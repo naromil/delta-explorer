@@ -12,6 +12,7 @@
 - [x] Catch rejected `loadSettings`/`getHotkeyStatus` reads in the Look-up Guide and Settings views (and drop the redundant casts on the already-typed `loadSettings`) — a failed read leaves the mode picker unloaded with an unhandled rejection
 - [x] Unit-test `saveConversationState` in `hooks/chat/persistence.ts` — the autosave skip rules (no/blank turns, lookup source, finalized loading expansions) have no coverage
 - [ ] Unit-test `formatRelativeTime` in `lib/format.ts` — the Home recents labels have untested 1m/1h/24h/7d boundaries
+- [ ] Change the toolbar for text selection in canvas. Add a way to highlight the text selection. Add a way to link the text selection to another object (the same way as giving a new rectangle context from another branch). Leave the original direct "Expand" and custom prompt "Ask..." on the main toolbar, and the other prompt presets moved into a secondary menu.
 
 ## Proposed (needs the owner's OK — move to Routine to approve)
 
