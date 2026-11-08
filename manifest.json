@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Delta AI Expand",
-  "version": "0.1.0",
-  "description": "Right-click any plain text in the browser to expand/define it inline using an LLM.",
+  "name": "Delta Explorer",
+  "version": "0.2.0",
+  "description": "An AI helper for learning anything while you browse: expand any text inline, look things up, chat, and let it remember how you learn. Bring your own model.",
   "browser_specific_settings": {
     "gecko": {
       "id": "delta-ai-extension@naromil.com",
@@ -12,7 +12,10 @@
       }
     }
   },
-  "permissions": ["storage", "contextMenus", "clipboardWrite", "tabs"],
+  "permissions": ["storage", "unlimitedStorage", "contextMenus", "clipboardWrite", "tabs", "alarms"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'"
+  },
   "host_permissions": ["<all_urls>"],
   "background": {
     "scripts": ["background.js"],
@@ -22,13 +25,16 @@
     {
       "matches": ["<all_urls>"],
       "js": [
+        "src/shared/markdown.js",
         "src/content/state.js",
         "src/content/anchor.js",
         "src/content/theme.js",
         "src/content/dom-utils.js",
         "src/content/persistence.js",
+        "src/content/stream.js",
         "src/content/bubble.js",
         "src/content/prompt.js",
+        "src/content/selection-bar.js",
         "src/content/rehydrate.js",
         "src/content/init.js",
         "content.js"
@@ -39,16 +45,32 @@
     }
   ],
   "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+D"
+      },
+      "description": "Open the look-up"
+    },
     "expand": {
       "suggested_key": {
         "default": "Ctrl+E"
       },
-      "description": "Expand the current selection"
+      "description": "Expand the selected text"
+    },
+    "expand-prompted": {
+      "suggested_key": {
+        "default": "Alt+Shift+E"
+      },
+      "description": "Expand the selected text with your own question"
     }
   },
   "action": {
     "default_popup": "popup/popup.html",
-    "default_title": "Delta AI Expand"
+    "default_title": "Delta Explorer look-up",
+    "default_icon": {
+      "48": "icons/icon.svg",
+      "96": "icons/icon.svg"
+    }
   },
   "options_ui": {
     "page": "dashboard/dashboard.html",

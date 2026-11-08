@@ -1,97 +1,56 @@
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  font-weight: normal;
-}
+/* The look-up popup: compact conversation. Firefox caps popups at 800×600. */
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #20212a;
-  color: rgba(238, 238, 245, 0.92);
-  font-size: 13px;
-  line-height: 1.5;
-  min-width: 280px;
-}
+html, body { width: 440px; height: 560px; overflow: hidden; }
 
-.container {
-  padding: 16px;
-}
+.lookup { display: flex; flex-direction: column; height: 100%; }
 
-header {
-  margin-bottom: 14px;
-}
-
-h1 {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.status {
-  background: #25262e;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 12px;
-}
-
-.row {
+.lookup-header {
+  flex: none;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 3px 0;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
 }
 
-.row .label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: rgba(228, 230, 240, 0.4);
-}
-
-.row .value {
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
   font-size: 12px;
-  color: rgba(238, 238, 245, 0.86);
-  font-weight: 500;
-  text-align: right;
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: none;
 }
 
-.row .value.missing {
-  color: #cf7b6e;
-}
+.lookup-title { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lookup-header-actions { display: flex; align-items: center; gap: 2px; }
 
-.hint {
-  font-size: 11px;
-  color: rgba(228, 230, 240, 0.4);
-  margin-bottom: 14px;
-  line-height: 1.45;
-}
-
-.hint strong {
-  color: rgba(228, 230, 240, 0.62);
-  font-weight: 500;
-}
-
-button {
-  width: 100%;
-  padding: 9px 16px;
-  background: #8aa0b8;
-  border: none;
-  border-radius: 8px;
-  color: #20212a;
+.lookup-setup {
+  flex: none;
+  margin: 10px 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-md);
   font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
 }
+.lookup-setup p { margin: 0 0 8px; }
 
-button:hover {
-  background: #9ab0c8;
-}
+.lookup-conversation { flex: 1 1 auto; min-height: 0; }
 
-button:active {
-  background: #7a90a8;
-}
+.lookup .conv-scroll { padding-top: 12px; }
+.lookup .conv-scroll > * { padding-left: 12px; padding-right: 12px; }
+.lookup .composer { padding: 6px 10px 10px; }
+.lookup .message-list { gap: 14px; }
+.lookup .message-avatar { width: 24px; height: 24px; }
+.lookup .conv-context p { max-height: 120px; }
+.lookup .expand-notice { bottom: 70px; }
+
+.lookup-empty { color: var(--text-3); text-align: center; padding: 28px 12px; font-size: 13px; }
+.lookup-empty p { margin: 0; }

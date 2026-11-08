@@ -1,80 +1,96 @@
-# Delta AI Expand
+# Delta Explorer for Firefox
 
-Firefox browser extension that expands and defines any plain text inline using a configurable LLM provider.
+**An AI helper for learning anything while you browse.** The browser companion to the
+[Delta Explorer](https://github.com/naromil/delta-ai) desktop app: bring your own model, expand any
+text inline, look things up, chat, and let it remember how you learn.
 
-Right-click a word or phrase on any page, click **Expand**, and a definition or explanation streams inline near the selection. Add a custom prompt with **Expand on…** to ask *why*, *how*, or any other question about the selected text.
+![Firefox 140+](https://img.shields.io/badge/Firefox-140%2B-orange)
 
-![Firefox 115+](https://img.shields.io/badge/Firefox-115%2B-orange)
+## Features
 
-## Installation (Development)
+- **Inline expansions on any page.** Select text and right-click **Expand** for a definition or
+  explanation, or **Expand on…** to ask your own question, with one-click **Simpler / Example / Why /
+  Compare / Deeper**. The answer streams in as markdown right where the text was. Answers nest (select
+  inside an answer to go deeper), can be regenerated, re-asked, copied, sent to Chat, folded back into
+  the text or removed, and come back when you revisit the page. `Ctrl+E` expands the selection;
+  `Alt+Shift+E` asks first. An optional Expand bar can float over every selection.
+- **Look-up popup.** The toolbar button (`Alt+Shift+D`) asks about the page you are on, with the
+  selected text (or, if you choose, the readable page text) as context. Continue any look-up in Chat.
+- **Chat.** Persistent conversations with inline expansions inside answers (selection bar, right-click,
+  `Ctrl+E`), image attachments for vision models, edit-and-resend, regenerate, stop with `Esc`, rename,
+  export as markdown, delete, and `Ctrl+K` search across every conversation's titles and content.
+- **Rich answers.** Markdown with tables and code blocks (each with a Copy button), and LaTeX math
+  rendered with KaTeX (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`).
+- **Memory personalization.** A background curator turns your chats and page expansions into private
+  markdown notes about what you know and how you like things explained (`index-learning.md` and
+  friends). Chat, look-ups and expansions read them on every request, and can update them when you
+  ask. Browse, edit or delete the notes in the Knowledge Base. Needs a tool-capable model on the
+  Knowledge Base Maintenance role; can be turned off in Settings.
+- **Role-based models.** Add any number of connections (OpenAI, OpenAI Compatible, Google AI Studio,
+  OpenRouter, Ollama) and assign Chat, Look-up and Knowledge Base Maintenance independently, so
+  look-ups can run on a fast model. Model details (context window, tool support, vision, price) come
+  from [models.dev](https://models.dev); endpoints can be queried for their own model lists and tested.
+- **Long chats fit the model's window.** The oldest messages are dropped when a request would exceed
+  the model's context window as reported by models.dev; an unknown window trims nothing.
+- **Light and dark** themes for the dashboard and popup; page bubbles follow the page.
+
+## Installation (development)
 
 1. Clone this repository.
-2. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`.
-3. Click **Load Temporary Add-on…**.
-4. Select `manifest.json` from the repo root.
+2. Open `about:debugging#/runtime/this-firefox` in Firefox.
+3. Click **Load Temporary Add-on…** and select `manifest.json`.
 
-The extension will be active for the current browser session. To install permanently, [package it as an unsigned `.xpi`](https://extensionworkshop.com/documentation/develop/getting-started-with-web-ext/) or submit it to [addons.mozilla.org](https://addons.mozilla.org/).
+Then open the dashboard (the house icon in the look-up, or the add-on's Options) and go to
+**Settings → Models**: add a connection with your API key (or an Ollama host) and assign a model to
+each role.
 
-## Configuration
+There is no build step and no npm. To package, zip the repository contents (without `.git`, `ref_src/`
+and `dist/`) into an `.xpi`.
 
-Click the **Δ Delta AI Expand** toolbar button to open the settings popup.
+## Supported providers
 
-| Field | Description |
-|-------|-------------|
-| **Provider** | LLM service: OpenAI, OpenAI Compatible, Google AI Studio, OpenRouter, or Ollama |
-| **API Key** | Your provider API key (not required for Ollama) |
-| **Base URL** | Custom endpoint (required for OpenAI Compatible / OpenRouter) |
-| **Host** | Ollama host, e.g. `http://localhost:11434` |
-| **Model** | Model name, e.g. `gpt-4o-mini`, `gemini-2.5-flash`, `qwen3:4b` |
-| **Web search** | Enable web search capability if the provider supports it |
+All providers are reached through their OpenAI-compatible chat-completions endpoint with SSE
+streaming and function calling.
 
-Settings are persisted in `browser.storage.local`.
+| Provider          | Auth    | Default endpoint                                           |
+| ----------------- | ------- | ---------------------------------------------------------- |
+| OpenAI            | API key | `https://api.openai.com/v1`                                |
+| OpenAI Compatible | API key (optional) | your base URL                                   |
+| Google AI Studio  | API key | `https://generativelanguage.googleapis.com/v1beta/openai`  |
+| OpenRouter        | API key | `https://openrouter.ai/api/v1`                             |
+| Ollama            | host    | `{host}/v1` (default `http://localhost:11434`)             |
 
-## Supported Providers
+A model without tool support still answers; it just cannot read or write memories (it gets the
+always-loaded notes as plain text instead). If Ollama answers HTTP 403, start it with
+`OLLAMA_ORIGINS="moz-extension://*"`.
 
-| Provider | Streaming | Web Search | Auth |
-|----------|-----------|------------|------|
-| OpenAI | yes | yes | API key |
-| OpenAI Compatible | yes | yes | API key |
-| Google AI Studio | yes | yes | API key |
-| OpenRouter | yes | yes | API key |
-| Ollama | yes | no | host |
+## Privacy
 
-## How It Works
+- **Bring your own key.** Keys are stored in this browser profile's extension storage.
+- **All data stays local** except requests to the model providers you configure and the public
+  models.dev model list. Expanding sends the selection and nearby page text to your Look-up model;
+  chats go to your Chat model; curating memories sends conversation summaries to the Knowledge Base
+  Maintenance model.
+- Images you attach are scaled down and re-encoded (stripping metadata) before they are sent or saved.
+- No telemetry, no analytics, no accounts.
 
-1. **Right-click** any plain text on any page.
-2. A custom context menu appears with **Expand**, **Expand on…**, and **Copy**.
-3. **Expand** sends the selected text plus surrounding context to your configured LLM and streams the definition into a floating popup near the selection.
-4. **Expand on…** shows a prompt input where you can type a custom instruction (e.g. `explain like I'm five`), then streams the tailored result.
-5. Dismiss the popup by clicking outside or pressing Escape.
-
-The content script intercepts the `contextmenu` event in all frames, renders the overlay UI with zero external dependencies, and communicates with the background script via WebExtension runtime messaging. The background script streams LLM responses back chunk-by-chunk using the OpenAI-compatible server-sent-events protocol (or Gemini's `streamGenerateContent` for Google AI Studio).
-
-## Project Structure
+## Project structure
 
 ```
-├── manifest.json             # Firefox MV3 manifest
-├── background.js             # Message router → provider streamer
-├── content.js                # Right-click interception + popup UI
-├── content.css               # Dark-themed overlay styles
-├── popup/
-│   ├── popup.html            # Settings page
-│   ├── popup.js              # Config load/save module
-│   └── popup.css             # Settings page styling
-├── src/
-│   ├── shared/
-│   │   ├── prompts.js        # Expand instruction templates + system prompts
-│   │   ├── expand-prompt.js  # LLM message builder for expand requests
-│   │   └── models.js         # Provider registry + default config
-│   └── background/
-│       ├── provider.js       # Streaming LLM client (SSE / Gemini)
-│       └── config.js         # browser.storage.local wrapper
-└── icons/
-    └── icon.svg
+manifest.json            Firefox MV3 manifest
+background.js            Message router, streaming host, KB scheduler (ES module)
+content.js, content.css  Content script entry + inline bubble styles
+src/content/             Page bubbles: anchors, streaming, selection bar, persistence, rehydrate
+src/background/          Provider client, config, conversations, memory store + tools, KB, catalog
+src/shared/              Prompts, models, conversation + rich-text model, offset-tracking markdown
+src/ui/                  Shared page UI: conversation view, API bridge, DOM helpers, styles
+dashboard/               Home, Chat, Knowledge Base, Guide, Settings
+popup/                   Toolbar look-up
+vendor/katex/            KaTeX 0.19.1 (MIT), unmodified
 ```
 
-No build step. No dependencies. Just load the extension and configure a provider.
+See [docs/architecture.md](docs/architecture.md) for the details.
 
 ## License
 
-MIT — see [LICENSE.md](LICENSE.md).
+MIT — see [LICENSE.md](LICENSE.md). KaTeX is MIT-licensed (`vendor/katex/LICENSE`).

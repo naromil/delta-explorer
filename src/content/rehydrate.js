@@ -138,7 +138,7 @@ function restoreOne(record, parentEntry) {
 function restoreSubBubble(record, parentEntry) {
   // Restore a sub-bubble directly inside the parent's body.
   // Try to position at stored xpath (same pattern as restoreOne).
-  var container = parentEntry.el && parentEntry.el.querySelector('.delta-bubble-body');
+  var container = parentEntry.el && parentEntry.el.querySelector('.delta-bubble-content');
   if (!container) return;
 
   var marker = null;
@@ -195,19 +195,10 @@ function restoreSubBubble(record, parentEntry) {
 }
 
 function setBubbleResponse(entry, responseText) {
-  if (!entry || !entry.el || !responseText) return;
-  entry.responseText = responseText;
-  var body = entry.el.querySelector('.delta-bubble-body');
-  if (!body) return;
-  var spinner = body.querySelector('.delta-bubble-spinner');
-  if (spinner) removeEl(spinner);
-  var contentEl = body.querySelector('.delta-bubble-content');
-  if (!contentEl) {
-    contentEl = document.createElement('span');
-    contentEl.className = 'delta-bubble-content';
-    body.appendChild(contentEl);
-  }
-  contentEl.textContent = responseText;
-  var transferBtn = entry.el.querySelector('.delta-bubble-transfer');
-  if (transferBtn) transferBtn.style.display = '';
+  if (!entry || !entry.el) return;
+  entry.responseText = responseText || '';
+  entry.status = entry.responseText.trim() ? 'done' : 'error';
+  entry.error = entry.responseText.trim() ? '' : 'Response interrupted.';
+  renderBubbleAnswer(entry);
+  updateBubbleActions(entry);
 }

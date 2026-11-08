@@ -1,143 +1,105 @@
-/* ---- Prompt Input ----
- * Renders near the selection; on submit, creates the inline bubble in
- * place of the selection. If a parent bubble body triggered this prompt
- * (sub-expansion), the new bubble appends into that body.
- */
-function showPromptInput(requestId, data, parentEntry) {
-  removeEl(promptInputEl);
+/* ---- "Expand on…" prompt ----
+ * A small floating panel: type a question (blank = a plain explanation), or
+ * pick a one-click question. Editing an existing bubble's question reuses it
+ * without the presets. */
+
+function closePromptPanel() {
+  if (promptInputEl) {
+    removeEl(promptInputEl);
+    promptInputEl = null;
+  }
+}
+
+/** opts: { x, y, initialPrompt?, onSubmit(prompt) } */
+function showPromptPanel(opts) {
+  closePromptPanel();
+  closeSelectionBar();
+  var editing = typeof opts.initialPrompt === 'string';
 
   var el = document.createElement('div');
   el.id = 'delta-expandPrompt';
-  // Set position and z-index inline — the content CSS may not always apply
-  // (same scoping issue that affected .delta-bubble-marker).
-  el.style.cssText =
-    'position:fixed;' +
-    'z-index:2147483647;' +
-    'background:var(--delta-surface-2,#2c2d36);' +
-    'border:1px solid var(--delta-accent,#8aa0b8);' +
-    'border-radius:6px;' +
-    'box-shadow:0 4px 14px rgba(0,0,0,0.18);' +
-    'padding:6px 10px;' +
-    'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
-
-  // Position at the live selection's end so the input appears just below
-  // the text the user selected.
-  var posLeft = 0;
-  var posTop = 0;
-  try {
-    var liveSel = window.getSelection();
-    if (liveSel && liveSel.rangeCount > 0) {
-      var liveRect = liveSel.getRangeAt(0).getBoundingClientRect();
-      if (liveRect && liveRect.width > 0 && liveRect.height > 0) {
-        posLeft = liveRect.left;
-        posTop = liveRect.bottom;
-      }
-    }
-  } catch (e) { /* ignore */ }
-
-  // Fallback to captured rect from lastExpandData
-  if (posTop <= 0 && data && data.rect) {
-    if (data.rect.left != null) posLeft = data.rect.left;
-    if (data.rect.bottom != null) posTop = data.rect.bottom;
-  }
-  // Last resort: click coordinates
-  if (posTop <= 0) { posLeft = lastClickX || 0; posTop = lastClickY || 0; }
-
-  el.style.left = posLeft + 'px';
-  el.style.top = posTop + 'px';
-  el.style.left = posLeft + 'px';
-  el.style.top = posTop + 'px';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-label', editing ? 'Edit question' : 'Expand on');
+  // Position inline: the content CSS may not apply in every frame.
+  el.style.cssText = 'position:fixed;z-index:2147483647;left:' + Math.round(opts.x) + 'px;top:' + Math.round(opts.y) + 'px;';
 
   var input = document.createElement('input');
   input.type = 'text';
   input.className = 'delta-expand-prompt-input';
-  input.placeholder = 'Expand on\u2026';
+  input.placeholder = editing ? 'Blank for a plain explanation' : 'Expand on…';
   input.autocomplete = 'off';
+  if (editing) input.value = opts.initialPrompt;
 
-  function submit() {
-    var val = (input.value || '').trim();
-    removeEl(el);
-    promptInputEl = null;
-
-    var fullData = {
-      selection: data.selection,
-      context: data.context,
-      prompt: val || undefined,
-      range: data.range
-    };
-
-    /* For sub-bubbles: parent entry passes its body as the target container.
-     * We still need a marker to anchor at the original selection inside
-     * the parent body.
-     */
-    var marker = null;
-    var container = null;
-    var savedXpath = null;
-    if (parentEntry) {
-      var pbody = parentEntry.el.querySelector('.delta-bubble-body');
-      if (pbody && data.range) {
-        savedXpath = buildXPathFromNode(data.range.startContainer, data.range.startOffset, document);
-        try {
-          marker = wrapRangeWithMarker(data.range);
-        } catch (err) {
-          marker = null;
-        }
-        if (!marker) {
-          marker = document.createElement('span');
-          marker.className = 'delta-bubble-marker';
-          marker.textContent = data.selection;
-          pbody.appendChild(marker);
-        }
-        container = marker && marker.parentNode ? marker.parentNode : pbody;
-      }
-    } else if (data.range) {
-      savedXpath = buildXPathFromNode(data.range.startContainer, data.range.startOffset, document);
-      marker = wrapRangeWithMarker(data.range);
-      container = marker ? marker.parentNode : document.body;
-    }
-
-    var rid = genId();
-    var entry = createBubble({
-      range: data.range,
-      data: fullData,
-      parent: parentEntry,
-      marker: marker,
-      container: container,
-      _savedXpath: savedXpath
-    });
-    pendingChunks.set(rid, entry.id);
-
-    browser.runtime.sendMessage({
-      type: 'expandRequest',
-      requestId: rid,
-      selection: fullData.selection,
-      context: fullData.context,
-      prompt: fullData.prompt
-    }).catch(function (err) {
-      updateBubble(entry.id, 'Failed to send expand request: ' + (err && err.message ? err.message : err), true, true);
-    });
+  var done = false;
+  function submit(value) {
+    if (done) return;
+    done = true;
+    closePromptPanel();
+    document.removeEventListener('mousedown', onDown, true);
+    opts.onSubmit(String(value || ''));
   }
 
   input.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') { e.preventDefault(); submit(); }
-    if (e.key === 'Escape') {
-      removeEl(el);
-      promptInputEl = null;
-    }
+    e.stopPropagation();
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); submit(input.value); }
+    if (e.key === 'Escape') { e.preventDefault(); closePromptPanel(); }
   });
 
   el.appendChild(input);
+
+  if (!editing) {
+    var intents = document.createElement('div');
+    intents.className = 'delta-expand-intents';
+    EXPAND_INTENTS.forEach(function (intent) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'delta-expand-intent';
+      btn.textContent = intent.label;
+      btn.title = intent.prompt;
+      btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      btn.addEventListener('click', function (e) { e.stopPropagation(); submit(intent.prompt); });
+      intents.appendChild(btn);
+    });
+    el.appendChild(intents);
+  }
+
   document.body.appendChild(el);
   promptInputEl = el;
 
-  setTimeout(function () { input.focus(); }, 0);
+  // Keep the panel on screen.
+  var rect = el.getBoundingClientRect();
+  var left = Math.max(8, Math.min(opts.x, window.innerWidth - rect.width - 8));
+  var top = Math.max(8, Math.min(opts.y, window.innerHeight - rect.height - 8));
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+
+  setTimeout(function () {
+    input.focus();
+    if (editing) input.select();
+  }, 0);
 
   var onDown = function (e) {
     if (!el.contains(e.target)) {
-      removeEl(el);
-      promptInputEl = null;
+      closePromptPanel();
       document.removeEventListener('mousedown', onDown, true);
     }
   };
   document.addEventListener('mousedown', onDown, true);
+}
+
+/** "Expand on…" for a captured selection. */
+function showPromptInput(data, parentEntry) {
+  var x = lastClickX || 0;
+  var y = lastClickY || 0;
+  try {
+    var live = window.getSelection();
+    var rect = live && live.rangeCount > 0 ? live.getRangeAt(0).getBoundingClientRect() : null;
+    if (rect && (rect.width > 0 || rect.height > 0)) { x = rect.left; y = rect.bottom + 4; }
+    else if (data.rect) { x = data.rect.left; y = data.rect.bottom + 4; }
+  } catch (e) { /* ignore */ }
+  showPromptPanel({
+    x: x,
+    y: y,
+    onSubmit: function (prompt) { expandSelection(data, parentEntry, prompt); }
+  });
 }

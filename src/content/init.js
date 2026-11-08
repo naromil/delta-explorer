@@ -1,76 +1,105 @@
 /* Initialization and event wiring for the content script.
- * Called once from content.js after the double-injection guard passes.
- * All event listeners, theme init, SPA routing, and cleanup go here.
- */
+ * Called once from content.js after the double-injection guard passes. */
+
+var PAGE_TEXT_LIMIT = 12000;
+
+/** Readable text of the page for the look-up: the main article when there is one. */
+function readablePageText() {
+  var candidates = ['article', 'main', '[role="main"]'];
+  var root = null;
+  for (var i = 0; i < candidates.length && !root; i++) {
+    var found = document.querySelector(candidates[i]);
+    if (found && (found.innerText || '').trim().length > 200) root = found;
+  }
+  root = root || document.body;
+  var text = (root && root.innerText ? root.innerText : '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return text.length > PAGE_TEXT_LIMIT ? text.slice(0, PAGE_TEXT_LIMIT) + '…' : text;
+}
+
+function selectionParentEntry(data) {
+  if (!data || !data.range) return null;
+  return hostEntryOf(data.range.startContainer);
+}
+
+function loadContentSettings() {
+  browser.storage.local.get('deltaSettings').then(function (obj) {
+    var s = obj && obj.deltaSettings;
+    deltaSettings.pageSelectionBar = !!(s && s.pageSelectionBar);
+  }).catch(function () {});
+}
+
 function initContentScript() {
 
-  /* ---- Selection tracking (passive — no preventDefault) ---- */
+  /* ---- Selection tracking (passive) ---- */
 
   document.addEventListener('contextmenu', function (e) {
     lastClickX = e.clientX;
     lastClickY = e.clientY;
     lastExpandData = captureExpandData() || null;
-    /* If the click is inside a bubble body, remember that body as parent
-     * for any upcoming sub-expand. Otherwise clear.
-     */
-    var bubbleEl = e.target.closest ? e.target.closest('.delta-bubble') : null;
-    if (bubbleEl && !e.target.closest('.delta-bubble-header')) {
-      var bid = bubbleEl.getAttribute('data-bubble-id');
-      lastSubParentEntry = bubbles.get(bid) || null;
-    } else {
-      lastSubParentEntry = null;
-    }
+    lastSubParentEntry = selectionParentEntry(lastExpandData);
   }, true);
 
   document.addEventListener('mouseup', function (e) {
     lastClickX = e.clientX;
     lastClickY = e.clientY;
-    lastExpandData = captureExpandData() || null;
   }, true);
 
-  /* ---- Esc key handler ---- */
+  /* ---- Esc: close the prompt, then the bar, then fold the newest bubble ---- */
 
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
-    if (promptInputEl) {
-      removeEl(promptInputEl);
-      promptInputEl = null;
-      return;
-    }
-    dismissTopBubble();
+    if (promptInputEl) { closePromptPanel(); return; }
+    if (selectionBarEl) { closeSelectionBar(); return; }
+    if (isEditable(document.activeElement)) return;
+    foldTopBubble();
   });
 
-  /* ---- Message handler ---- */
+  initSelectionBar();
+
+  /* ---- Messages from the background and the popup ---- */
 
   browser.runtime.onMessage.addListener(function (msg) {
-    if (msg.type === 'expandPromptedFromMenu') {
-      var data = lastExpandData;
-      if (!data) return;
-      var parent = lastSubParentEntry;
+    if (!msg) return;
+    if (msg.type === 'pageExpandCommand') {
+      var data;
+      var parent;
+      if (msg.fromShortcut) {
+        // The shortcut reaches every frame; only the one holding the selection acts.
+        data = captureExpandData();
+        if (!data) return;
+        parent = selectionParentEntry(data);
+      } else {
+        data = lastExpandData;
+        parent = lastSubParentEntry;
+      }
       lastSubParentEntry = null;
-      showPromptInput(msg.requestId, data, parent);
+      if (!data) return;
+      if (isOwnChrome(data.range.startContainer)) return;
+      if (msg.prompted) showPromptInput(data, parent);
+      else expandSelection(data, parent, '');
       return;
     }
-
-    if (msg.type === 'expandChunk') {
-      var bubbleId = pendingChunks.get(msg.requestId);
-      if (!bubbleId) return;
-      if (msg.error) {
-        updateBubble(bubbleId, msg.error, msg.done, true);
-        if (msg.done) pendingChunks.delete(msg.requestId);
-        return;
-      }
-      updateBubble(bubbleId, msg.text, msg.done, false);
-      if (msg.done) pendingChunks.delete(msg.requestId);
-      return;
+    if (msg.type === 'getPageContext') {
+      if (window !== window.top) return;
+      var sel = window.getSelection();
+      return Promise.resolve({
+        title: document.title || '',
+        url: location.href,
+        selection: sel ? sel.toString().trim().slice(0, PAGE_TEXT_LIMIT) : '',
+        text: readablePageText()
+      });
     }
   });
 
-  /* ---- Theme init ----
-   * The content script runs at document_idle so the page is already painted
-   * by the time we read backgroundColor. We also re-apply on `pageshow` for
-   * bfcache restores and on `visibilitychange` in case the OS theme changed
-   * while the tab was hidden. */
+  /* ---- Settings ---- */
+
+  loadContentSettings();
+  browser.storage.onChanged.addListener(function (changes, area) {
+    if (area === 'local' && changes.deltaSettings) loadContentSettings();
+  });
+
+  /* ---- Theme ---- */
+
   applyPageTheme();
   window.addEventListener('pageshow', applyPageTheme);
   document.addEventListener('visibilitychange', function () {
@@ -78,14 +107,8 @@ function initContentScript() {
   });
 
   /* ---- SPA route handling ----
-   * Many sites (React, Vue, etc.) navigate via history.pushState/replaceState
-   * without a full page reload. We monkey-patch those to detect route
-   * changes, and also listen for popstate (back/forward). On route change
-   * we update currentUrl and re-anchor bubbles for the new URL.
-   *
-   * Old bubbles are left in their previous storage key — abandoned, not
-   * migrated. They expire after 30 days.
-   */
+   * pushState/replaceState/popstate change the URL without a load; bubbles for
+   * the new URL are rehydrated. Old bubbles stay under their old key and expire. */
   function onRouteChange() {
     var newUrl = (typeof location !== 'undefined' && location.href) || '';
     if (newUrl === currentUrl) return;
@@ -112,19 +135,16 @@ function initContentScript() {
       };
     }
     window.addEventListener('popstate', onRouteChange);
+    // Page scripts call their own pushState (the patch above only covers this
+    // content script's view of `history` under Firefox's Xray wrappers), so
+    // also notice URL changes by looking.
+    setInterval(onRouteChange, 1000);
   })();
 
   rehydrateFromStorage();
 
-  /* ---- Cleanup on page unload ---- */
-  window.addEventListener('unload', function () {
-    var pendingIds = [];
-    pendingChunks.forEach(function (bid, rid) { pendingIds.push(rid); });
-    pendingIds.forEach(function (rid) {
-      browser.runtime.sendMessage({ type: 'abort', requestId: rid });
-    });
-    bubbles.clear();
-    pendingChunks.clear();
+  /* ---- Cleanup on unload: stop every stream ---- */
+  window.addEventListener('pagehide', function () {
+    bubbles.forEach(function (entry) { stopBubbleStream(entry); });
   });
-
 }

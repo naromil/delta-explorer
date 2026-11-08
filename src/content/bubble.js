@@ -1,22 +1,76 @@
-/* ---- Bubble creation ---- */
+/* ---- Inline bubbles ----
+ * A bubble replaces the selected text in the page flow. Its answer streams in
+ * as markdown; it can be folded back to a marker over the original text,
+ * regenerated, re-asked, copied, sent to Chat, or dismissed. Sub-bubbles nest
+ * inside a parent's answer. */
+
+var SVG_NS = 'http://www.w3.org/2000/svg';
+var ICONS = {
+  regenerate: 'M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3',
+  edit: 'M10.5 2.5l3 3-8 8H2.5v-3z',
+  copy: 'M5.5 5.5h8v8h-8zM2.5 10.5v-8h8',
+  chat: 'M2.5 3.5h11a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H6.5L4 13.5V11.5H2.5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z',
+  fold: 'M4 6l4 4 4-4',
+  stop: 'M5 5h6v6H5z',
+  close: 'M4 4l8 8M12 4l-8 8',
+  check: 'M3 8.5l3 3 7-7'
+};
+
+function svgIcon(name) {
+  var svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('width', '12');
+  svg.setAttribute('height', '12');
+  svg.setAttribute('aria-hidden', 'true');
+  var path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', ICONS[name]);
+  path.setAttribute('fill', name === 'stop' ? 'currentColor' : 'none');
+  path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('stroke-width', '1.5');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  svg.appendChild(path);
+  return svg;
+}
+
+function actionButton(name, label, onClick) {
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'delta-bubble-action delta-bubble-action--' + name;
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.appendChild(svgIcon(name));
+  btn.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    onClick(btn);
+  });
+  // Clicking an action must not clear a selection or blur the page oddly.
+  btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+  return btn;
+}
+
+function bubbleTitleText(data) {
+  var text = (data.prompt ? data.prompt + ' · ' : '') + (data.selection || '');
+  return text.length > 60 ? text.slice(0, 57) + '…' : text;
+}
+
+function flashButton(btn) {
+  var original = btn.firstChild;
+  btn.replaceChild(svgIcon('check'), original);
+  btn.classList.add('delta-bubble-action--done');
+  setTimeout(function () {
+    if (btn.firstChild) btn.replaceChild(original, btn.firstChild);
+    btn.classList.remove('delta-bubble-action--done');
+  }, 1200);
+}
 
 /**
- * Create an expanded bubble. The bubble is inserted INLINE in place of the
- * given marker element (which is removed). The marker loses its parent —
- * we keep a reference so fold() can put a fresh marker back.
- *
- * @param {Object} opts
- * @param {Range}  opts.range        Saved Range of the original selection
- * @param {Object} opts.data         { selection, context, prompt }
- * @param {Entry|null} opts.parent  parent bubble entry (for sub-bubbles)
- * @param {string} opts.marker       initial marker element to replace (if any)
- * @param {string} [opts.id]         bubble id (preserved across re-expand)
- * @param {HTMLElement} [opts.container] container to append into (for sub-bubbles). Defaults to marker.parentNode.
- * @returns {Object} the new bubble entry
+ * Creates a bubble in place of `opts.marker` (or appended to `opts.container`).
+ * opts: { id?, range, data: { selection, context, prompt }, parent, marker, container, _savedXpath }
  */
 function createBubble(opts) {
   var id = opts.id || genId();
-  var range = opts.range;
   var data = opts.data || {};
   var parent = opts.parent || null;
   var marker = opts.marker || null;
@@ -26,462 +80,361 @@ function createBubble(opts) {
     id: id,
     el: null,
     marker: null,
-    range: range,
+    range: opts.range,
     data: data,
     responseText: '',
+    status: 'loading',
+    error: '',
     children: new Map(),
     parent: parent,
     folded: false,
+    port: null,
     _savedXpath: opts._savedXpath || null
   };
 
-  /* Build bubble DOM */
-  var el = document.createElement('div');
+  var el = document.createElement('span');
   el.className = 'delta-bubble';
   el.setAttribute('data-bubble-id', id);
+  el.setAttribute('role', 'note');
 
-  var header = document.createElement('div');
+  var header = document.createElement('span');
   header.className = 'delta-bubble-header';
 
   var title = document.createElement('span');
   title.className = 'delta-bubble-title';
-  var titleText = (data.prompt ? (data.prompt + ' / ') : '') + (data.selection || '');
-  title.textContent = titleText.length > 60 ? titleText.slice(0, 57) + '\u2026' : titleText;
-  title.title = data.selection || '';
+  title.textContent = bubbleTitleText(data);
+  title.title = (data.prompt ? data.prompt + '\n' : '') + (data.selection || '') + '\n\nRight-click to fold';
 
-  var actions = document.createElement('div');
+  var actions = document.createElement('span');
   actions.className = 'delta-bubble-actions';
 
-  /* Send-to-Chat is only offered on bubbles directly embedded in the page
-   * (or future top-level frames). Sub-expansions nested inside a parent
-   * bubble skip it — they have no separate "Chat" destination, since
-   * sending the whole parent's expansion is enough.
-   */
-  var transferBtn = null;
-  if (!parent) {
-    transferBtn = document.createElement('button');
-    transferBtn.className = 'delta-bubble-transfer';
-    transferBtn.title = 'Send to Chat';
-    transferBtn.setAttribute('aria-label', 'Send to Chat');
-    transferBtn.type = 'button';
-    /* Inline SVG: speech-bubble glyph. Inherits currentColor. */
-    transferBtn.innerHTML =
-      '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">' +
-      '<path fill="none" stroke="currentColor" stroke-width="1.4" ' +
-      'stroke-linecap="round" stroke-linejoin="round" ' +
-      'd="M2.5 3.5h11a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H6.5L4 13.5V11.5H2.5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"/>' +
-      '</svg>';
-    transferBtn.style.display = 'none';
-    transferBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var responseData = entry.data || {};
+  var buttons = {
+    stop: actionButton('stop', 'Stop', function () {
+      stopBubbleStream(entry);
+      finishBubble(entry, entry.responseText.trim() ? 'done' : 'error', entry.responseText.trim() ? '' : 'Generation stopped.');
+    }),
+    regenerate: actionButton('regenerate', 'Regenerate', function () { regenerateBubble(id); }),
+    edit: actionButton('edit', 'Change the question', function (btn) { editBubbleQuestion(id, btn); }),
+    copy: actionButton('copy', 'Copy answer', function (btn) {
+      DeltaMarkdown.copyToClipboard(entry.responseText || '').then(function () { flashButton(btn); });
+    }),
+    chat: parent ? null : actionButton('chat', 'Continue in Chat', function (btn) {
       browser.runtime.sendMessage({
         type: 'transferExpansion',
-        selection: responseData.selection || '',
-        context: responseData.context || '',
-        prompt: responseData.prompt || '',
-        response: entry.responseText || ''
-      });
-      transferBtn.classList.add('delta-bubble-transfer-done');
-      transferBtn.style.pointerEvents = 'none';
-    });
-  }
-
-  var close = document.createElement('button');
-  close.className = 'delta-bubble-close';
-  close.textContent = '\u00d7';
-  close.title = 'Close (or right-click to fold)';
-  close.setAttribute('aria-label', 'Close');
-  close.type = 'button';
-  close.addEventListener('click', function (e) {
-    e.stopPropagation();
-    dismissBubble(id);
+        selection: entry.data.selection || '',
+        context: entry.data.context || '',
+        prompt: entry.data.prompt || '',
+        response: entry.responseText || '',
+        page: { title: document.title || '', url: location.href }
+      }).then(function () { flashButton(btn); }).catch(function () {});
+    }),
+    fold: actionButton('fold', 'Fold (or right-click the title)', function () { foldBubble(id); }),
+    close: actionButton('close', 'Remove', function () { dismissBubble(id); })
+  };
+  entry.buttons = buttons;
+  ['stop', 'regenerate', 'edit', 'copy', 'chat', 'fold', 'close'].forEach(function (key) {
+    if (buttons[key]) actions.appendChild(buttons[key]);
   });
 
-  if (transferBtn) actions.appendChild(transferBtn);
-  actions.appendChild(close);
   header.appendChild(title);
   header.appendChild(actions);
-
-  /* Right-click anywhere on header folds the bubble */
   header.addEventListener('contextmenu', function (e) {
     e.preventDefault();
     e.stopPropagation();
     foldBubble(id);
   });
 
-  var body = document.createElement('div');
-  body.className = 'delta-bubble-body';
-  var spinner = document.createElement('span');
-  spinner.className = 'delta-bubble-spinner';
-  spinner.textContent = 'Thinking\u2026';
-  body.appendChild(spinner);
+  var body = document.createElement('span');
+  body.className = 'delta-bubble-body delta-bubble-body--text-only';
+  var content = document.createElement('span');
+  content.className = 'delta-bubble-content';
+  body.appendChild(content);
 
   el.appendChild(header);
   el.appendChild(body);
+  entry.el = el;
 
-  /* Wire the body to allow sub-expansions inside it:
-   * We intercept selections that start/end within the body and route
-   * "expand" menu events back through the same showPromptInput flow, but
-   * with parent=this entry so the resulting bubble renders inside this body.
-   *
-   * We track the most recent in-body selection so showPromptInput can use it.
-   */
-  body.addEventListener('mouseup', function () {
-    // Let the selection settle, then capture if it's within this body.
-    setTimeout(function () {
-      var sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0) return;
-      var r = sel.getRangeAt(0);
-      if (!body.contains(r.startContainer) || !body.contains(r.endContainer)) return;
-      var text = sel.toString().trim();
-      if (!text) return;
-      var ctx = getSurroundingText(r.startContainer, 2000) || entry.responseText;
-      body.__deltaLastSubData = {
-        selection: text,
-        context: ctx,
-        range: r.cloneRange()
-      };
-    }, 0);
-  }, true);
-
-  /* Insert: replace marker with bubble, or append to container.
-   * If the marker isn't actually a child of `container` (e.g., because
-   * the marker was placed in a deeper descendant by wrapRangeWithMarker),
-   * fall back to the marker's real parentNode so we never strand a
-   * marker in the DOM — that would leave the user looking at a colored
-   * span with no click handler (the "always folded" symptom). */
   if (marker && container) {
     try {
       container.replaceChild(el, marker);
     } catch (err) {
-      var realParent = marker.parentNode;
-      if (realParent) {
-        realParent.replaceChild(el, marker);
-      } else {
-        document.body.appendChild(el);
-      }
+      if (marker.parentNode) marker.parentNode.replaceChild(el, marker);
+      else document.body.appendChild(el);
     }
   } else if (container) {
     container.appendChild(el);
   } else {
-    // No marker — last resort, append at end of body
     document.body.appendChild(el);
   }
 
-  entry.el = el;
-
-  /* If the original text had punctuation immediately before/after, hide it
-   * so the frame sits flush. */
   hideAdjacentPunctuation(el);
 
-  /* Register the bubble so chunks can find it */
   bubbles.set(id, entry);
   if (parent) {
     parent.children.set(id, entry);
-    /* The parent body now hosts a sub-bubble — drop its bottom padding so
-     * the sub-bubble's top edge sits flush with the parent's text area.
-     * (Re-applied when the last sub-bubble is dismissed.) */
     var parentBody = parent.el && parent.el.querySelector('.delta-bubble-body');
     if (parentBody) parentBody.classList.remove('delta-bubble-body--text-only');
-  } else {
-    /* Top-level bubble: if its body has no sub-bubbles it should keep the
-     * small bottom padding so the text doesn't kiss the frame edge. */
-    var body = el.querySelector('.delta-bubble-body');
-    if (body) body.classList.add('delta-bubble-body--text-only');
   }
 
-  /* Persist (suppressed during rehydrate by isRestoring). */
+  renderBubbleAnswer(entry);
+  updateBubbleActions(entry);
   persistBubble(entry);
-
   return entry;
 }
 
-/* ---- Bubble updates / streaming ---- */
+/** Re-renders the answer. Never call with sub-bubbles inside: they live in this DOM. */
+function renderBubbleAnswer(entry) {
+  if (!entry || !entry.el) return;
+  var content = entry.el.querySelector('.delta-bubble-content');
+  if (!content) return;
+  while (content.firstChild) content.removeChild(content.firstChild);
+  entry.el.classList.toggle('delta-bubble--loading', entry.status === 'loading');
+  entry.el.classList.toggle('delta-bubble--error', entry.status === 'error');
 
-function updateBubble(id, text, done, error) {
-  var entry = bubbles.get(id);
-  if (!entry) return;
-  var body = entry.el.querySelector('.delta-bubble-body');
-  if (!body) return;
-
-  /* Find (or create) a content node after the spinner */
-  var content = body.querySelector('.delta-bubble-content');
-  var spinner = body.querySelector('.delta-bubble-spinner');
-  if (!content) {
-    if (spinner) removeEl(spinner);
-    content = document.createElement('span');
-    content.className = 'delta-bubble-content';
-    body.appendChild(content);
+  if (entry.responseText) {
+    content.appendChild(DeltaMarkdown.render(entry.responseText, [], { inline: true, anchored: false }));
+  } else if (entry.status === 'loading') {
+    var spinner = document.createElement('span');
+    spinner.className = 'delta-bubble-spinner';
+    spinner.textContent = 'Thinking…';
+    content.appendChild(spinner);
   }
-
-  if (error) {
-    body.className = 'delta-bubble-body delta-error';
-    content.textContent = text || error;
-  } else {
-    body.className = 'delta-bubble-body';
-    content.textContent = text || '\u200b';
-    entry.responseText = text || '';
-  }
-
-  if (done) {
-    var transferBtn = entry.el.querySelector('.delta-bubble-transfer');
-    if (transferBtn) transferBtn.style.display = '';
-    /* Persist the now-complete response so a reload can restore it
-     * without re-issuing the LLM call. */
-    persistBubble(entry);
+  if (entry.status === 'error' && entry.error) {
+    var error = document.createElement('span');
+    error.className = 'delta-bubble-error';
+    error.textContent = entry.error;
+    content.appendChild(error);
   }
 }
 
-/* ---- Fold / re-expand ----
- * Fold detaches the bubble element from the DOM and stores it on the entry.
- * A colored marker over the original selection text takes its place. The
- * nested subtree inside the bubble el (including folded sub-bubble markers
- * and their click handlers) is preserved, so re-expand is just a DOM
- * swap of the marker back for the cached el — no re-creation needed.
- *
- * This also means sub-bubbles that were folded before the parent folded
- * remain folded markers inside the saved el; clicking them later (after
- * the parent re-expands) re-expands them via their own marker handlers,
- * using their own cached responses.
+function updateBubbleActions(entry) {
+  var b = entry.buttons;
+  if (!b) return;
+  var loading = entry.status === 'loading';
+  b.stop.hidden = !loading;
+  b.regenerate.hidden = loading;
+  b.regenerate.title = entry.status === 'error' ? 'Retry' : 'Regenerate';
+  b.regenerate.setAttribute('aria-label', b.regenerate.title);
+  b.edit.hidden = loading;
+  b.copy.hidden = loading || !entry.responseText;
+  if (b.chat) b.chat.hidden = loading || entry.status !== 'done';
+}
+
+/* ---- Regenerate / edit ---- */
+
+function confirmDroppingChildren(entry, action) {
+  if (entry.children.size === 0) return true;
+  return window.confirm(action + '? The expansions inside this answer will be removed.');
+}
+
+function dropChildren(entry) {
+  Array.from(entry.children.values()).forEach(function (child) { dismissBubble(child.id); });
+}
+
+function regenerateBubble(id) {
+  var entry = bubbles.get(id);
+  if (!entry) return;
+  if (!confirmDroppingChildren(entry, 'Regenerate this answer')) return;
+  dropChildren(entry);
+  startBubbleStream(entry);
+  updateBubbleActions(entry);
+}
+
+function editBubbleQuestion(id, anchorEl) {
+  var entry = bubbles.get(id);
+  if (!entry) return;
+  var rect = anchorEl.getBoundingClientRect();
+  showPromptPanel({
+    x: rect.left,
+    y: rect.bottom + 4,
+    initialPrompt: entry.data.prompt || '',
+    onSubmit: function (prompt) {
+      if (!confirmDroppingChildren(entry, 'Replace this answer')) return;
+      dropChildren(entry);
+      entry.data.prompt = prompt.trim() ? prompt.trim() : '';
+      var title = entry.el.querySelector('.delta-bubble-title');
+      if (title) title.textContent = bubbleTitleText(entry.data);
+      startBubbleStream(entry);
+      updateBubbleActions(entry);
+    }
+  });
+}
+
+/* ---- Starting an expansion ---- */
+
+/**
+ * Wraps the selection, creates the bubble and starts streaming.
+ * `data` is from captureExpandData(); `parentEntry` is the bubble whose answer
+ * holds the selection, if any.
  */
+function expandSelection(data, parentEntry, prompt) {
+  if (!data || !data.range) return null;
+  if (parentEntry && isStreaming(parentEntry)) {
+    showContentNotice('Wait for this answer to finish before expanding inside it.');
+    return null;
+  }
+  var savedXpath = buildXPathFromNode(data.range.startContainer, data.range.startOffset, document);
+  var marker = null;
+  try { marker = wrapRangeWithMarker(data.range); } catch (err) { marker = null; }
+  var container = marker ? marker.parentNode : null;
+  if (!marker && parentEntry) {
+    container = parentEntry.el.querySelector('.delta-bubble-content');
+  }
+  var entry = createBubble({
+    range: data.range,
+    data: {
+      selection: data.selection,
+      context: parentEntry ? '' : data.context,
+      prompt: prompt && prompt.trim() ? prompt.trim() : ''
+    },
+    parent: parentEntry || null,
+    marker: marker,
+    container: container,
+    _savedXpath: savedXpath
+  });
+  window.getSelection() && window.getSelection().removeAllRanges();
+  startBubbleStream(entry);
+  return entry;
+}
+
+/* ---- Fold / re-expand ---- */
 
 function foldBubble(id) {
   var entry = bubbles.get(id);
   if (!entry || entry.folded) return;
 
-  /* Tell background to stop streaming if in-flight */
-  var pendingId = null;
-  pendingChunks.forEach(function (bid, rid) {
-    if (bid === id) pendingId = rid;
-  });
-  if (pendingId) {
-    browser.runtime.sendMessage({ type: 'abort', requestId: pendingId });
-    pendingChunks.delete(pendingId);
+  if (isStreaming(entry)) {
+    stopBubbleStream(entry);
+    entry.status = entry.responseText.trim() ? 'done' : 'error';
+    entry.error = entry.responseText.trim() ? '' : 'Generation stopped.';
+    renderBubbleAnswer(entry);
+    updateBubbleActions(entry);
   }
 
-  /* Recursively fold all children first so their el is also detached and
-   * stored on their own entry, keeping the parent el's sub-tree consistent. */
   entry.children.forEach(function (child) { if (!child.folded) foldBubble(child.id); });
 
-  /* Create the colored marker over the original selection text. */
   var isLight = document.documentElement.classList.contains('delta-theme-light');
   var markerBg = isLight ? 'rgba(74,111,165,0.15)' : 'rgba(138,160,184,0.28)';
-  var markerBorder = isLight ? '#4a6fa5' : '#8aa0b8';
-  var markerTriangle = isLight ? '#4a6fa5' : '#8aa0b8';
   var markerBgHover = isLight ? 'rgba(74,111,165,0.32)' : 'rgba(138,160,184,0.50)';
+  var markerBorder = isLight ? '#4a6fa5' : '#8aa0b8';
 
   var marker = document.createElement('span');
-  marker.className = 'delta-bubble-marker';
-  // Apply all styling inline so the marker is always visible regardless
-  // of whether the content CSS loads successfully (Firefox content script
-  // CSS can fail to apply in sandboxed/cross-origin frames).
+  marker.className = 'delta-bubble-marker delta-bubble-pill';
+  marker.setAttribute('role', 'button');
+  marker.setAttribute('tabindex', '0');
+  marker.title = (entry.data.prompt ? entry.data.prompt + ' — ' : '') + 'Click to expand again';
+  // Inline styles keep the marker visible where the content CSS does not apply.
   marker.style.cssText =
-    'display:inline;' +
-    'background:' + markerBg + ';' +
-    'border-bottom:1px dashed ' + markerBorder + ';' +
-    'border-radius:3px;' +
-    'padding:0 3px;' +
-    'margin:0 1px;' +
-    'cursor:pointer;' +
-    'vertical-align:baseline;' +
-    'user-select:text;';
-  // Triangle prefix for visual distinction
-  var triangleSpan = document.createElement('span');
-  triangleSpan.style.fontSize = '0.85em';
-  triangleSpan.style.color = markerTriangle;
-  triangleSpan.style.marginRight = '3px';
-  triangleSpan.textContent = '\u25B8';
-  marker.appendChild(triangleSpan);
+    'display:inline;background:' + markerBg + ';border-bottom:1px dashed ' + markerBorder + ';' +
+    'border-radius:3px;padding:0 3px;margin:0 1px;cursor:pointer;vertical-align:baseline;user-select:text;';
   marker.appendChild(document.createTextNode(entry.data.selection || ''));
-  // Hover darkening
   marker.addEventListener('mouseenter', function () { marker.style.background = markerBgHover; });
   marker.addEventListener('mouseleave', function () { marker.style.background = markerBg; });
 
-  /* Insert marker before the bubble, then detach the bubble. */
   if (entry.el && entry.el.parentNode) {
     entry.el.parentNode.insertBefore(marker, entry.el);
     entry.el.parentNode.removeChild(entry.el);
-  } else if (entry.marker) {
-    /* Already a marker in place (e.g. double fold) — replace it. */
+  } else if (entry.marker && entry.marker.parentNode) {
     entry.marker.parentNode.replaceChild(marker, entry.marker);
   } else {
     document.body.appendChild(marker);
   }
 
-  /* Wire click + right-click to re-expand this bubble. */
-  marker.addEventListener('click', function (e) {
+  var reopen = function (e) {
     e.preventDefault();
     e.stopPropagation();
     reexpandBubble(id);
-  });
-  marker.addEventListener('contextmenu', function (e) {
-    e.preventDefault();
-    e.stopPropagation();
-    reexpandBubble(id);
+  };
+  marker.addEventListener('click', reopen);
+  marker.addEventListener('contextmenu', reopen);
+  marker.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') reopen(e);
   });
 
   entry.marker = marker;
   entry.folded = true;
-  /* entry.el is intentionally kept (detached) for re-expand swap back. */
-
-  /* Restore any punctuation that was hidden around the bubble before fold
-   * (it's no longer adjacent to the marker — wait, actually it IS still
-   * adjacent; the marker took the bubble's slot). Re-run the check on the
-   * marker so punctuation still gets hidden when the bubble becomes a
-   * marker. */
   hideAdjacentPunctuation(marker);
-
-  /* Persist the folded state. */
   persistBubble(entry);
 }
 
-/**
- * Re-expand: swap the marker back for the cached bubble element (no AI call,
- * no DOM recreation). Nested sub-bubbles that were folded remain as markers
- * inside `entry.el`; clicking them re-expands each via its own marker
- * handler using its cached response.
- *
- * Three cases for where the marker might be:
- *  (a) Live in the document, with a real parentNode — simple swap.
- *  (b) Detached (no parentNode). Re-insert the cached el at a sensible
- *      location: into the parent bubble's body if this is a sub-bubble,
- *      otherwise at the end of document.body.
- *  (c) Completely lost (entry.marker is null). Same fallback as (b).
- */
 function reexpandBubble(id) {
   var entry = bubbles.get(id);
   if (!entry || !entry.folded) return;
   if (!entry.el) {
-    /* We somehow lost the cached element. Best we can do is mark unfolded
-     * so the next fold() call isn't a no-op. */
     entry.folded = false;
     entry.marker = null;
     return;
   }
-
   var marker = entry.marker;
   if (marker && marker.parentNode) {
-    /* Case (a): marker is live. Swap it for the cached el. */
     marker.parentNode.replaceChild(entry.el, marker);
   } else {
-    /* Case (b)/(c): re-insert the cached el into the parent body if we
-     * have one, otherwise at end of document.body. */
-    var target = null;
-    if (entry.parent && entry.parent.el) {
-      target = entry.parent.el.querySelector('.delta-bubble-body');
-    }
-    if (!target) target = document.body;
-    target.appendChild(entry.el);
+    var target = entry.parent && entry.parent.el ? entry.parent.el.querySelector('.delta-bubble-content') : null;
+    (target || document.body).appendChild(entry.el);
   }
-
   entry.marker = null;
   entry.folded = false;
-
-  /* Hide adjacent punctuation that should sit flush with the frame. */
   hideAdjacentPunctuation(entry.el);
 
-  /* If we never had a response (e.g. folded mid-stream), re-issue the
-   * request by sending expandRequest again. */
-  if (!entry.responseText && entry.data && entry.data.selection && !hasPendingChunk(id)) {
-    var requestId = genId();
-    pendingChunks.set(requestId, id);
-    browser.runtime.sendMessage({
-      type: 'expandRequest',
-      requestId: requestId,
-      selection: entry.data.selection,
-      context: entry.data.context,
-      prompt: entry.data.prompt
-    }).catch(function (err) {
-      updateBubble(id, 'Failed to send expand request: ' + (err && err.message ? err.message : err), true, true);
-    });
-  }
-
-  /* Persist the unfolded state. */
+  // Folded before any answer arrived: ask again.
+  if (!entry.responseText && !isStreaming(entry)) startBubbleStream(entry);
   persistBubble(entry);
 }
 
-function hasPendingChunk(bubbleId) {
-  var found = false;
-  pendingChunks.forEach(function (bid) { if (bid === bubbleId) found = true; });
-  return found;
-}
-
-/* ---- Dismiss (for explicit close) ---- */
+/* ---- Dismiss ---- */
 
 function dismissBubble(id) {
   var entry = bubbles.get(id);
   if (!entry) return;
-
-  /* Abort in-flight stream */
-  var pendingId = null;
-  pendingChunks.forEach(function (bid, rid) { if (bid === id) pendingId = rid; });
-  if (pendingId) {
-    browser.runtime.sendMessage({ type: 'abort', requestId: pendingId });
-    pendingChunks.delete(pendingId);
-  }
-
-  /* Recursively dismiss children */
+  stopBubbleStream(entry);
   entry.children.forEach(function (child) { dismissBubble(child.id); });
 
-  /* Restore any hidden adjacent punctuation so we don't strand wrappers
-   * in the document when the bubble is removed. */
   if (entry.el) restoreAdjacentPunctuation(entry.el);
   if (entry.marker) restoreAdjacentPunctuation(entry.marker);
 
-  /* Restore original DOM if we have a saved range and the marker/bubble is
-   * still attached. We do this by unwrapping — replace the bubble (or
-   * marker) with its original text only if the bubble was folded, otherwise
-   * the bubble contains the result not the original text.
-   *
-   * The simplest correct behavior: just remove our elements and leave the
-   * original text intact (the marker wraps the original text; the bubble
-   * replaced it but didn't destroy it). For dismissed bubbles we unwrap
-   * the marker back to its text children. For expanded bubbles we leave
-   * the bubble's removal as-is; the original text was already inside the
-   * marker that we replaced — to restore it, we re-extract from range.
-   */
   if (entry.marker) {
-    unwrapMarker(entry.marker);
+    var markerParent = entry.marker.parentNode;
+    if (markerParent) markerParent.replaceChild(document.createTextNode(entry.data.selection || ''), entry.marker);
     entry.marker = null;
   }
   if (entry.el) {
-    /* Put the original text back as a plain text node. This is best-effort. */
-    if (entry.range) {
-      try {
-        var container = entry.el.parentNode;
-        var textNode = document.createTextNode(entry.data.selection || '');
-        if (container) container.replaceChild(textNode, entry.el);
-      } catch (err) { /* ignore */ }
-    } else {
-      removeEl(entry.el);
-    }
+    var container = entry.el.parentNode;
+    if (container) container.replaceChild(document.createTextNode(entry.data.selection || ''), entry.el);
     entry.el = null;
   }
 
   bubbles.delete(id);
   if (entry.parent) {
     entry.parent.children.delete(id);
-    /* If the parent no longer hosts any sub-bubbles, restore its body's
-     * bottom padding so the text doesn't kiss the frame edge. */
     if (entry.parent.children.size === 0 && entry.parent.el) {
       var pbody = entry.parent.el.querySelector('.delta-bubble-body');
       if (pbody) pbody.classList.add('delta-bubble-body--text-only');
     }
   }
-
-  /* Drop the persisted record so the bubble doesn't reappear on the
-   * next page load. Sub-bubbles are removed first via the recursive
-   * call above, so this single remove() cascades to them all. */
   removePersistedBubble(id);
 }
 
-function dismissTopBubble() {
-  if (bubbles.size === 0) return;
-  /* No z-index anymore (inline bubbles) — fold the most recently created */
+/** Esc folds the most recently created open bubble. */
+function foldTopBubble() {
   var lastId = null;
-  bubbles.forEach(function (entry) {
-    if (!entry.folded) lastId = entry.id;
-  });
+  bubbles.forEach(function (entry) { if (!entry.folded && entry.el && entry.el.isConnected) lastId = entry.id; });
   if (lastId) foldBubble(lastId);
+}
+
+/* ---- Notices ---- */
+
+var noticeTimer = null;
+function showContentNotice(text) {
+  var notice = document.getElementById('delta-notice');
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.id = 'delta-notice';
+    notice.setAttribute('role', 'status');
+    notice.style.cssText = 'position:fixed;z-index:2147483647;bottom:16px;left:50%;transform:translateX(-50%);';
+    notice.addEventListener('click', function () { removeEl(notice); });
+    document.body.appendChild(notice);
+  }
+  notice.textContent = text;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(function () { removeEl(notice); }, 4000);
 }

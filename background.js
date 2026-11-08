@@ -1,351 +1,224 @@
-/* background.js — module script (manifest "type": "module")
- * Registers a native context menu item "Expand…".
- * Routes menu clicks to the content script which handles all UI.
- * Accepts expandRequest from content script and streams LLM chunks back.
- */
+/* background.js — ESM module (manifest "type": "module").
+ *
+ * Message router, streaming host and Knowledge Base scheduler. UI lives in the
+ * content script (inline page expansions), the toolbar popup (look-up) and the
+ * dashboard (Home, Chat, Knowledge Base, Guide, Settings). */
 
-import { callProviderStream } from './src/background/provider.js';
-import { loadConfig, saveConfig } from './src/background/config.js';
-import { buildExpandMessages } from './src/shared/expand-prompt.js';
-import { getSystemPrompt, buildScreenContextMessage } from './src/shared/prompts.js';
-import { loadKbPrompt, loadKbData, saveKbPrompt, saveKbKeywords, analyzeExpansions } from './src/background/kb.js';
-import { saveExpansionRecord, loadExpansionRecords, listUnfedExpansions, markExpansionKbFed, clearExpansionRecords } from './src/background/expansion-records.js';
-import { loadConversations, createConversation, updateConversation, deleteConversation } from './src/background/conversations.js';
-import { loadPageBubbles, addOrUpdateBubble, removeBubble, clearPageBubbles } from './src/shared/bubble-store.js';
+import { handleStreamPort, imageSupportForRole } from './src/background/streams.js';
+import { loadModelConfig, saveModelConfig, loadSettings, saveSettings } from './src/background/config.js';
+import { discoverConnectionModels, getModelCatalog, testConnection } from './src/background/model-catalog.js';
+import {
+  deleteConversation,
+  listConversations,
+  loadConversation,
+  renameConversation,
+  saveConversation,
+  searchConversations
+} from './src/background/conversations.js';
+import {
+  analyzePending,
+  countCuratableItems,
+  getKbStatus,
+  handleConfigChanged,
+  reanalyzeRecent,
+  startKbAutoMaintenance
+} from './src/background/kb.js';
+import {
+  clearMemories,
+  listMemoryFiles,
+  onMemoriesChanged,
+  readMemory,
+  removeMemory,
+  writeMemory
+} from './src/background/memory-store.js';
+import { clearExpansionRecords, loadExpansionRecords } from './src/background/expansion-records.js';
+import { loadPageBubbles, addOrUpdateBubble, removeBubble, clearPageBubbles, pruneExpired } from './src/shared/bubble-store.js';
+import { buildConversationTitle, newConversationId } from './src/shared/conversation.js';
+import { buildExpandPromptedInstruction, buildExpandUserInstruction } from './src/shared/prompts.js';
 
-const activeStreams = new Map();
+const DASHBOARD_URL = browser.runtime.getURL('dashboard/dashboard.html');
 
-function abortStream(requestId) {
-  const ac = activeStreams.get(requestId);
-  if (ac) {
-    ac.abort();
-    activeStreams.delete(requestId);
-  }
+function broadcast(message) {
+  browser.runtime.sendMessage(message).catch(() => { /* nobody listening */ });
 }
 
-async function streamExpand(tabId, frameId, requestId, selection, context, prompt) {
-  abortStream(requestId);
-
-  const config = await loadConfig();
-  const kbPrompt = await loadKbPrompt();
-  let systemContent = getSystemPrompt('lookup');
-  if (kbPrompt) {
-    systemContent = systemContent + '\n\n' + kbPrompt;
-  }
-
-  const messages = [
-    { role: 'system', content: systemContent },
-    ...buildExpandMessages({ answer: context, selection, prompt })
-  ];
-
-  const ac = new AbortController();
-  activeStreams.set(requestId, ac);
-
-  try {
-    let fullResponse = '';
-    for await (const chunk of callProviderStream(messages, config)) {
-      if (ac.signal.aborted) break;
-      fullResponse += chunk;
-      try {
-        await browser.tabs.sendMessage(tabId, {
-          type: 'expandChunk',
-          requestId,
-          text: fullResponse,
-          done: false
-        }, { frameId });
-      } catch {
-        break;
-      }
-    }
-
-    if (!ac.signal.aborted) {
-      try {
-        await browser.tabs.sendMessage(tabId, {
-          type: 'expandChunk',
-          requestId,
-          text: fullResponse,
-          done: true
-        }, { frameId });
-      } catch { /* tab gone */ }
-
-      if (fullResponse && !ac.signal.aborted) {
-        saveExpansionRecord({
-          id: requestId,
-          timestamp: Date.now(),
-          selection,
-          context,
-          prompt: prompt || '',
-          response: fullResponse
-        }).catch(() => {});
-      }
-    }
-  } catch (err) {
-    try {
-      await browser.tabs.sendMessage(tabId, {
-        type: 'expandChunk',
-        requestId,
-        error: err?.message || 'Unknown error',
-        done: true
-      }, { frameId });
-    } catch { /* tab gone */ }
-  } finally {
-    activeStreams.delete(requestId);
-  }
+let memoryBroadcastTimer = null;
+function announceMemoryUpdated() {
+  clearTimeout(memoryBroadcastTimer);
+  memoryBroadcastTimer = setTimeout(() => broadcast({ type: 'memoryUpdated' }), 150);
 }
+onMemoriesChanged(announceMemoryUpdated);
 
-async function streamChat(tabId, conversationId, messages, turnId) {
-  const config = await loadConfig();
-  const kbPrompt = await loadKbPrompt();
-  let systemContent = getSystemPrompt('chat');
-  if (kbPrompt) {
-    systemContent = systemContent + '\n\n' + kbPrompt;
-  }
+startKbAutoMaintenance(announceMemoryUpdated);
+pruneExpired().catch(() => {});
 
-  const fullMessages = [
-    { role: 'system', content: systemContent },
-    ...messages
-  ];
+/* ---- Streaming ---- */
 
-  try {
-    let fullResponse = '';
-    for await (const chunk of callProviderStream(fullMessages, config)) {
-      fullResponse += chunk;
-      try {
-        await browser.tabs.sendMessage(tabId, {
-          type: 'chatStreamChunk',
-          conversationId,
-          turnId,
-          text: fullResponse,
-          done: false
-        });
-      } catch {
-        break;
-      }
-    }
+browser.runtime.onConnect.addListener((port) => {
+  if (port.name === 'delta-stream') handleStreamPort(port, { onMemoryChanged: announceMemoryUpdated });
+});
 
-    try {
-      await browser.tabs.sendMessage(tabId, {
-        type: 'chatStreamChunk',
-        conversationId,
-        turnId,
-        text: fullResponse,
-        done: true
-      });
-    } catch { /* tab gone */ }
-  } catch (err) {
-    try {
-      await browser.tabs.sendMessage(tabId, {
-        type: 'chatStreamChunk',
-        conversationId,
-        turnId,
-        error: err?.message || 'Unknown error',
-        done: true
-      });
-    } catch { /* tab gone */ }
-  }
-}
-
-/* ---- Register native context menu items (every startup, not just onInstalled) ---- */
+/* ---- Context menu (re-registered on every startup) ---- */
 
 function registerContextMenus() {
   browser.contextMenus.removeAll().then(() => {
-    browser.contextMenus.create({
-      id: 'delta-expand',
-      title: 'Expand\u2026',
-      contexts: ['selection']
-    });
+    browser.contextMenus.create({ id: 'delta-expand', title: 'Expand', contexts: ['selection'] });
+    browser.contextMenus.create({ id: 'delta-expand-prompted', title: 'Expand on…', contexts: ['selection'] });
   });
 }
-
 registerContextMenus();
 
-let reqCtr = 0;
-function genRequestId() {
-  return 'rx_' + Date.now() + '_' + (reqCtr++);
-}
-
 browser.contextMenus.onClicked.addListener((info, tab) => {
-  const tabId = tab.id;
+  if (!tab || typeof tab.id !== 'number') return;
   const frameId = typeof info.frameId === 'number' ? info.frameId : 0;
-  const requestId = genRequestId();
-
-  if (info.menuItemId === 'delta-expand') {
-    browser.tabs.sendMessage(tabId, {
-      type: 'expandPromptedFromMenu',
-      requestId
-    }, { frameId });
+  if (info.menuItemId === 'delta-expand' || info.menuItemId === 'delta-expand-prompted') {
+    browser.tabs.sendMessage(tab.id, {
+      type: 'pageExpandCommand',
+      prompted: info.menuItemId === 'delta-expand-prompted'
+    }, { frameId }).catch(() => {});
   }
 });
 
-/* ---- Keyboard shortcut (Ctrl+E) ---- */
+/* ---- Keyboard commands ---- */
 
-browser.commands.onCommand.addListener((command) => {
-  if (command !== 'expand') return;
-  browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
-    const tab = tabs[0];
-    if (!tab) return;
-    const requestId = genRequestId();
-    browser.tabs.sendMessage(tab.id, {
-      type: 'expandPromptedFromMenu',
-      requestId
-    });
-  });
+browser.commands.onCommand.addListener(async (command) => {
+  if (command !== 'expand' && command !== 'expand-prompted') return;
+  // The dashboard and the popup take the key here too: the browser consumes it before they see it.
+  broadcast({ type: 'expandShortcut', prompted: command === 'expand-prompted' });
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (!tab) return;
+  // Every frame hears it; only the one holding the selection acts.
+  browser.tabs.sendMessage(tab.id, { type: 'pageExpandCommand', prompted: command === 'expand-prompted', fromShortcut: true }).catch(() => {});
 });
 
-function createKbProgressCallback() {
-  return (done, total) => {
-    const dashUrl = browser.runtime.getURL('dashboard/dashboard.html');
-    browser.tabs.query({ url: dashUrl }).then(tabs => {
-      for (const tab of tabs) {
-        browser.tabs.sendMessage(tab.id, {
-          type: 'kbAnalyzeProgress',
-          done,
-          total
-        }).catch(() => {});
-      }
-    }).catch(() => {});
-  };
+/* ---- Dashboard ---- */
+
+async function openDashboard(hash) {
+  const url = DASHBOARD_URL + (hash ? '#' + hash : '');
+  const tabs = await browser.tabs.query({ url: DASHBOARD_URL + '*' });
+  if (tabs.length > 0) {
+    const tab = tabs[0];
+    await browser.tabs.update(tab.id, { active: true, url });
+    if (typeof tab.windowId === 'number') await browser.windows.update(tab.windowId, { focused: true }).catch(() => {});
+    return;
+  }
+  await browser.tabs.create({ url });
 }
 
-/* ---- Message handler ---- */
+/** A page bubble becomes a look-up conversation the user can continue in Chat. */
+async function transferPageExpansion(message) {
+  const selection = String(message.selection || '');
+  const prompt = typeof message.prompt === 'string' && message.prompt.trim() ? message.prompt : undefined;
+  const now = new Date().toISOString();
+  const question = prompt !== undefined ? buildExpandPromptedInstruction(selection, prompt) : buildExpandUserInstruction(selection);
+  const record = {
+    id: newConversationId(),
+    title: buildConversationTitle(prompt ? `${prompt} — ${selection}` : selection),
+    createdAt: now,
+    updatedAt: now,
+    kbFed: false,
+    source: 'lookup',
+    lookup: {
+      context: String(message.context || '').slice(0, 12_000),
+      page: { title: String(message.page?.title || ''), url: String(message.page?.url || '') }
+    },
+    state: {
+      turns: [
+        { id: 1, role: 'user', content: question, expansions: [] },
+        { id: 2, role: 'assistant', content: String(message.response || ''), expansions: [] }
+      ]
+    }
+  };
+  await saveConversation(record);
+  await openDashboard(`chat/${record.id}`);
+  return { id: record.id };
+}
+
+/* ---- Messages ---- */
+
+function frameOf(sender) {
+  return typeof sender.frameId === 'number' ? sender.frameId : 0;
+}
+
+const handlers = {
+  /* config */
+  getModelConfig: () => loadModelConfig(),
+  saveModelConfig: async (m) => {
+    const saved = await saveModelConfig(m.config);
+    handleConfigChanged().catch(() => {});
+    broadcast({ type: 'configChanged' });
+    return saved;
+  },
+  getSettings: () => loadSettings(),
+  saveSettings: async (m) => {
+    const saved = await saveSettings(m.patch);
+    handleConfigChanged().catch(() => {});
+    broadcast({ type: 'settingsChanged', settings: saved });
+    return saved;
+  },
+  getCatalog: (m) => getModelCatalog({ force: m.force === true }),
+  discoverModels: (m) => discoverConnectionModels(m.connection),
+  testConnection: (m) => testConnection(m.connection, m.probeModel),
+  imageSupport: (m) => imageSupportForRole(m.role === 'lookup' ? 'lookup' : 'chat'),
+
+  /* conversations */
+  listConversations: () => listConversations(),
+  loadConversation: (m) => loadConversation(m.id),
+  saveConversation: async (m) => {
+    const meta = await saveConversation(m.record);
+    broadcast({ type: 'conversationsChanged' });
+    return meta;
+  },
+  deleteConversation: async (m) => {
+    await deleteConversation(m.id);
+    broadcast({ type: 'conversationsChanged', deleted: m.id });
+    return true;
+  },
+  renameConversation: async (m) => {
+    const record = await renameConversation(m.id, m.title);
+    broadcast({ type: 'conversationsChanged' });
+    return record ? record.title : null;
+  },
+  searchConversations: (m) => searchConversations(m.query),
+
+  /* knowledge base */
+  kbStatus: () => getKbStatus(),
+  kbAnalyze: () => analyzePending(),
+  kbReanalyze: (m) => reanalyzeRecent(m.count),
+  kbCountItems: () => countCuratableItems(),
+  memoryList: () => listMemoryFiles(),
+  memoryRead: (m) => readMemory(m.path),
+  memoryWrite: (m) => writeMemory(m.path, m.content),
+  memoryDelete: (m) => removeMemory(m.path, false),
+  memoryClear: () => clearMemories(),
+  browsingStats: async () => {
+    const records = await loadExpansionRecords();
+    return { total: records.length, unfed: records.filter((r) => !r.kbFed).length };
+  },
+  forgetBrowsing: async () => {
+    await clearExpansionRecords();
+    handleConfigChanged().catch(() => {});
+    return true;
+  },
+
+  /* page bubbles */
+  bubbleLoad: (m, sender) => loadPageBubbles(m.url, frameOf(sender)),
+  bubblePersist: (m, sender) => addOrUpdateBubble(m.url, frameOf(sender), m.bubble),
+  bubbleRemove: (m, sender) => removeBubble(m.url, frameOf(sender), m.bubbleId),
+  bubbleClearPage: (m, sender) => clearPageBubbles(m.url, frameOf(sender)),
+
+  /* navigation */
+  openDashboard: (m) => openDashboard(typeof m.hash === 'string' ? m.hash : ''),
+  transferExpansion: (m) => transferPageExpansion(m)
+};
 
 browser.runtime.onMessage.addListener((message, sender) => {
-  if (message.type === 'expandRequest') {
-    const tabId = sender.tab?.id;
-    if (!tabId) return false;
-    streamExpand(
-      tabId,
-      typeof sender.frameId === 'number' ? sender.frameId : 0,
-      message.requestId,
-      message.selection,
-      message.context,
-      message.prompt
-    );
-    return false;
-  }
-
-  if (message.type === 'loadConfig') {
-    return loadConfig();
-  }
-
-  if (message.type === 'saveConfig') {
-    return saveConfig(message.config);
-  }
-
-  if (message.type === 'abort') {
-    abortStream(message.requestId);
-    return false;
-  }
-
-  if (message.type === 'openSettings') {
-    browser.tabs.create({ url: 'dashboard/dashboard.html' });
-    return false;
-  }
-
-  if (message.type === 'kbLoadData') {
-    return loadKbData();
-  }
-
-  if (message.type === 'kbGetStatus') {
-    return (async () => {
-      const records = await loadExpansionRecords();
-      const unfed = records.filter(r => !r.kbFed);
-      return { total: records.length, unfed: unfed.length };
-    })();
-  }
-
-  if (message.type === 'kbAnalyze') {
-    return (async () => {
-      const unfed = await listUnfedExpansions();
-      return analyzeExpansions(unfed, markExpansionKbFed, createKbProgressCallback());
-    })();
-  }
-
-  if (message.type === 'kbReanalyze') {
-    return (async () => {
-      const all = await loadExpansionRecords();
-      const n = message.count || all.length;
-      const subset = all.slice(-Math.min(n, all.length));
-      return analyzeExpansions(subset, null, createKbProgressCallback());
-    })();
-  }
-
-  if (message.type === 'kbClear') {
-    return (async () => {
-      await clearExpansionRecords();
-      await saveKbPrompt('');
-      await saveKbKeywords([]);
-      return { ok: true };
-    })();
-  }
-
-  if (message.type === 'chatLoadConversations') {
-    return loadConversations();
-  }
-
-  if (message.type === 'chatCreateConversation') {
-    return createConversation(message.title || 'New Chat', [], 'chat');
-  }
-
-  if (message.type === 'chatDeleteConversation') {
-    return deleteConversation(message.conversationId);
-  }
-
-  if (message.type === 'chatUpdateConversation') {
-    return updateConversation(message.conversationId, message.updates);
-  }
-
-  if (message.type === 'chatSend') {
-    const tabId = sender.tab?.id;
-    if (!tabId) return false;
-    streamChat(tabId, message.conversationId, message.messages, message.turnId);
-    return false;
-  }
-
-  if (message.type === 'bubbleLoad') {
-    const frameId = typeof sender.frameId === 'number' ? sender.frameId : 0;
-    return loadPageBubbles(message.url, frameId);
-  }
-
-  if (message.type === 'bubblePersist') {
-    const frameId = typeof sender.frameId === 'number' ? sender.frameId : 0;
-    return addOrUpdateBubble(message.url, frameId, message.bubble);
-  }
-
-  if (message.type === 'bubbleRemove') {
-    const frameId = typeof sender.frameId === 'number' ? sender.frameId : 0;
-    return removeBubble(message.url, frameId, message.bubbleId);
-  }
-
-  if (message.type === 'bubbleClearPage') {
-    const frameId = typeof sender.frameId === 'number' ? sender.frameId : 0;
-    return clearPageBubbles(message.url, frameId);
-  }
-
-  if (message.type === 'transferExpansion') {
-    (async () => {
-      const title = (message.prompt || message.selection).slice(0, 60);
-      const turns = [];
-      if (message.context) {
-        turns.push({ id: crypto.randomUUID(), role: 'user', content: buildScreenContextMessage(message.context) });
-      }
-      turns.push({ id: crypto.randomUUID(), role: 'user', content: message.prompt || message.selection });
-      turns.push({ id: crypto.randomUUID(), role: 'assistant', content: message.response });
-      const conv = await createConversation(title, turns, 'expansion');
-
-      const dashUrl = browser.runtime.getURL('dashboard/dashboard.html');
-      const tabs = await browser.tabs.query({ url: dashUrl });
-      if (tabs.length > 0) {
-        const tab = tabs[0];
-        await browser.tabs.update(tab.id, { active: true });
-        await browser.tabs.sendMessage(tab.id, {
-          type: 'chatSelectConversation',
-          conversationId: conv.id
-        });
-      } else {
-        await browser.tabs.create({ url: dashUrl });
-      }
-    })();
-    return false;
-  }
+  const handler = message && handlers[message.type];
+  if (!handler) return false;
+  return Promise.resolve()
+    .then(() => handler(message, sender))
+    .catch((err) => {
+      // Rejections cross the boundary as plain Errors; keep the message readable.
+      throw new Error(err?.message || String(err));
+    });
 });
