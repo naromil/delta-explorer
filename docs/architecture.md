@@ -196,7 +196,7 @@ record, and resets `expansionIdCounter` past the max imported id.
   written. Error turns stay on disk but are omitted by `serializeForChat`, which also drops
   blank assistant placeholders.
 - The memories document base maintains itself. `onConversationSaved` in `conversations.ts` notifies
-  `kb/maintenance.ts` after every successful write; a 20s debounce after the last chat activity
+  `kb/maintenance.ts` after every successful write; a 3-minute debounce after the last chat activity, so the review runs once a session ends,
   starts a bounded pass (`AUTO_BATCH_SIZE`, newest first, chat and lookup alike). The pass curates each
   conversation into `{userData}/memories/` through the `kb-maintenance` role and marks it fed **per
   conversation**, so an interrupted run keeps its progress. Empty conversations

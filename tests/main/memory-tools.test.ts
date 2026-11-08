@@ -26,7 +26,7 @@ vi.mock('../../src/main/services/model-catalog', () => ({ getCachedModel }))
 
 import { memoriesDir } from '../../src/main/memory/store'
 import { memoryAgentFor, withAutoLoadedMemories } from '../../src/main/memory/tools'
-import { KB_MEMORY_SYSTEM_PROMPT } from '../../src/shared/prompts'
+import { KB_MEMORY_SYSTEM_PROMPT, MEMORY_INBOX_FILE } from '../../src/shared/prompts'
 import { callProvider, callProviderStream } from '../../src/main/provider'
 import type { ProviderMessage } from '../../src/main/provider'
 import type { RoleId } from '../../src/shared/models'
@@ -161,6 +161,30 @@ describe('memoryAgentFor', () => {
       expect(agentFor(role).instructions).toContain('Prefers worked examples.')
     }
     expect(KB_MEMORY_SYSTEM_PROMPT).toContain('index-learning.md')
+  })
+
+  it('has the assistant take notes in session and the curator review them later', () => {
+    for (const role of ['chat', 'lookup'] as const) {
+      const instructions = agentFor(role).instructions
+      expect(instructions).toMatch(/without being asked/)
+      expect(instructions).toContain(MEMORY_INBOX_FILE)
+    }
+    expect(agentFor('kb-maintenance').instructions).not.toMatch(/without being asked/)
+    expect(KB_MEMORY_SYSTEM_PROMPT).toContain(MEMORY_INBOX_FILE)
+    expect(KB_MEMORY_SYSTEM_PROMPT).toMatch(/Review\..*Capture\..*Abstract\..*Connect\./)
+  })
+
+  it('tells every stage the base exists to help the user improve', () => {
+    for (const role of ['chat', 'lookup'] as const) {
+      expect(agentFor(role).instructions).toMatch(/help this user improve/)
+    }
+    expect(KB_MEMORY_SYSTEM_PROMPT).toMatch(/help this user improve/)
+  })
+
+  it('asks every writer for several levels of detail', () => {
+    for (const role of ['chat', 'kb-maintenance'] as const) {
+      expect(agentFor(role).instructions).toMatch(/levels of detail/)
+    }
   })
 
   it('encourages index and collection meta-files', () => {

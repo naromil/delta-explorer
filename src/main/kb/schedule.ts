@@ -6,8 +6,10 @@
  * back off) can be tested without Electron.
  */
 
-/** Quiet period after the last conversation write before learning starts. */
-export const AUTO_DEBOUNCE_MS = 20_000
+/** Quiet period after the last conversation write: the review runs once a session ends, not between turns. */
+export const AUTO_DEBOUNCE_MS = 3 * 60_000
+/** Enabling learning or assigning its model has no session to wait for. */
+export const AUTO_CONFIG_DELAY_MS = 20_000
 /** Earliest an automatic pass may follow the previous one across a restart. */
 export const AUTO_MIN_INTERVAL_MS = 10 * 60_000
 /** Gap between passes while a backlog remains, so history drains in bounded batches. */

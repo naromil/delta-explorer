@@ -363,15 +363,19 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
   without tool support therefore gets no personalization, except in expand, which then gets the auto-loaded notes as text. Learning preferences live in the root
   `index-learning.md`, which the curator maintains. `migrateLegacyKbPrompt` moves an older
   install's `kb/prompt.txt` there once at startup and renames the old file `prompt.migrated.txt`.
-- **A document base about the user lives in `{userData}/memories/`** (`~/.config/delta-explorer/memories/` on Linux). It is a nested tree of
+- **A document base about the user lives in `{userData}/memories/`** (`~/.config/delta-explorer/memories/` on Linux). Its one purpose is to tailor answers so the user improves more effectively: both stages save and abstract what changes a future answer (knowledge level, gaps, goals, how they learn), not everything about the person. It is a nested tree of
   markdown files managed through the `memory_*` function tools (ls, cat, grep, write, edit, mkdir, mv,
   rm). These are not a real shell and must not become one: the model can receive untrusted screen
   text, so `memory/store.ts` implements each command in JS, confines every path to the root, refuses
   `..`, absolute paths and symlinks, and only touches `.md` files.
-  - **Writers.** The background curator is the primary writer: `runKbAnalysis` runs one tool pass per
-    conversation through the `kb-maintenance` role (`KB_MEMORY_SYSTEM_PROMPT`, deliberately
-    aggressive), so a failed pass leaves the conversation unfed. Chat and lookup hold the same tools,
-    but their prompt limits writes to explicit requests. Expand holds them too, as a follow-up does;
+  - **Writers, in two stages.** In session, chat and lookup take notes proactively
+    (`MEMORY_ASSISTANT_WRITE_RULES`): quick, dated lines in the file that covers the subject, or in the
+    root `inbox.md` (`MEMORY_INBOX_FILE`) when none fits, never reorganizing. Once the conversation goes
+    quiet, the curator reviews it ("dreaming"): `runKbAnalysis` runs one tool pass per conversation
+    through the `kb-maintenance` role, whose `KB_MEMORY_SYSTEM_PROMPT` checks the in-session notes
+    against the conversation and empties the inbox, captures what they missed (deliberately aggressive),
+    writes abstractions at a higher level of detail, and links related notes both ways. A failed pass
+    leaves the conversation unfed. Both stages hold the same tools. Expand holds them too, as a follow-up does;
     `withAutoLoadedMemories` gives it the auto-loaded files as text only when the model has no tools.
     The curator also learns from expansions, via the selected passage and typed question in
     `buildSingleMaterial`.
@@ -638,8 +642,8 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
   it atomically to the path chosen in the system save dialog. The UI shows
   idle → `Exporting…` → `Saved` (2s) or an inline error; the `'Canceled.'` error is a no-op.
 - **KB maintenance is automatic.** `kb/maintenance.ts` subscribes to `onConversationSaved`
-  (`conversations.ts`) and `onAppConfigChanged` (`config.ts`). A save starts a 20s-debounced
-  pass that curates at most 4 newest unfed conversations into the document base through the
+  (`conversations.ts`) and `onAppConfigChanged` (`config.ts`). A save starts a 3-minute-debounced
+  pass (so the review follows a session rather than each answer; a config change waits 20s) that curates at most 4 newest unfed conversations into the document base through the
   `kb-maintenance` role; a backlog continues every 45s, failures back off 2m → 30m, and
   `kb/state.json` persists pacing/error state. All runs (manual or automatic) share one queue,
   so writes never interleave. Nothing runs without a `kb-maintenance` model, and

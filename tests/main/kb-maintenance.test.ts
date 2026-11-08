@@ -55,6 +55,7 @@ import {
 } from '../../src/main/kb/maintenance'
 import {
   AUTO_BACKLOG_INTERVAL_MS,
+  AUTO_CONFIG_DELAY_MS,
   AUTO_DEBOUNCE_MS,
   AUTO_RETRY_BASE_MS
 } from '../../src/main/kb/schedule'
@@ -143,6 +144,28 @@ afterEach(() => {
 })
 
 describe('automatic KB pass scheduling', () => {
+  it('waits for a session to go quiet, but not after a config change', async () => {
+    let configListener: (() => void) | undefined
+    h.onAppConfigChanged.mockImplementation((listener: () => void) => {
+      configListener = listener
+      return () => undefined
+    })
+    startKbAutoMaintenance()
+    await settle()
+    vi.clearAllTimers()
+
+    unfed = [chat('chat_a')]
+    savedListener?.(record('chat_a'))
+    await vi.advanceTimersByTimeAsync(AUTO_CONFIG_DELAY_MS)
+    expect(h.runKbAnalysis).not.toHaveBeenCalled()
+    vi.clearAllTimers()
+
+    configListener?.()
+    await settle()
+    await vi.advanceTimersByTimeAsync(AUTO_CONFIG_DELAY_MS)
+    expect(h.runKbAnalysis).toHaveBeenCalledTimes(1)
+  })
+
   it('does not start a pass twice when two timers fire mid-scan', async () => {
     startKbAutoMaintenance()
     await settle()

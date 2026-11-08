@@ -6,6 +6,7 @@ import { listUnfedConversations, onConversationSaved } from '../conversations'
 import { runKbAnalysis } from './run'
 import {
   AUTO_BACKLOG_INTERVAL_MS,
+  AUTO_CONFIG_DELAY_MS,
   AUTO_DEBOUNCE_MS,
   autoFollowUpDelayMs,
   selectAutoBatch,
@@ -210,7 +211,7 @@ function handleAppConfigChanged(): void {
   void refreshStatus()
     .then((status) => {
       if (!started || !status.enabled || !status.configured || status.pending === 0) return
-      schedule(AUTO_DEBOUNCE_MS)
+      schedule(AUTO_CONFIG_DELAY_MS)
     })
     .catch((err) => console.warn('Failed to react to a config change:', err))
 }

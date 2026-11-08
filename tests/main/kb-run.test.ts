@@ -60,7 +60,7 @@ describe('runKbAnalysis', () => {
     const [messages, role, , usedAgent] = callProvider.mock.calls[0]
     expect(role).toBe('kb-maintenance')
     expect(usedAgent).toBe(agent)
-    expect(messages[0].content).toMatch(/primary writer/)
+    expect(messages[0].content).toMatch(/reflective review/)
     expect(JSON.stringify(messages)).toContain('What is a finite state machine?')
     expect(markConversationKbFed.mock.calls).toEqual([
       ['chat_a', '2026-01-02T00:00:00.000Z'],
