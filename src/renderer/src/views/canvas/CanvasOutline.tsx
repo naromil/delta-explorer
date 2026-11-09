@@ -80,6 +80,8 @@ function CanvasOutline({
             setActiveIndex(0)
           }}
           onKeyDown={(e) => {
+            // Arrows, Enter and Escape belong to the IME while CJK input is being composed.
+            if (e.nativeEvent.isComposing) return
             if (e.key === 'ArrowDown') {
               e.preventDefault()
               step(1)

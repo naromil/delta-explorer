@@ -394,6 +394,7 @@ function Conversation({
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={commitTitle}
                 onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing) return
                   if (e.key === 'Enter') {
                     e.preventDefault()
                     commitTitle()

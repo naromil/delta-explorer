@@ -31,6 +31,7 @@ function FrameTitleEditor({ title, onDone }: FrameTitleEditorProps): React.JSX.E
       onPointerDown={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         e.stopPropagation()
+        if (e.nativeEvent.isComposing) return
         if (e.key === 'Enter') finish(e.currentTarget.value)
         else if (e.key === 'Escape') finish(null)
       }}

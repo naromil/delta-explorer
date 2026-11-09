@@ -184,7 +184,8 @@ function handlePlainKey(e: KeyboardEvent, actions: CanvasKeyboardActions): void 
 }
 
 export function handleKeyDown(e: KeyboardEvent, actions: CanvasKeyboardActions): void {
-  if (e.defaultPrevented) return
+  // A key that is part of an IME composition (CJK input) belongs to the field, Escape included.
+  if (e.defaultPrevented || e.isComposing) return
   if (e.ctrlKey || e.metaKey) {
     if (!e.altKey && handleModifierKey(e, actions)) e.preventDefault()
     return

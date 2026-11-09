@@ -2704,7 +2704,7 @@ function CanvasBoard({
           defaultValue={canvas.title}
           onBlur={(e) => canvas.rename(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur()
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.currentTarget.blur()
           }}
         />
         <button
