@@ -127,6 +127,56 @@ export function buildPageContextMessage(context, page) {
   return `The following text is from a web page I am reading${source}:\n\n"${context}"`;
 }
 
+/* ---- Canvas ---- */
+
+/** A canvas answer fills a rectangle the user drew, so its size replaces every other length rule. */
+export function buildCanvasFitNote(words) {
+  return [
+    `Your answer appears inside a fixed rectangle that holds about ${words} words (about ${words * 3} characters in Chinese, Japanese or Korean).`,
+    'Write close to that length: use the space, and do not run past it.',
+    'This replaces any other instruction about length. Do not mention the rectangle.'
+  ].join(' ');
+}
+
+/** Cards the user selected and asked about. They are material, not conversation history. */
+export function buildCanvasSourcesNote(sources) {
+  const blocks = sources.map(({ title, text }, index) => {
+    const heading = title.trim() === '' ? `Card ${index + 1}` : `Card ${index + 1}: ${title.trim()}`;
+    return `<card>\n${heading}\n\n${text.trim()}\n</card>`;
+  });
+  return [
+    'The question below is about these cards, which the user selected on their canvas:',
+    ...blocks
+  ].join('\n\n');
+}
+
+/** Material the user linked into a branch: kind is 'note', 'card' or 'branch'. */
+export function buildCanvasContextNote(items) {
+  const blocks = items.map(({ kind, title, text, label }) => {
+    const lines = [
+      ...(title.trim() === '' ? [] : [`Title: ${title.trim()}`]),
+      ...(label ? [`How the user relates it: ${label}`] : [])
+    ];
+    return `<${kind}>\n${[...lines, text.trim()].join('\n\n')}\n</${kind}>`;
+  });
+  return [
+    'The user linked this material from elsewhere on their canvas into this conversation: a <note> is their own text, a <card> one question and answer, and a <branch> a separate conversation. It is not part of this conversation, so do not assume it was said here. Use it where it is relevant.',
+    ...blocks
+  ].join('\n\n');
+}
+
+/** How the page's own links reach the model on a canvas, and how it should hand them back. */
+export const PAGE_LINKS_NOTE = [
+  'The page text is markdown, with the page\'s own links kept as [text](address); links from elsewhere on the page are listed at the end.',
+  'When the user asks for links, sources, or where to go next, answer with the relevant ones as markdown links, copying each address exactly as it appears in the page text.',
+  'Never make up or alter an address. If the page has no link for what they want, say so.'
+].join(' ');
+
+/** A page on a canvas: the look-up's page context, with its links and how to give them. */
+export function buildPageCanvasContextMessage(context, page) {
+  return `${buildPageContextMessage(context, page)}\n\n${PAGE_LINKS_NOTE}`;
+}
+
 /* ---- Expand instructions ---- */
 
 const EXPAND_SHARED_CONSTRAINTS = [

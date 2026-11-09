@@ -17,8 +17,9 @@ let pageInfo = null;
 const openInChat = h('button.btn.btn--sm', { type: 'button', hidden: true, title: 'Continue this look-up in Chat', on: { click: transferToChat } }, icon('external', 14), 'Open in Chat');
 const resumeBtn = h('button.icon-btn', { type: 'button', hidden: true, title: 'Resume your last look-up', 'aria-label': 'Resume your last look-up' }, icon('history', 16));
 const newBtn = h('button.icon-btn', { type: 'button', hidden: true, title: 'New look-up', 'aria-label': 'New look-up', on: { click: () => startFresh() } }, icon('plus', 16));
+const canvasBtn = h('button.icon-btn', { type: 'button', title: 'Explore this page on a canvas', 'aria-label': 'Explore this page on a canvas', on: { click: openPageCanvas } }, icon('canvas', 16));
 const dashboardBtn = h('button.icon-btn', { type: 'button', title: 'Open the dashboard', 'aria-label': 'Open the dashboard', on: { click: () => openDashboard('home') } }, icon('home', 16));
-actions.append(openInChat, resumeBtn, newBtn, dashboardBtn);
+actions.append(openInChat, resumeBtn, newBtn, canvasBtn, dashboardBtn);
 
 const view = new ConversationView({
   host: document.getElementById('lookup-conversation'),
@@ -43,6 +44,13 @@ const view = new ConversationView({
 async function openDashboard(hash) {
   await rpc('openDashboard', { hash });
   window.close();
+}
+
+/** Over the page when it can hold one; restricted pages get the dashboard's canvas instead. */
+async function openPageCanvas() {
+  const opened = await rpc('openPageCanvas').catch(() => false);
+  if (opened) window.close();
+  else openDashboard('canvas');
 }
 
 async function transferToChat() {

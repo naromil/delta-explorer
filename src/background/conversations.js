@@ -165,6 +165,10 @@ function contentSnippet(record, needle) {
     texts.push(...nested);
   }
   if (record.source === 'lookup') texts.push(record.lookup.context);
+  if (record.source === 'canvas') {
+    for (const card of record.canvas.cards) if (card.kind === 'note') texts.push(card.text);
+    for (const frame of record.canvas.frames) texts.push(frame.title);
+  }
   for (const text of texts) {
     const flat = flattenMarkdown(text || '').replace(/\s+/g, ' ');
     const at = flat.toLowerCase().indexOf(needle);

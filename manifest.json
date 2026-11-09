@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Delta Explorer",
   "version": "0.2.0",
-  "description": "An AI helper for learning anything while you browse: expand any text inline, look things up, chat, and let it remember how you learn. Bring your own model.",
+  "description": "An AI helper for learning anything while you browse: expand any text inline, look things up, chat, explore pages on a canvas, and let it remember how you learn. Bring your own model.",
   "browser_specific_settings": {
     "gecko": {
       "id": "delta-ai-extension@naromil.com",
@@ -36,6 +36,7 @@
         "src/content/prompt.js",
         "src/content/selection-bar.js",
         "src/content/rehydrate.js",
+        "src/content/page-canvas.js",
         "src/content/init.js",
         "content.js"
       ],
@@ -62,8 +63,20 @@
         "default": "Alt+Shift+E"
       },
       "description": "Expand the selected text with your own question"
+    },
+    "open-canvas": {
+      "suggested_key": {
+        "default": "Alt+Shift+C"
+      },
+      "description": "Explore the page on a canvas"
     }
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["canvas/canvas.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "Delta Explorer look-up",

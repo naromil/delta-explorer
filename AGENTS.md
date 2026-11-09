@@ -2,8 +2,8 @@
 
 ## Overview
 Firefox MV3 extension, the browser companion to the Delta Explorer desktop app (`~/Projects/delta-ai`).
-Its features mirror the desktop app's, minus the canvas; the desktop look-up's screen OCR becomes page
-text. No build step, no npm dependencies. Files are loaded directly by Firefox. KaTeX is vendored
+Its features mirror the desktop app's, including the canvas; the desktop look-up's screen OCR becomes
+page text, and any web page can be opened as a canvas whose first card is the page. No build step, no npm dependencies. Files are loaded directly by Firefox. KaTeX is vendored
 unmodified in `vendor/katex/`.
 
 ## Loading the extension
@@ -17,9 +17,14 @@ unmodified in `vendor/katex/`.
 background.js (module)   →  message router, streaming host (Ports), context menu, commands, KB scheduler
 content.js + src/content →  inline page bubbles, injected into all frames (classic scripts, shared scope)
 popup/                   →  toolbar look-up (a ConversationView with role 'lookup')
-dashboard/               →  Home, Chat, Knowledge Base, Guide, Settings (hash routes, ES modules)
+dashboard/               →  Home, Chat, Canvas, Knowledge Base, Guide, Settings (hash routes, ES modules)
+canvas/                  →  standalone canvas page: the in-page overlay frame, or a tab
 src/ui/                  →  shared page UI: ConversationView, api bridge, dom helpers, attachments, CSS
-src/shared/              →  pure logic: prompts, models, conversation, rich-text, context-budget, markdown
+src/ui/canvas/           →  canvas board (gestures, keys, keyed DOM), store (state, streams, undo, save),
+                            panels (rail, selection bar, outline, map, shortcuts), popups, helpers
+src/shared/              →  pure logic: prompts, models, conversation, rich-text, context-budget, markdown,
+                            canvas* (geometry, sessions, selection, arrange, tidy, history, outline,
+                            context links, requests), layered-layout
 src/background/
 ├── provider.js          →  OpenAI-compatible streaming client with a function-tool agent loop
 ├── config.js            →  model config (connections + roles) and settings, with legacy migration
@@ -60,20 +65,46 @@ src/background/
   Kinds: `chat` (`role` + full `messages`, used for chat, look-ups and chat expansions) and
   `page-expand` (page context + chain of parent bubbles; the background builds the messages and records
   the expansion for the curator).
-- **Shortcuts:** `expand` (Ctrl+E) and `expand-prompted` (Alt+Shift+E) are commands. The background
-  sends `pageExpandCommand` to the active tab (every frame; only the one with a selection acts) and
-  broadcasts `expandShortcut` for the dashboard and popup, which never see the key themselves.
+- **Shortcuts:** `expand` (Ctrl+E), `expand-prompted` (Alt+Shift+E) and `open-canvas` (Alt+Shift+C) are
+  commands. `open-canvas`, the page context menu item and the popup's Canvas button send `openPageCanvas`
+  to the tab's top frame.
+- **Expand shortcuts:** for `expand` and `expand-prompted` the background sends `pageExpandCommand` to
+  the active tab (every frame; only the one with a selection acts) and broadcasts `expandShortcut` for
+  the dashboard, popup and canvas page, which never see the key themselves.
 
 ## Conversations
-- One record per conversation under `deltaConv:<id>`, metadata in `deltaConvIndex`. Shape:
-  `{ id, title, createdAt, updatedAt (ISO), kbFed, source: 'chat' | 'lookup', state: { turns },
-  lookup?: { context, page: { title, url } } }`. Turns: `{ id: number, role, content, expansions,
+- One record per conversation under `deltaConv:<id>`, metadata in `deltaConvIndex` (a canvas's meta
+  also holds `pageUrl`). Shape: `{ id, title, createdAt, updatedAt (ISO), kbFed,
+  source: 'chat' | 'lookup' | 'canvas', state: { turns }, lookup?: { context, page: { title, url } },
+  canvas?: layout }`. Turns: `{ id: number, role, content, expansions,
   error?, attachments? }`.
 - Expansions are offset-anchored annotations on a turn's markdown (`src/shared/rich-text.js`), never
   part of the history sent to the model. An expansion request is a follow-up branching from its turn
   (`buildExpandRequest`).
 - `kbFed` belongs to a version: a save that keeps `updatedAt` (folding, renaming) keeps it; a content
   change clears it. `migrateConversationRecord` accepts the extension's pre-0.2 shape.
+
+## Canvas
+- Ported from the desktop's `shared/canvas*.ts`, `hooks/useCanvas.ts` and `views/canvas/*`. The pure
+  modules were transpiled and adapted; keep them in step with the desktop when porting changes.
+- A canvas is a record with `source: 'canvas'` and a `canvas` layout `{ cards, frames, links, stack,
+  viewport }`, normalized on every load (`normalizeCanvasLayout`). Cards: `message`, `expansion`, `note`,
+  and the extension's `page` (`{ turnId, title, url }`, its text in a user turn).
+- A page card is the first context of every session that continues it: `turnsThroughCard` turns its
+  turn into `buildPageContextMessage`, and expansions on it use the page-expand shape
+  (`canvas-request.js`). Never send a page turn as anything the user said; the curator skips it
+  (`pageTurnIds`) except for what was expanded in it.
+- The board has no framework: `derive()` computes what is on screen, `renderNow()` updates DOM kept by
+  id (`syncKeyed`). Rebuild a card's text only when it changed, so selections and link animations survive.
+- Page links are kept: the content script writes the main content's links as `[text](address)` (http(s)
+  only, no in-page jumps or overlong addresses, `()<>` and spaces percent-encoded) and appends the page's
+  other links as a list. `PAGE_LINKS_NOTE` (`buildPageCanvasContextMessage`) tells the model to hand them
+  back as markdown links, copied exactly. Answers render them as links opening in a new tab.
+- The page canvas: the content script (`src/content/page-canvas.js`) reads the page as markdown, stashes
+  it with `stashCanvasSeed` (in `storage.session`, single use, bound to the tab) and adds an iframe of
+  `canvas/canvas.html?overlay=1&seed=<token>`. The frame takes the seed, reopens the newest canvas whose
+  meta `pageUrl` matches, or starts one with the page card. Embedded without a valid seed it shows nothing.
+  It closes by posting `delta-canvas-close` to its parent.
 
 ## Markdown and selections
 `src/shared/markdown.js` is a classic script defining `globalThis.DeltaMarkdown` (content script,
@@ -106,6 +137,8 @@ Keep `crossesBlockBoundary` (rich-text) and the parser's block rules consistent.
 ## Storage keys
 `deltaModelConfig`, `deltaSettings`, `deltaConvIndex`, `deltaConv:<id>`, `deltaMemories`,
 `deltaKbState`, `deltaExpansionRecords`, `deltaPageBubbles`, `deltaModelCatalog`, `deltaLastLookup`.
+`storage.session`: `deltaCanvasSeed:<token>` (page canvas hand-off). `localStorage` on extension pages:
+`delta-canvas-minimap`.
 Legacy keys migrated and removed on first use: `deltaConfig`, `deltaKbConfig`, `deltaConversations`,
 `deltaKbData`.
 

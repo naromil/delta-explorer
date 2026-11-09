@@ -22,7 +22,8 @@ const TABS = [
 const COMMANDS = [
   { name: '_execute_action', label: 'Open the look-up' },
   { name: 'expand', label: 'Expand the selected text' },
-  { name: 'expand-prompted', label: 'Expand with your own question' }
+  { name: 'expand-prompted', label: 'Expand with your own question' },
+  { name: 'open-canvas', label: 'Explore the page on a canvas' }
 ];
 
 function formatContextWindow(tokens) {

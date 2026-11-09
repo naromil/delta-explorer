@@ -7,6 +7,7 @@
  * idle background page; a running pass keeps the page awake. */
 
 import { KB_MEMORY_SYSTEM_PROMPT, LEARNING_PREFERENCES_FILE } from '../shared/prompts.js';
+import { pageTurnIds } from '../shared/conversation.js';
 import { loadSettings, resolveRole } from './config.js';
 import { callProvider, resolveTarget } from './provider.js';
 import { memoryAgentFor } from './memory-tools.js';
@@ -121,10 +122,26 @@ export function buildConversationMaterial(record) {
     if (page.url) parts.push(`Page: ${page.title ? page.title + ' — ' : ''}${page.url}`);
     if (record.lookup.context) parts.push(`Page text it was about: ${clip(record.lookup.context, 600)}`);
   }
+  const pageTurns = pageTurnIds(record);
+  if (record.source === 'canvas') {
+    for (const card of record.canvas.cards) {
+      if (card.kind !== 'page') continue;
+      const turn = record.state.turns.find((item) => item.id === card.turnId);
+      if (card.url) parts.push(`Page: ${card.title ? card.title + ' — ' : ''}${card.url}`);
+      if (turn) parts.push(`Page text the canvas explores: ${clip(turn.content, 600)}`);
+    }
+    const notes = record.canvas.cards.filter((card) => card.kind === 'note' && card.text.trim());
+    if (notes.length) parts.push('Notes the user wrote on the canvas:', ...notes.map((note) => '- ' + clip(note.text)));
+  }
   parts.push('---');
   const questionLines = [];
   const expansions = [];
   for (const turn of record.state.turns) {
+    if (pageTurns.has(turn.id)) {
+      // Page text is not something the user said, but what they expanded in it is.
+      collectExpansions(turn.content, turn.expansions, expansions);
+      continue;
+    }
     if (turn.role === 'user') {
       if (turn.content.trim()) questionLines.push('- User: ' + turn.content.trim());
     } else if (!turn.error && turn.content.trim()) {
@@ -178,7 +195,9 @@ function buildKbMessages(material) {
 /* ---- Queue ---- */
 
 function hasLearningMaterial(record) {
-  return record.state.turns.some((turn) => turn.content.trim() !== '' || (turn.expansions || []).length > 0);
+  const pageTurns = pageTurnIds(record);
+  return record.state.turns.some((turn) =>
+    (turn.content.trim() !== '' && !pageTurns.has(turn.id)) || (turn.expansions || []).length > 0);
 }
 
 /** Every curatable item, newest first: conversations and pages with expansions. */

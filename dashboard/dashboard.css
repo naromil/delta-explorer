@@ -79,6 +79,8 @@ html, body { height: 100%; overflow: hidden; }
 .view { height: 100%; overflow-y: auto; }
 .view--chat { display: flex; flex-direction: column; overflow: hidden; }
 .view--chat[hidden] { display: none; }
+.view--canvas { display: flex; flex-direction: column; overflow: hidden; }
+.view--canvas[hidden] { display: none; }
 
 .view-header {
   max-width: 920px;

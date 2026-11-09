@@ -1,11 +1,13 @@
 /* Dashboard shell: navigation, routing by URL hash, theme, global shortcuts.
  *
- * Routes: #home, #chat, #chat/<id>, #knowledge, #guide, #settings, #settings/<tab>. */
+ * Routes: #home, #chat, #chat/<id>, #canvas, #canvas/<id>, #knowledge, #guide, #settings,
+ * #settings/<tab>. */
 
 import { onBroadcast, rpc } from '../../src/ui/api.js';
 import { applyTheme, h, icon, keyLabel } from '../../src/ui/dom.js';
 import { createHomeView } from './home.js';
 import { createChatView } from './chat.js';
+import { createCanvasView } from './canvas.js';
 import { createKnowledgeView } from './knowledge.js';
 import { createGuideView } from './guide.js';
 import { createSettingsView } from './settings.js';
@@ -14,6 +16,7 @@ import { openSearch } from './search.js';
 const NAV = [
   { view: 'home', label: 'Home', icon: 'home' },
   { view: 'chat', label: 'Chat', icon: 'chat' },
+  { view: 'canvas', label: 'Canvas', icon: 'canvas' },
   { view: 'knowledge', label: 'Knowledge Base', icon: 'book' },
   { view: 'guide', label: 'Guide', icon: 'compass' },
   { view: 'settings', label: 'Settings', icon: 'settings' }
@@ -29,7 +32,7 @@ const app = {
     else location.hash = next;
   },
   openConversation(meta) {
-    app.navigate(`chat/${meta.id}`);
+    app.navigate(`${meta.source === 'canvas' ? 'canvas' : 'chat'}/${meta.id}`);
   },
   newChat() {
     app.navigate('chat/new');
@@ -47,6 +50,7 @@ function viewFactory(name) {
   switch (name) {
     case 'home': return createHomeView(host, app);
     case 'chat': return createChatView(host, app);
+    case 'canvas': return createCanvasView(host, app);
     case 'knowledge': return createKnowledgeView(host, app);
     case 'guide': return createGuideView(host, app);
     case 'settings': return createSettingsView(host, app);
@@ -79,7 +83,7 @@ function buildNav() {
   for (const item of NAV) {
     nav.appendChild(h('button.sidebar-tab', {
       type: 'button', dataset: { view: item.view },
-      on: { click: () => app.navigate(item.view === 'chat' && views.chat?.currentId() ? `chat/${views.chat.currentId()}` : item.view) }
+      on: { click: () => app.navigate((item.view === 'chat' || item.view === 'canvas') && views[item.view]?.currentId() ? `${item.view}/${views[item.view].currentId()}` : item.view) }
     }, icon(item.icon, 17), h('span', { text: item.label })));
   }
   document.getElementById('search-key').textContent = keyLabel('Ctrl+K');
@@ -105,7 +109,7 @@ function bindShortcuts() {
   // Ctrl+E is an extension command, so the browser takes the key before this page sees it.
   onBroadcast('expandShortcut', (msg) => {
     if (!document.hasFocus()) return;
-    if (current === views.chat) views.chat.handleExpandShortcut(!!msg.prompted);
+    if (current === views.chat || current === views.canvas) current.handleExpandShortcut(!!msg.prompted);
   });
 }
 

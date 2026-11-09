@@ -26,6 +26,7 @@ export function createHomeView(host, app) {
       setupBanner,
       h('div.home-actions',
         action('chat', 'Start a chat', 'Ask anything — Delta Explorer remembers.', () => app.newChat()),
+        action('canvas', 'Open a canvas', 'Ask in rectangles on an open plane, or explore any page on one.', () => app.navigate('canvas')),
         action('book', 'Update memories', 'Curate your recent chats and page look-ups into notes.', () => app.navigate('knowledge')),
         action('search', 'Look something up', 'Select text on any page, or open the look-up from the toolbar.', () => app.navigate('guide'), lookupKey)),
       recentSection));

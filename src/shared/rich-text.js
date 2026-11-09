@@ -148,6 +148,11 @@ export function expansionPath(nodes, id) {
   return null;
 }
 
+/** The expansion and everything nested under it. */
+export function expansionSubtreeIds(node) {
+  return [node.id, ...node.children.flatMap(expansionSubtreeIds)];
+}
+
 export function maxExpansionId(turns) {
   let max = 0;
   const visit = (nodes) => {

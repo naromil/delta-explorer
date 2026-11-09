@@ -113,6 +113,10 @@ export function createChatView(host, app) {
         app.newChat();
         return;
       }
+      if (record.source === 'canvas') {
+        app.navigate(`canvas/${id}`);
+        return;
+      }
       loadedId = id;
       view.load(record);
       renderToolbar();

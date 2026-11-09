@@ -1,8 +1,9 @@
 /* background.js — ESM module (manifest "type": "module").
  *
  * Message router, streaming host and Knowledge Base scheduler. UI lives in the
- * content script (inline page expansions), the toolbar popup (look-up) and the
- * dashboard (Home, Chat, Knowledge Base, Guide, Settings). */
+ * content script (inline page expansions, the page canvas overlay), the toolbar popup
+ * (look-up), the canvas page and the dashboard (Home, Chat, Canvas, Knowledge Base,
+ * Guide, Settings). */
 
 import { handleStreamPort, imageSupportForRole } from './src/background/streams.js';
 import { loadModelConfig, saveModelConfig, loadSettings, saveSettings } from './src/background/config.js';
@@ -64,12 +65,17 @@ function registerContextMenus() {
   browser.contextMenus.removeAll().then(() => {
     browser.contextMenus.create({ id: 'delta-expand', title: 'Expand', contexts: ['selection'] });
     browser.contextMenus.create({ id: 'delta-expand-prompted', title: 'Expand on…', contexts: ['selection'] });
+    browser.contextMenus.create({ id: 'delta-canvas', title: 'Explore this page on a canvas', contexts: ['page', 'selection'] });
   });
 }
 registerContextMenus();
 
 browser.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab || typeof tab.id !== 'number') return;
+  if (info.menuItemId === 'delta-canvas') {
+    openPageCanvas(tab.id).catch(() => {});
+    return;
+  }
   const frameId = typeof info.frameId === 'number' ? info.frameId : 0;
   if (info.menuItemId === 'delta-expand' || info.menuItemId === 'delta-expand-prompted') {
     browser.tabs.sendMessage(tab.id, {
@@ -82,6 +88,11 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
 /* ---- Keyboard commands ---- */
 
 browser.commands.onCommand.addListener(async (command) => {
+  if (command === 'open-canvas') {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tab) openPageCanvas(tab.id).catch(() => {});
+    return;
+  }
   if (command !== 'expand' && command !== 'expand-prompted') return;
   // The dashboard and the popup take the key here too: the browser consumes it before they see it.
   broadcast({ type: 'expandShortcut', prompted: command === 'expand-prompted' });
@@ -132,6 +143,53 @@ async function transferPageExpansion(message) {
   await saveConversation(record);
   await openDashboard(`chat/${record.id}`);
   return { id: record.id };
+}
+
+/* ---- Page canvas ----
+ * The content script reads the page and stashes it here; the canvas frame it opens takes it
+ * back with a single-use token bound to the tab. Session storage survives the event page
+ * being suspended in between. */
+
+const CANVAS_SEED_PREFIX = 'deltaCanvasSeed:';
+const CANVAS_SEED_TTL_MS = 5 * 60_000;
+const CANVAS_SEED_TEXT_LIMIT = 21_000;
+
+/** Asks the tab's top frame to open the canvas over the page; false where no content script runs. */
+async function openPageCanvas(tabId) {
+  try {
+    await browser.tabs.sendMessage(tabId, { type: 'openPageCanvas' }, { frameId: 0 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function stashCanvasSeed(message, sender) {
+  if (!sender.tab || typeof sender.tab.id !== 'number') throw new Error('Not from a tab.');
+  const seed = message.seed || {};
+  const token = crypto.randomUUID();
+  await browser.storage.session.set({
+    [CANVAS_SEED_PREFIX + token]: {
+      tabId: sender.tab.id,
+      at: Date.now(),
+      seed: {
+        title: String(seed.title || '').slice(0, 300),
+        url: String(seed.url || '').slice(0, 2000),
+        text: String(seed.text || '').slice(0, CANVAS_SEED_TEXT_LIMIT)
+      }
+    }
+  });
+  return token;
+}
+
+async function takeCanvasSeed(message, sender) {
+  const key = CANVAS_SEED_PREFIX + String(message.token || '');
+  const stored = (await browser.storage.session.get(key))[key];
+  if (!stored) return null;
+  await browser.storage.session.remove(key);
+  if (!sender.tab || sender.tab.id !== stored.tabId) return null;
+  if (Date.now() - stored.at > CANVAS_SEED_TTL_MS) return null;
+  return stored.seed;
 }
 
 /* ---- Messages ---- */
@@ -209,6 +267,12 @@ const handlers = {
 
   /* navigation */
   openDashboard: (m) => openDashboard(typeof m.hash === 'string' ? m.hash : ''),
+  openPageCanvas: async () => {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    return tab ? openPageCanvas(tab.id) : false;
+  },
+  stashCanvasSeed: (m, sender) => stashCanvasSeed(m, sender),
+  takeCanvasSeed: (m, sender) => takeCanvasSeed(m, sender),
   transferExpansion: (m) => transferPageExpansion(m)
 };
 

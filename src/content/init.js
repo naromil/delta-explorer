@@ -79,6 +79,10 @@ function initContentScript() {
       else expandSelection(data, parent, '');
       return;
     }
+    if (msg.type === 'openPageCanvas') {
+      openPageCanvas();
+      return;
+    }
     if (msg.type === 'getPageContext') {
       if (window !== window.top) return;
       var sel = window.getSelection();
