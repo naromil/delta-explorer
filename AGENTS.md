@@ -1,19 +1,38 @@
 # Delta Explorer
 
-Electron desktop app (BYOK) with a ChatGPT-like chat UI (React 19), an infinite canvas of
-answer rectangles, and an always-on-top lookup popup that performs OCR on screen captures via
-global hotkey.
-Targets Linux (X11 + KDE Wayland first-class), macOS/Windows secondary.
+A monorepo (npm workspaces) holding two products and the code they share:
+
+| Workspace          | Path             | What it is                                                            |
+| ------------------ | ---------------- | --------------------------------------------------------------------- |
+| `delta-explorer`   | `apps/desktop`   | Electron desktop app — the main subject of this file                  |
+| `@delta/extension` | `apps/extension` | Firefox MV3 extension; its own guide is `apps/extension/AGENTS.md`    |
+| `@delta/core`      | `packages/core`  | Pure TypeScript both apps import: canvas model, rich text, prompts, … |
+
+The desktop app is an Electron app (BYOK) with a ChatGPT-like chat UI (React 19), an infinite
+canvas of answer rectangles, and an always-on-top lookup popup that performs OCR on screen
+captures via global hotkey. Targets Linux (X11 + KDE Wayland first-class), macOS/Windows secondary.
+
+**Paths in the rest of this file are relative to `apps/desktop`**, except `shared/<module>` for
+the modules listed under "Shared", which live in `packages/core/src/<module>.ts` and are imported
+as `@delta/core/<module>`. Only `models.ts`, `model-catalog.ts`, `model-picker.ts` and `kb.ts`
+are still desktop files under `apps/desktop/src/shared/`.
 
 ## Commands
 
-- `npm run dev` — Launch app with HMR (electron-vite)
-- `npm run typecheck` — `tsc --noEmit` (node: `src/main/**`, `src/preload/**`; web: `src/renderer/src/**`)
-- `npm run lint` — ESLint (Prettier-compatible config; `format:check` verifies formatting)
-- `npm run test` — Vitest over `tests/**` (unit tests + acceptance gates)
-- `npm run verify` — typecheck + lint + test + `prettier --check`
-- `npm run build` — Typecheck then `electron-vite build`
+Run from the repository root:
+
+- `npm run dev` — Launch the desktop app with HMR (electron-vite)
+- `npm run dev:extension` — Rebuild the extension into `apps/extension/dist` on every change
+- `npm run typecheck` — `tsc --noEmit` in every workspace (desktop node: `src/main/**`, `src/preload/**`; web: `src/renderer/src/**`; core: `src/**`)
+- `npm run lint` — ESLint over the repo (Prettier-compatible config; `format:check` verifies formatting)
+- `npm run test` — Vitest in every workspace (`packages/core/tests/**`; `apps/desktop/tests/**`, unit tests + acceptance gates)
+- `npm run verify` — typecheck + lint + test + `prettier --check` + extension build
+- `npm run build` — Typecheck then `electron-vite build` (desktop); `npm run build:extension` bundles the extension
 - `npm run format` — Prettier write across the repo
+
+A single workspace: `npm run <script> -w apps/desktop` (or `-w packages/core`). The acceptance
+gates (`tools/acceptance/run-gate.mjs`) read paths relative to the working directory, so run
+them from `apps/desktop`.
 
 **Always run `npm run typecheck && npm run lint` after changing `.ts`/`.tsx`.**
 The build will fail on typecheck errors, so fix them before committing.
@@ -32,7 +51,17 @@ The build will fail on typecheck errors, so fix them before committing.
   pruned by `scripts/strip-usocket.mjs` in `postinstall` for exactly this reason; if a dependency
   needs native code, rebuild it for Electron or pick a pure-JS alternative.
 - Use custom scrollbars everywhere — never the native OS scrollbar. Style `::-webkit-scrollbar` on scrollable elements.
-- Store all AI-facing prompt strings as exported constants in `src/shared/prompts.ts`. Never inline a prompt in a handler or component.
+- Store all AI-facing prompt strings as exported constants in `packages/core/src/prompts.ts`. Never inline a prompt in a handler or component.
+  (The extension keeps its browser-specific wording in `apps/extension/src/shared/prompts.js`, which re-exports the rest from core.)
+- `@delta/core` stays pure: no Electron, Node, DOM or `browser.*` APIs, and no imports from an app.
+  Both apps compile its TypeScript sources directly (`exports: ./* → ./src/*.ts`), so there is no
+  build step for it. A change there ships in both apps: run the desktop tests and
+  `npm run build:extension`, and keep the extension's callers working (see its `AGENTS.md`).
+- Keep `@delta/core` a **devDependency** of the desktop. electron-vite externalizes `dependencies`
+  from the main bundle, which would leave a `require('@delta/core/…')` of a `.ts` file at runtime.
+- Workspaces hoist `node_modules` to the root. `electron` is pinned to an exact version because
+  electron-builder cannot read a version range from a hoisted install, and `electron-builder.yml`
+  takes `tessdata` from `../../node_modules`.
 - When architecture changes, update this file.
 
 ## Detailed guidelines
@@ -91,17 +120,17 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 
 #### Module map
 
-##### Shared (`src/shared/`)
+##### Shared (`packages/core/src/`, imported as `@delta/core/<module>`)
 
 | Module                 | Role                                                                                                                                                                                                                                                                                      |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `models.ts`            | Shared types + registries (ProviderType, RoleId, Connection, etc.)                                                                                                                                                                                                                        |
+| `messages.ts`          | `ImageInput`, `ProviderMessage`: the request shape every provider receives (re-exported by the desktop `models.ts`)                                                                                                                                                                       |
 | `conversation.ts`      | `ConversationRecord` (chat, lookup, canvas union), `ConversationState` / `Turn` (markdown `content` + offset-anchored `expansions`), `ConversationMeta`, `linearStateOf`, `linearRecordOf`, `persistableTurns`, `serializeForChat`, `buildConversationTitle`, `migrateConversationRecord` |
 | `context-budget.ts`    | Pure token budgeting: `estimateTokens` (4 chars/token), `budgetFor` (85% of the window minus the output reserve), `trimMessages` (drops oldest non-system messages, never the last)                                                                                                       |
 | `rich-text.ts`         | Pure rich-text model: `ExpansionNode`, `validateInsertion` / `insertExpansion(InTurns)` / `updateExpansion` / `setExpansionFolded` / `findExpansionIn*` / `maxExpansionId`, `flattenMarkdown`, legacy `migrateLegacySegments`                                                             |
 | `expand-prompt.ts`     | `buildExpandRequest(state, turn, parentId, range, role, prompt?, attachments?)` — a follow-up's messages at that turn, ancestor chain, instruction; `buildExpandMessages` assembles the branch                                                                                            |
 | `attachments.ts`       | `ImageAttachment`, per-message/size limits, `isImageInput` / `isImageAttachment` validation, `scaledImageSize`                                                                                                                                                                            |
-| `canvas.ts`            | Pure canvas model: card types, rectangles, snapping, `estimateWords`, `withCanvasFit`, `resolveMove`, session walks (`turnsThroughCard`), `linkPath`, viewport math, `normalizeCanvasLayout`                                                                                              |
+| `canvas.ts`            | Pure canvas model: card types (incl. the extension's `page`), rectangles, snapping, `estimateWords`, `withCanvasFit`, `resolveMove`, session walks (`turnsThroughCard`), `linkPath`, viewport math, `normalizeCanvasLayout`                                                               |
 | `canvas-selection.ts`  | What a selection covers: `marqueeHits`, `movingForSelection` (frames bring contents, cards bring what is joined), `sessionAncestorIds`, `cardAtPoint`, `selectionMarkdown`, `sourceExcerpts`                                                                                              |
 | `canvas-arrange.ts`    | Rigid blocks: `alignSelection`, `distributeSelection`, `duplicateSelection`; spaces out only what it moves                                                                                                                                                                                |
 | `canvas-history.ts`    | Undo as patches: `diffCanvas`, `applyCanvasPatch` (leaves what the patch did not touch, refuses a turn that moved on)                                                                                                                                                                     |
@@ -182,6 +211,7 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 
 | Task                                   | File(s)                                                                                                                    |
 | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Share logic with the extension         | `packages/core/src/*` + a one-line re-export in `apps/extension/src/shared/` (pure code only)                              |
 | Add an AI provider                     | `provider.ts` (`ROUTES` row: name + base URL, nothing else)                                                                |
 | Change the OCR/capture pipeline        | `lookup/capture.ts`                                                                                                        |
 | Change the hotkey response flow        | `lookup/lookup.ts` (`handleHotkeyPressed`)                                                                                 |
@@ -427,6 +457,11 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
   never join anything: `orderBoxes` keeps their families adjacent and swaps positions while that lowers
   crossings, then lines over other cards, then total line length. Lines do not route around cards. When
   nothing would move it returns `{ ok: false }` and the view says so.
+- **A page card belongs to the extension, but its model is shared.** `kind: 'page'` holds a web page's
+  text in a user turn (`turnId`, `title`, `url`). It roots every session that continues it:
+  `turnsThroughCard` sends it as `buildPageCanvasContextMessage`, and a term expanded on it is asked as
+  a fresh expand instruction rather than an ancestor question. It has no source, never fits its
+  height, stays single on duplicate, and the desktop shows it read-only (no edit or regenerate).
 - **A note is a card, a frame and a connection are not.** A note (`kind: 'note'`) stands on the plane
   like any card, so it snaps, joins and may overlap, but holds no turn, so it continues no session
   (`continuationCandidates`) and curator passes never see it: note edits save with `touchContent: false`.
@@ -741,7 +776,7 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 
 #### More Details
 
-Refer to `docs/architecture.md` for more details.
+Refer to `apps/desktop/docs/architecture.md` for more details.
 
 ### Coding Style Guidelines
 

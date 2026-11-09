@@ -62,9 +62,9 @@ Renderer (React 19)          Preload (contextBridge)        Main process (Node)
 | Module                                              | Role                                                                                                                                                         |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/shared/models.ts`                              | Provider/role type registries, connection & config types — pure TS, no runtime deps                                                                          |
-| `src/shared/conversation.ts`                        | `ConversationState` model + pure helpers: tokenize, expand/insert/fold/unfold, serialize for API                                                             |
-| `src/shared/expand-prompt.ts`                       | `buildExpandRequest` — constructs API messages for inline expansions with optional custom direction                                                          |
-| `src/shared/prompts.ts`                             | All LLM-facing prompt strings (system prompts, context template, expand instructions, KB analysis)                                                           |
+| `packages/core/src/conversation.ts` (repo root)     | `ConversationState` model + pure helpers: tokenize, expand/insert/fold/unfold, serialize for API                                                             |
+| `packages/core/src/expand-prompt.ts` (repo root)    | `buildExpandRequest` — constructs API messages for inline expansions with optional custom direction                                                          |
+| `packages/core/src/prompts.ts` (repo root)          | All LLM-facing prompt strings (system prompts, context template, expand instructions, KB analysis)                                                           |
 | `src/main/index.ts`                                 | App lifecycle, main window, tray, streaming IPC handlers (chat-send, chat-expand, lookup-transfer)                                                           |
 | `src/main/config.ts`                                | Config persistence (providers.json, settings.json), Wayland detection, hotkey registry                                                                       |
 | `src/main/provider.ts`                              | Provider dispatch by role — resolves connection + model, routes to Google AI Studio / OpenAI-compatible / Ollama / OpenAI / OpenRouter                       |
@@ -157,6 +157,10 @@ helpers. There is no component or end-to-end harness yet, so UI changes still ne
 with `npm run dev`.
 
 ### Commands
+
+The app lives in `apps/desktop` of the Delta Explorer monorepo. Run these from the repository root;
+the packaging commands (`build:linux`, `build:mac`, `build:win`) from `apps/desktop`, or from the root
+with `-w apps/desktop`.
 
 | Command               | Description                                      |
 | --------------------- | ------------------------------------------------ |

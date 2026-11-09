@@ -13,8 +13,11 @@ browser. Five surfaces share one background:
 | Page canvas | iframe over any page (`canvas/canvas.html`) | The page as the first card of a canvas |
 | Background | ES module event page | Routing, streaming, model config, conversations, memories, curator |
 
-There is no build step. Shared logic lives in `src/shared/` as ES modules, except
-`src/shared/markdown.js`, a classic script so the content script can load it too.
+Firefox loads `dist/`, built by `scripts/build.mjs`: esbuild bundles the four module entries and
+copies everything else unchanged. Shared logic lives in `src/shared/` as ES modules, except
+`src/shared/markdown.js`, a classic script so the content script can load it too. The canvas model,
+rich text and context budget there are re-exports of `@delta/core` (`packages/core/src`), the
+TypeScript the desktop app runs as well.
 
 ## Desktop → extension mapping
 
@@ -86,8 +89,8 @@ question and its answer), expansions (an `ExpansionNode` in a turn), notes, and 
 `parentId` chains: a rectangle sharing a side with a card continues it, so a canvas branches and each
 branch sends only its own history. Answers are sized by their rectangle (`buildCanvasFitNote`), then the
 card's height is fitted to the text. Frames, connections (optionally sending context), undo as patches,
-an outline with search, a map, tidy/align and the full keyboard map work as on the desktop; see the desktop
-repo's `docs/architecture.md` for the model.
+an outline with search, a map, tidy/align and the full keyboard map work as on the desktop; the model is
+the same `@delta/core` code, documented in `apps/desktop/docs/architecture.md`.
 
 **Page cards** are the extension's addition. `openPageCanvas` (context menu, `Alt+Shift+C`, the popup)
 reaches the tab's top frame; `src/content/page-canvas.js` converts the main content to markdown

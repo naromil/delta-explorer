@@ -1,15 +1,26 @@
 # AGENTS.md
 
 ## Overview
-Firefox MV3 extension, the browser companion to the Delta Explorer desktop app (`~/Projects/delta-ai`).
+Firefox MV3 extension, the browser companion to the Delta Explorer desktop app. Both live in one
+monorepo: this is the `@delta/extension` workspace (`apps/extension`), the desktop app is
+`apps/desktop`, and the pure logic they share is `@delta/core` (`packages/core`, TypeScript).
 Its features mirror the desktop app's, including the canvas; the desktop look-up's screen OCR becomes
-page text, and any web page can be opened as a canvas whose first card is the page. No build step, no npm dependencies. Files are loaded directly by Firefox. KaTeX is vendored
+page text, and any web page can be opened as a canvas whose first card is the page. KaTeX is vendored
 unmodified in `vendor/katex/`.
 
-## Loading the extension
-1. Open `about:debugging#/runtime/this-firefox`
-2. Click **Load Temporary Add-on…**
-3. Select `manifest.json`
+## Building and loading the extension
+Firefox loads `dist/`, never the sources: the pages and the background import `@delta/core`, which
+only a bundler can resolve.
+1. From the repository root: `npm install`, then `npm run build:extension` (or
+   `npm run dev:extension` to rebuild on every change).
+2. Open `about:debugging#/runtime/this-firefox` and click **Load Temporary Add-on…**
+3. Select `apps/extension/dist/manifest.json`
+
+`scripts/build.mjs` bundles the four module entries (`background.js`, `popup/popup.js`,
+`dashboard/js/app.js`, `canvas/canvas.js`) with esbuild, unminified, and copies everything else that
+ships: manifest, HTML, CSS, icons, `vendor/`, and the classic scripts named by the manifest's content
+scripts or loaded by a page without `type="module"`. A new module file needs nothing; a new classic
+script must be referenced from the manifest or a page's HTML to be copied.
 
 ## Architecture
 
@@ -39,9 +50,15 @@ src/background/
 ```
 
 ## Critical rules
-- **Store every AI-facing prompt string in `src/shared/prompts.js`.** Never inline one elsewhere.
+- **Store every AI-facing prompt string in `src/shared/prompts.js`** (the extension's own wording) or
+  `packages/core/src/prompts.ts` (shared with the desktop: page context, canvas notes, expand
+  instructions, `EXPAND_INTENTS`), which `prompts.js` re-exports. Never inline one elsewhere.
   Content scripts cannot import modules: `EXPAND_INTENTS` is mirrored in `src/content/state.js`; keep them
-  in sync.
+  in sync with core.
+- **Shared logic lives in `@delta/core`.** `src/shared/{canvas*,layered-layout,rich-text,context-budget}.js`
+  are one-line re-exports of `packages/core/src/*.ts`. Change the TypeScript there, never add a copy here,
+  and remember the desktop runs the same code (`npm run test` covers it). Only module code (background,
+  pages) can import core; content scripts are classic scripts and cannot.
 - **`browser.*` only, Firefox only.** Background is an ES module (`import`, not `importScripts`).
 - **No innerHTML with dynamic content.** Build DOM with `h()` (`src/ui/dom.js`) or `createElement`.
   KaTeX renders through `katex.render` into a node.
@@ -85,8 +102,9 @@ src/background/
   change clears it. `migrateConversationRecord` accepts the extension's pre-0.2 shape.
 
 ## Canvas
-- Ported from the desktop's `shared/canvas*.ts`, `hooks/useCanvas.ts` and `views/canvas/*`. The pure
-  modules were transpiled and adapted; keep them in step with the desktop when porting changes.
+- The model (`canvas*`, `layered-layout`, the page card included) is `@delta/core`, the same code the
+  desktop runs. The store (`src/ui/canvas/store.js`) and board are ports of the desktop's
+  `hooks/useCanvas.ts` and `views/canvas/*` (React there, plain DOM here); keep them in step by hand.
 - A canvas is a record with `source: 'canvas'` and a `canvas` layout `{ cards, frames, links, stack,
   viewport }`, normalized on every load (`normalizeCanvasLayout`). Cards: `message`, `expansion`, `note`,
   and the extension's `page` (`{ turnId, title, url }`, its text in a user turn).
@@ -142,9 +160,10 @@ Keep `crossesBlockBoundary` (rich-text) and the parser's block rules consistent.
 Legacy keys migrated and removed on first use: `deltaConfig`, `deltaKbConfig`, `deltaConversations`,
 `deltaKbData`.
 
-## No tooling
-- **No package.json, no npm, no Node.js in the repo.**
-- **No tests, no lint, no typecheck.** Do not invent or run these commands. Verify UI changes by loading
-  the extension in Firefox.
+## Tooling
+- `npm run build:extension` / `npm run dev:extension` from the root (see above). `dist/` is ignored.
+- The extension's own JS has no typecheck, lint or tests, and is not Prettier-formatted (the root
+  `.prettierignore` and ESLint config skip it; `scripts/` is linted and formatted). The shared model it
+  imports is tested in `packages/core/tests`. Verify UI changes by loading `dist/` in Firefox.
 - `.vscode/` config is user-level (includes C++ settings) — ignore it.
 - `ref_src/` is gitignored reference material; the JS files are the source of truth.

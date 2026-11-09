@@ -48,6 +48,7 @@ jobs:
         run: npm run test
 
       - name: Build and package
+        working-directory: apps/desktop
         run: |
           npx electron-vite build
           npx electron-builder ${{ matrix.target }} --publish never
@@ -56,10 +57,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*.dmg
-            dist/*.deb
-            dist/*.rpm
-            dist/*.pkg.tar.zst
-            dist/*.AppImage
-            dist/*.exe
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.deb
+            apps/desktop/dist/*.rpm
+            apps/desktop/dist/*.pkg.tar.zst
+            apps/desktop/dist/*.AppImage
+            apps/desktop/dist/*.exe
           fail_on_unmatched_files: false

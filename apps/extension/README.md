@@ -45,16 +45,20 @@ text inline, look things up, chat, explore on a canvas, and let it remember how 
 
 ## Installation (development)
 
-1. Clone this repository.
-2. Open `about:debugging#/runtime/this-firefox` in Firefox.
-3. Click **Load Temporary Add-on…** and select `manifest.json`.
+The extension lives in the Delta Explorer monorepo, next to the desktop app it shares its canvas model
+and prompts with (`packages/core`). It needs Node.js 22+ to build.
+
+1. Clone the repository and run `npm install` at its root.
+2. Run `npm run build:extension` (or `npm run dev:extension` to rebuild on every change).
+3. Open `about:debugging#/runtime/this-firefox` in Firefox.
+4. Click **Load Temporary Add-on…** and select `apps/extension/dist/manifest.json`.
 
 Then open the dashboard (the house icon in the look-up, or the add-on's Options) and go to
 **Settings → Models**: add a connection with your API key (or an Ollama host) and assign a model to
 each role.
 
-There is no build step and no npm. To package, zip the repository contents (without `.git`, `ref_src/`
-and `dist/`) into an `.xpi`.
+To package, zip the contents of `apps/extension/dist/` into an `.xpi`. The bundles are not minified,
+so the source submitted for review can be the repository itself.
 
 ## Supported providers
 
