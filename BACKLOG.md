@@ -3,18 +3,14 @@
 ## Routine (Claude may build these without asking)
 
 - [ ] Have AI-based conversation title generation at first message.
-- [x] Surface autosave failures in the chat — `saveConversationState` only `console.warn`s a failed `conversation-save`, so a chat can silently fail to persist
-- [x] Show an error when OCR of a pasted image fails in the grown look-up — `LookupApp.tsx` drops `result.error`, so the spinner just stops and nothing happens
-- [x] Ignore Enter during IME composition in the search modal and the Knowledge re-analyze field — Ctrl/Cmd+K opens the highlighted chat mid-composition for CJK input
-- [x] List the keyboard shortcuts in the Look-up Guide view — Ctrl/Cmd+N, K, E, Shift+E and Esc-to-stop exist but are undiscoverable
-- [x] Fix stale Look-up Guide text — it points to a "chat sidebar" that doesn't exist, hardcodes Ctrl+Shift+D instead of the configured hotkey, and describes Expand as definition-only
-- [x] Ctrl/Cmd+, opens Settings — the standard desktop shortcut is missing from the app-wide handler in `App.tsx`
-- [x] Catch rejected `loadSettings`/`getHotkeyStatus` reads in the Look-up Guide and Settings views (and drop the redundant casts on the already-typed `loadSettings`) — a failed read leaves the mode picker unloaded with an unhandled rejection
-- [x] Unit-test `saveConversationState` in `hooks/chat/persistence.ts` — the autosave skip rules (no/blank turns, lookup source, finalized loading expansions) have no coverage
-- [ ] Unit-test `formatRelativeTime` in `lib/format.ts` — the Home recents labels have untested 1m/1h/24h/7d boundaries
+- [ ] Right-click Cut/Copy/Paste and spelling suggestions in text fields — Electron shows no context menu by default, so the composer, look-up Ask field and editors have none
+- [ ] Ignore Enter during IME composition in the remaining single-line editors (chat title rename, canvas title, frame and link labels, canvas outline search, model picker) — CJK input commits or jumps mid-composition
+- [ ] Up arrow in an empty chat composer edits the last user message — a standard chat-app shortcut that reuses the existing edit-and-resend path
 - [ ] Change the toolbar for text selection in canvas. Add a way to highlight the text selection. Add a way to link the text selection to another object (the same way as giving a new rectangle context from another branch). Leave the original direct "Expand" and custom prompt "Ask..." on the main toolbar, and the other prompt presets moved into a secondary menu.
 - [ ] Make canvas tidy-up feature respect the original up/down/left/right directional layout between chunks (cards attached to each other), instead of listing by strict hierarchy (which often ends up twining all the links visually).
 - [ ] Unify the chat and lookup model configuration into one configuration. Knowledge maintenance stays separate. Add more model provider presets beyond the 5 ones.
+- [ ] Unit-test `renderMath` in `lib/math.ts` — nothing guards `trust: false`, the one safeguard on the renderer's only `dangerouslySetInnerHTML` (`\href{javascript:…}` must not produce a link)
+- [ ] Unit-test `formatRelativeTime` in `lib/format.ts` — the Home recents labels have untested 1m/1h/24h/7d boundaries
 
 ## Proposed (needs the owner's OK — move to Routine to approve)
 
