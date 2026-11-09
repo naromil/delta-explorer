@@ -621,6 +621,8 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
   Editing a user message (`editMessage`) runs the same truncate-and-resend path
   (`truncateAndResend`): the edited turn and everything after it are replaced by the new text and
   a fresh answer; the UI confirms only when more than that one answer would be dropped.
+  Up in an empty composer opens that editor on the newest user message (`lastUserTurnId`), through
+  `Turn`'s `editRequest` key, so it is the same path as the Edit button.
   `serializeForChat` omits assistant turns that are `error: true` or have blank/whitespace
   content (in-flight/legacy placeholders), so neither error text nor empty placeholders are
   replayed to the model; error turns stay on disk so Retry survives a reload.

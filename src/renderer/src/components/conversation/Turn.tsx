@@ -20,6 +20,8 @@ interface TurnProps {
   onDismissExpansion?: (expansionId: number) => void
   onAskAnotherExpansion?: (expansionId: number, at: FramePopupAt) => void
   onPickExpansionAnswer?: (expansionId: number, at: FramePopupAt) => void
+  /** Opens the editor each time it changes to a new number (Up in an empty composer). */
+  editRequest?: number
 }
 
 function Turn({
@@ -34,7 +36,8 @@ function Turn({
   onEditExpansion,
   onDismissExpansion,
   onAskAnotherExpansion,
-  onPickExpansionAnswer
+  onPickExpansionAnswer,
+  editRequest
 }: TurnProps): React.JSX.Element {
   const isUser = turn.role === 'user'
   const hasAttachments = (turn.attachments?.length ?? 0) > 0
@@ -60,6 +63,14 @@ function Turn({
   const beginEdit = (): void => {
     setEditDraft(turn.content)
     setEditing(true)
+  }
+
+  // Each new request opens the editor once, during render rather than in an effect, so a
+  // later content or loading change cannot reopen it.
+  const [seenEditRequest, setSeenEditRequest] = useState(editRequest)
+  if (editRequest !== seenEditRequest) {
+    setSeenEditRequest(editRequest)
+    if (editRequest !== undefined && onEdit && !loading) beginEdit()
   }
 
   const submitEdit = (): void => {

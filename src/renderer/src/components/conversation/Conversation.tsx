@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, useEffect } from 'react'
 import type { ImageAttachment } from '../../../../shared/attachments'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '../../../../shared/attachments'
 import type { ConversationState } from '../../../../shared/conversation'
-import { CONVERSATION_TITLE_MAX_LENGTH } from '../../../../shared/conversation'
+import { CONVERSATION_TITLE_MAX_LENGTH, lastUserTurnId } from '../../../../shared/conversation'
 import { useExpansionContextMenu } from '../../hooks/useExpansionContextMenu'
 import type { ExpandRequest } from '../../hooks/useExpansionContextMenu'
 import { useImageAttachments } from '../../hooks/useImageAttachments'
@@ -92,6 +92,8 @@ function Conversation({
   const [toolbarError, setToolbarError] = useState<string | null>(null)
   const exportSavedTimerRef = useRef<number | null>(null)
   const [editingTitle, setEditingTitle] = useState(false)
+  /** Up in an empty composer: which message to edit, and a key so a repeat opens it again. */
+  const [editRequest, setEditRequest] = useState<{ turnId: number; key: number } | null>(null)
   const [titleDraft, setTitleDraft] = useState('')
   const titleSettledRef = useRef(false)
   const turnsRef = useRef(state.turns)
@@ -171,11 +173,22 @@ function Conversation({
     return () => window.removeEventListener('keydown', handleEscape)
   }, [loading, ctxMenu, expandPrompt, searchOpen, onStop])
 
+  const editLastMessage = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return
+    if (input !== '' || attachments.length > 0 || loading || !onEditMessage) return
+    const turnId = lastUserTurnId(state.turns)
+    if (turnId === null) return
+    e.preventDefault()
+    setEditRequest((previous) => ({ turnId, key: (previous?.key ?? 0) + 1 }))
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (e.nativeEvent.isComposing) return
     if (e.key === 'Enter' && !e.shiftKey) {
-      if (e.nativeEvent.isComposing) return
       e.preventDefault()
       handleSend()
+    } else if (e.key === 'ArrowUp') {
+      editLastMessage(e)
     }
   }
 
@@ -474,6 +487,7 @@ function Conversation({
                   onDismissExpansion={removeExpansion}
                   onAskAnotherExpansion={askAnotherExpansion}
                   onPickExpansionAnswer={pickExpansionAnswer}
+                  editRequest={editRequest?.turnId === turn.id ? editRequest.key : undefined}
                 />
               </div>
             ))}
