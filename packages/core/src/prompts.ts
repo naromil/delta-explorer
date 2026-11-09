@@ -262,8 +262,8 @@ export function buildExpandUserInstruction(selection: string): string {
   ].join(' ')
 }
 
-export function buildExpandPromptedInstruction(selection: string, prompt: string): string {
-  const question = prompt.trim() || EXPAND_DEFAULT_PROMPT
+export function buildExpandPromptedInstruction(selection: string, prompt?: string): string {
+  const question = prompt?.trim() || EXPAND_DEFAULT_PROMPT
   return [
     `The user selected "${selection}" from the text above and asks: "${question}".`,
     ...EXPAND_SHARED_CONSTRAINTS

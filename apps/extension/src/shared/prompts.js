@@ -1,6 +1,7 @@
-/* Every AI-facing prompt string lives here. Ported from Delta Explorer's
- * src/shared/prompts.ts; the screen/OCR wording becomes web-page wording.
- * Never inline a prompt in a handler or a view. */
+/* Every AI-facing prompt string the extension sends lives here or in @delta/core/prompts.
+ * This file holds the extension's own wording (the assistant in a browser, its memory rules);
+ * page context, canvas notes and expand instructions are shared with the desktop app and
+ * re-exported from core. Never inline a prompt in a handler or a view. */
 
 /* ---- System prompts ---- */
 
@@ -117,137 +118,19 @@ export function buildAutoLoadedMemoryPrompt(autoLoaded) {
   ].join('\n\n');
 }
 
-/* ---- Context injection ---- */
+/* ---- Shared with the desktop app ---- */
 
-/** The page text a look-up or a transferred page expansion was about. */
-export function buildPageContextMessage(context, page) {
-  const source = page && (page.title || page.url)
-    ? ` (${[page.title, page.url].filter(Boolean).join(' — ')})`
-    : '';
-  return `The following text is from a web page I am reading${source}:\n\n"${context}"`;
-}
-
-/* ---- Canvas ---- */
-
-/** A canvas answer fills a rectangle the user drew, so its size replaces every other length rule. */
-export function buildCanvasFitNote(words) {
-  return [
-    `Your answer appears inside a fixed rectangle that holds about ${words} words (about ${words * 3} characters in Chinese, Japanese or Korean).`,
-    'Write close to that length: use the space, and do not run past it.',
-    'This replaces any other instruction about length. Do not mention the rectangle.'
-  ].join(' ');
-}
-
-/** Cards the user selected and asked about. They are material, not conversation history. */
-export function buildCanvasSourcesNote(sources) {
-  const blocks = sources.map(({ title, text }, index) => {
-    const heading = title.trim() === '' ? `Card ${index + 1}` : `Card ${index + 1}: ${title.trim()}`;
-    return `<card>\n${heading}\n\n${text.trim()}\n</card>`;
-  });
-  return [
-    'The question below is about these cards, which the user selected on their canvas:',
-    ...blocks
-  ].join('\n\n');
-}
-
-/** Material the user linked into a branch: kind is 'note', 'card' or 'branch'. */
-export function buildCanvasContextNote(items) {
-  const blocks = items.map(({ kind, title, text, label }) => {
-    const lines = [
-      ...(title.trim() === '' ? [] : [`Title: ${title.trim()}`]),
-      ...(label ? [`How the user relates it: ${label}`] : [])
-    ];
-    return `<${kind}>\n${[...lines, text.trim()].join('\n\n')}\n</${kind}>`;
-  });
-  return [
-    'The user linked this material from elsewhere on their canvas into this conversation: a <note> is their own text, a <card> one question and answer, and a <branch> a separate conversation. It is not part of this conversation, so do not assume it was said here. Use it where it is relevant.',
-    ...blocks
-  ].join('\n\n');
-}
-
-/** How the page's own links reach the model on a canvas, and how it should hand them back. */
-export const PAGE_LINKS_NOTE = [
-  'The page text is markdown, with the page\'s own links kept as [text](address); links from elsewhere on the page are listed at the end.',
-  'When the user asks for links, sources, or where to go next, answer with the relevant ones as markdown links, copying each address exactly as it appears in the page text.',
-  'Never make up or alter an address. If the page has no link for what they want, say so.'
-].join(' ');
-
-/** A page on a canvas: the look-up's page context, with its links and how to give them. */
-export function buildPageCanvasContextMessage(context, page) {
-  return `${buildPageContextMessage(context, page)}\n\n${PAGE_LINKS_NOTE}`;
-}
-
-/* ---- Expand instructions ---- */
-
-const EXPAND_SHARED_CONSTRAINTS = [
-  'Do NOT repeat the word itself or re-state the sentence it appears in.',
-  'Keep it concise (less than 4 sentences), but provide enough detail to explain clearly.'
-];
-
-const EXPAND_DEFINE_CONSTRAINTS = [
-  'Do NOT use phrases like "refers to" or "is" that introduce the word.',
-  'Output just the definition — a bare phrase or noun phrase.',
-  'Keep it concise (less than 4 sentences), but provide enough detail to explain clearly.',
-  'Example good output for "HKUMed": Li Ka Shing Faculty of Medicine at the University of Hong Kong',
-  'Example bad output: "HKUMed" refers to the Li Ka Shing Faculty of Medicine...'
-];
-
-const EXPAND_EXPLAIN_CONSTRAINTS = [
-  'Say what it means and why it matters here, in plain words, rather than defining each word.',
-  'Start directly with the explanation.'
-];
-
-const TERM_MAX_WORDS = 4;
-const TERM_MAX_LENGTH = 60;
-
-/** A few words with no sentence punctuation or code get a definition; anything else an explanation. */
-export function isTermSelection(selection) {
-  const text = String(selection || '').trim();
-  if (text.length > TERM_MAX_LENGTH || text.includes('\n') || text.includes('```')) return false;
-  if (/[.!?;:](\s|$)/.test(text)) return false;
-  return text.split(/\s+/).length <= TERM_MAX_WORDS;
-}
-
-export function buildExpandUserInstruction(selection) {
-  if (!isTermSelection(selection)) {
-    return [
-      `The user wants this passage from the text above explained: "${selection}".`,
-      ...EXPAND_SHARED_CONSTRAINTS,
-      ...EXPAND_EXPLAIN_CONSTRAINTS
-    ].join(' ');
-  }
-  return [
-    `The user wants to define "${selection}" from the text above.`,
-    ...EXPAND_SHARED_CONSTRAINTS,
-    ...EXPAND_DEFINE_CONSTRAINTS
-  ].join(' ');
-}
-
-export function buildExpandPromptedInstruction(selection, prompt) {
-  const question = String(prompt || '').trim() || EXPAND_DEFAULT_PROMPT;
-  return [
-    `The user selected "${selection}" from the text above and asks: "${question}".`,
-    ...EXPAND_SHARED_CONSTRAINTS
-  ].join(' ');
-}
-
-/** How an earlier expansion appears in the history of a nested one. */
-export function buildExpandAncestorQuestion(selection, prompt) {
-  const question = prompt ? String(prompt).trim() : '';
-  return question
-    ? `About "${selection}" from your answer: ${question}`
-    : `What does "${selection}" from your answer mean?`;
-}
-
-/** One-click questions; the text is stored in the expansion's `prompt` like a typed one. */
-export const EXPAND_INTENTS = [
-  { label: 'Simpler', prompt: 'Explain this more simply' },
-  { label: 'Example', prompt: 'Give a concrete example' },
-  { label: 'Why', prompt: 'Why is this so?' },
-  { label: 'Compare', prompt: 'Compare this with similar or related ideas' },
-  { label: 'Deeper', prompt: 'Go deeper on this' }
-];
-
-/** Replaces an earlier image in the history when the current model cannot read images. */
-export const IMAGE_OMITTED_NOTE =
-  '[An image was attached here, but the current model cannot read images, so it was omitted.]';
+export {
+  buildCanvasContextNote,
+  buildCanvasFitNote,
+  buildCanvasSourcesNote,
+  buildExpandAncestorQuestion,
+  buildExpandPromptedInstruction,
+  buildExpandUserInstruction,
+  buildPageCanvasContextMessage,
+  buildPageContextMessage,
+  EXPAND_INTENTS,
+  IMAGE_OMITTED_NOTE,
+  isTermSelection,
+  PAGE_LINKS_NOTE
+} from '@delta/core/prompts';

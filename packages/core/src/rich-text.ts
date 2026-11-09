@@ -105,7 +105,7 @@ export interface ExpansionMessageInput {
 export interface ExpansionChunk {
   /** Streamed text since the previous chunk. */
   delta?: string
-  /** The full answer; sent with `done`. */
+  /** The full answer; sent with `done`, or with `error` as the partial answer. */
   text?: string
   done?: boolean
   error?: string
@@ -453,7 +453,12 @@ export function applyExpansionChunk<T extends RichTextTurn>(
   if (!location) return turns
 
   if (chunk.error !== undefined) {
-    return updateExpansion(turns, id, { status: 'error', error: chunk.error })
+    // A failed stream may hand back the partial answer it had; keep it for Retry to show.
+    return updateExpansion(turns, id, {
+      status: 'error',
+      error: chunk.error,
+      ...(chunk.text ? { answer: chunk.text } : {})
+    })
   }
 
   let next = turns

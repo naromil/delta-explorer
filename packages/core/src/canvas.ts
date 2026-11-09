@@ -1016,7 +1016,7 @@ function expansionHistory(turns: Turn[], card: CanvasExpansionCard): Turn[] {
 }
 
 /** The card whose text a turn is: the answer of a message, or a page. */
-function turnOwnerCard(
+export function turnOwnerCard(
   cards: CanvasCard[],
   turnId: number
 ): CanvasMessageCard | CanvasPageCard | undefined {
