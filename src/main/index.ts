@@ -35,6 +35,7 @@ import type { ChatRecord, ConversationState, ConversationTarget } from '../share
 import { buildConversationTitle } from '../shared/conversation'
 import { prepareTransferredState } from './transfer'
 import { guardWindowNavigation } from './window-guards'
+import { installEditMenu } from './edit-menu'
 import {
   createChunkBatcher,
   isConversationRecord,
@@ -480,6 +481,7 @@ function createWindow(): BrowserWindow {
   })
 
   guardWindowNavigation(mainWindow)
+  installEditMenu(mainWindow)
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])

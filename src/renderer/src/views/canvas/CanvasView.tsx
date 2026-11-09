@@ -86,6 +86,7 @@ import ExpandPrompt from '../../components/conversation/ExpandPrompt'
 import ExpandSelectionBar from '../../components/conversation/ExpandSelectionBar'
 import type { useCanvas } from '../../hooks/useCanvas'
 import { useExpansionContextMenu } from '../../hooks/useExpansionContextMenu'
+import { isEditableTarget } from '../../lib/editable'
 import { formatRelativeTime } from '../../lib/format'
 import type { ConversationMeta } from '../../../../shared/conversation'
 import { CONVERSATION_SOURCE_LABELS } from '../../../../shared/conversation'
@@ -1887,6 +1888,7 @@ function CanvasBoard({
   )
 
   const openPlaneMenu = (e: React.MouseEvent): void => {
+    if (isEditableTarget(e.target)) return
     if ((e.target as Element).closest('.canvas-card, .canvas-frame-title, .canvas-link-hit')) return
     const at = pointerInWorld(e)
     openListMenu(
@@ -1911,6 +1913,7 @@ function CanvasBoard({
 
   const handleCardMenu = useCallback(
     (e: React.MouseEvent, id: string): void => {
+      if (isEditableTarget(e.target)) return
       const card = cardsRef.current.find((item) => item.id === id)
       if (!card) return
       const chosen = selectedRef.current.has(id) ? selectedRef.current : new Set([id])
@@ -1944,6 +1947,7 @@ function CanvasBoard({
 
   const handleFrameMenu = useCallback(
     (e: React.MouseEvent, id: string): void => {
+      if (isEditableTarget(e.target)) return
       const frame = framesRef.current.find((item) => item.id === id)
       if (!frame) return
       const only = new Set([id])
@@ -1978,6 +1982,7 @@ function CanvasBoard({
 
   const handleLinkMenu = useCallback(
     (e: React.MouseEvent, id: string): void => {
+      if (isEditableTarget(e.target)) return
       const link = linksRef.current.find((item) => item.id === id)
       if (!link) return
       const only = new Set([id])

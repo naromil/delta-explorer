@@ -125,6 +125,7 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 | Context budget      | `context-budget.ts`           | `applyContextBudget(messages, role)`: trims sends to the cached model's window; fail-open on any missing input                                                                        |
 | Streaming helpers   | `streaming.ts`                | IPC payload validation, `withInstructions`, `createChunkBatcher` (32 ms token deltas)                                                                                                 |
 | Window guards       | `window-guards.ts`            | `guardWindowNavigation`: deny window.open / navigation, hand http(s) links to the browser                                                                                             |
+| Edit menu           | `edit-menu.ts`                | `installEditMenu`: native Cut/Copy/Paste/Select All + spelling suggestions for right clicks in text fields the renderer leaves alone                                                  |
 | Secret store        | `services/secret-store.ts`    | `sealSecret` / `openSecret` for API keys (`safeStorage`, `enc:v1:` prefix, plaintext fallback)                                                                                        |
 | Lookup transfer     | `transfer.ts`                 | `prepareTransferredState`: finalizes in-flight frames + folds screen context into a user turn                                                                                         |
 | Main window ref     | `main-window.ts`              | Module-scoped getter/setter for BrowserWindow ref; `clearMainWindow()` on `closed` (used by transfer)                                                                                 |
@@ -548,6 +549,10 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 - **Canvas gestures cancel `mousedown`, never `pointerdown`.** Cancelling `pointerdown` suppresses the
   `mousedown` that `ContextMenu` and `ExpandPrompt` use to notice an outside click, so they would stay
   open. `claimPress` marks the press, and `handleSurfaceMouseDown` cancels it and releases focus.
+- **Text fields get the native edit menu.** `installEditMenu` (every window, next to
+  `guardWindowNavigation`) answers Electron's `context-menu` for editable targets with Cut/Copy/Paste,
+  Select All and spelling suggestions. It only fires when the renderer did not cancel the event, so
+  every renderer menu handler returns early on `isEditableTarget(e.target)` (`lib/editable.ts`).
 - **A right drag pans and a right click opens a menu, on every platform.** `contextmenu` fires on press
   on Linux and macOS and on release on Windows, so `createRightDrag` (`views/canvas/right-drag.ts`) holds it from a capture handler and
   decides at release: after a drag it is dropped, otherwise it is dispatched again on what was pressed,

@@ -3,7 +3,7 @@
 ## Routine (Claude may build these without asking)
 
 - [ ] Have AI-based conversation title generation at first message.
-- [ ] Right-click Cut/Copy/Paste and spelling suggestions in text fields — Electron shows no context menu by default, so the composer, look-up Ask field and editors have none
+- [x] Right-click Cut/Copy/Paste and spelling suggestions in text fields — Electron shows no context menu by default, so the composer, look-up Ask field and editors have none
 - [ ] Ignore Enter during IME composition in the remaining single-line editors (chat title rename, canvas title, frame and link labels, canvas outline search, model picker) — CJK input commits or jumps mid-composition
 - [ ] Up arrow in an empty chat composer edits the last user message — a standard chat-app shortcut that reuses the existing edit-and-resend path
 - [ ] Change the toolbar for text selection in canvas. Add a way to highlight the text selection. Add a way to link the text selection to another object (the same way as giving a new rectangle context from another branch). Leave the original direct "Expand" and custom prompt "Ask..." on the main toolbar, and the other prompt presets moved into a secondary menu.
