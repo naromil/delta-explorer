@@ -11,9 +11,13 @@ import {
   buildCanvasContextNote,
   buildCanvasFitNote,
   buildCanvasSourcesNote,
-  buildExpandAncestorQuestion
+  buildExpandAncestorQuestion,
+  buildExpandPromptedInstruction,
+  buildExpandUserInstruction,
+  buildPageCanvasContextMessage
 } from './prompts'
 import type { ProviderMessage } from './messages'
+import type { ExpansionNode } from './rich-text'
 import { expansionPath, findExpansionInTurns } from './rich-text'
 
 export interface CanvasPoint {
@@ -72,7 +76,23 @@ export interface CanvasNoteCard {
   color?: CanvasColor
 }
 
-export type CanvasCard = CanvasMessageCard | CanvasExpansionCard | CanvasNoteCard
+/**
+ * A web page's text, held in a user turn. The extension opens a page as a canvas with this as
+ * its first card: every session that continues it gets the page as context, as a look-up does,
+ * and its terms expand into cards like an answer's.
+ */
+export interface CanvasPageCard {
+  kind: 'page'
+  id: string
+  rect: CanvasRect
+  turnId: number
+  title: string
+  url: string
+  color?: CanvasColor
+  collapsedFrom?: number
+}
+
+export type CanvasCard = CanvasMessageCard | CanvasExpansionCard | CanvasNoteCard | CanvasPageCard
 
 /** A titled region under the cards. What it holds is decided by geometry, at the moment it moves. */
 export interface CanvasFrame {
@@ -116,6 +136,7 @@ export const MIN_MESSAGE_SIZE = { w: 200, h: 120 }
 export const MIN_EXPANSION_SIZE = { w: 140, h: 84 }
 export const DEFAULT_MESSAGE_SIZE = { w: 400, h: 280 }
 export const DEFAULT_EXPANSION_SIZE = { w: 280, h: 150 }
+export const DEFAULT_PAGE_SIZE = { w: 560, h: 640 }
 export const MIN_NOTE_SIZE = { w: 100, h: 60 }
 export const DEFAULT_NOTE_SIZE = { w: 240, h: 150 }
 export const MIN_FRAME_SIZE = { w: 160, h: 100 }
@@ -543,7 +564,7 @@ export function resizeDraftRect(
 
 /** The card a card came from: an expansion's host, or the card a message continues. */
 export function sourceCardId(card: CanvasCard): string | undefined {
-  if (card.kind === 'note') return undefined
+  if (card.kind === 'note' || card.kind === 'page') return undefined
   return card.kind === 'expansion' ? card.hostId : card.parentId
 }
 
@@ -921,8 +942,10 @@ export function fitCardHeight(
   contentHeight: number
 ): CanvasMoveUpdate[] {
   const card = cardById(cards, id)
-  // A note is the size the user made it, and a collapsed card has no body to fit.
-  if (!card || card.kind === 'note' || card.collapsedFrom !== undefined) return []
+  // A note or a page is the size the user made it, and a collapsed card has no body to fit.
+  if (!card || card.kind === 'note' || card.kind === 'page' || card.collapsedFrom !== undefined) {
+    return []
+  }
   const minimum = card.kind === 'message' ? MIN_MESSAGE_SIZE.h : MIN_EXPANSION_SIZE.h
   const wanted = Math.max(Math.ceil(contentHeight), minimum)
   if (wanted === card.rect.h) return []
@@ -967,19 +990,40 @@ export function setCardCollapsed(
 
 /* ---- Session history ---- */
 
+/** The question an expansion asked: about a page itself, or about an answer. */
+function expansionQuestion(node: ExpansionNode, aboutPage: boolean): string {
+  if (!aboutPage) return buildExpandAncestorQuestion(node.originalText, node.prompt)
+  return node.prompt
+    ? buildExpandPromptedInstruction(node.originalText, node.prompt)
+    : buildExpandUserInstruction(node.originalText)
+}
+
 function expansionHistory(turns: Turn[], card: CanvasExpansionCard): Turn[] {
   const turn = turns.find((item) => item.id === card.turnId)
   const path = turn ? expansionPath(turn.expansions, card.expansionId) : null
-  if (!path) return []
-  return path.flatMap((node): Turn[] => [
+  if (!turn || !path) return []
+  // A page turn is the user's: the first term in it was selected from the page.
+  const onPage = turn.role === 'user'
+  return path.flatMap((node, index): Turn[] => [
     {
       id: -node.id,
       role: 'user',
-      content: buildExpandAncestorQuestion(node.originalText, node.prompt),
+      content: expansionQuestion(node, onPage && index === 0),
       expansions: []
     },
     { id: -node.id, role: 'assistant', content: node.answer, expansions: [] }
   ])
+}
+
+/** The card whose text a turn is: the answer of a message, or a page. */
+function turnOwnerCard(
+  cards: CanvasCard[],
+  turnId: number
+): CanvasMessageCard | CanvasPageCard | undefined {
+  return cards.find(
+    (other): other is CanvasMessageCard | CanvasPageCard =>
+      (other.kind === 'message' || other.kind === 'page') && other.turnId === turnId
+  )
 }
 
 /**
@@ -990,12 +1034,18 @@ export function turnsThroughCard(cards: CanvasCard[], turns: Turn[], id: string)
   const card = cardById(cards, id)
   if (!card) return []
   if (card.kind === 'note') return []
+  if (card.kind === 'page') {
+    const turn = turns.find((item) => item.id === card.turnId)
+    if (!turn) return []
+    const page = { title: card.title, url: card.url }
+    return [{ ...turn, content: buildPageCanvasContextMessage(turn.content, page), expansions: [] }]
+  }
   if (card.kind === 'message') {
     const before = card.parentId === undefined ? [] : turnsThroughCard(cards, turns, card.parentId)
     const own = turns.filter((turn) => turn.id === card.userTurnId || turn.id === card.turnId)
     return [...before, ...own]
   }
-  const message = cards.find((other) => other.kind === 'message' && other.turnId === card.turnId)
+  const message = turnOwnerCard(cards, card.turnId)
   return [
     ...(message ? turnsThroughCard(cards, turns, message.id) : []),
     ...expansionHistory(turns, card)
@@ -1011,12 +1061,9 @@ export function sessionCardIds(cards: CanvasCard[], id: string | undefined): str
   let card = cardById(cards, id)
   while (card && !path.includes(card.id)) {
     path.push(card.id)
-    if (card.kind === 'note') break
-    const { turnId }: { turnId: number } = card
+    if (card.kind === 'note' || card.kind === 'page') break
     card =
-      card.kind === 'message'
-        ? cardById(cards, card.parentId)
-        : cards.find((other) => other.kind === 'message' && other.turnId === turnId)
+      card.kind === 'message' ? cardById(cards, card.parentId) : turnOwnerCard(cards, card.turnId)
   }
   return path
 }
@@ -1353,11 +1400,15 @@ function isCardSound(value: unknown, turns: Turn[]): value is CanvasCard {
   if (typeof value !== 'object' || value === null) return false
   const card = value as Partial<CanvasMessageCard> &
     Partial<CanvasExpansionCard> &
-    Partial<CanvasNoteCard>
+    Partial<CanvasNoteCard> &
+    Partial<CanvasPageCard>
   if (typeof card.id !== 'string' || !isRect(card.rect)) return false
   const hasTurn = (id: unknown): boolean => turns.some((turn) => turn.id === id)
   if (card.kind === 'note') return typeof card.text === 'string'
   if (card.kind === 'message') return hasTurn(card.userTurnId) && hasTurn(card.turnId)
+  if (card.kind === 'page') {
+    return hasTurn(card.turnId) && typeof card.title === 'string' && typeof card.url === 'string'
+  }
   return (
     card.kind === 'expansion' &&
     typeof card.hostId === 'string' &&

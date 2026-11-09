@@ -211,9 +211,11 @@ export function duplicateSelection(
 ): CanvasDuplicate | null {
   const moving = movingForSelection(layout, selected)
   const frames = layout.frames.filter((frame) => moving.frames.has(frame.id))
+  // A page holds the expansions made on it, so like an expansion it stays single.
   const chosen = layout.cards.filter(
     (card) =>
       card.kind !== 'expansion' &&
+      card.kind !== 'page' &&
       (selected.has(card.id) || moving.frames.size > 0) &&
       moving.cards.has(card.id) &&
       !(card.kind === 'message' && ids.streamingTurnIds.has(card.turnId))

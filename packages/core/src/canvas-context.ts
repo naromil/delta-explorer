@@ -62,7 +62,7 @@ function failedAnswer(card: CanvasCard, turns: Turn[]): boolean {
 }
 
 function ownTurnId(card: CanvasCard): number | undefined {
-  return card.kind === 'message' ? card.turnId : undefined
+  return card.kind === 'message' || card.kind === 'page' ? card.turnId : undefined
 }
 
 /**

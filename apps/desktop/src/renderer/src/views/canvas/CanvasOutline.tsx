@@ -8,7 +8,8 @@ const KIND_ICON: Readonly<Record<CanvasOutlineKind, CanvasIconName | null>> = {
   frame: 'frame',
   note: 'note',
   message: null,
-  expansion: null
+  expansion: null,
+  page: null
 }
 
 interface CanvasOutlineProps {

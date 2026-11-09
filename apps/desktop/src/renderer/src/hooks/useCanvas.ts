@@ -127,7 +127,7 @@ function captionLength(text: string): number {
 }
 
 function requestBelongsTo(request: PendingRequest, card: CanvasCard): boolean {
-  if (card.kind === 'note') return false
+  if (card.kind === 'note' || card.kind === 'page') return false
   return card.kind === 'message'
     ? request.kind === 'send' && request.turnId === card.turnId
     : request.kind === 'expand' && request.expansionId === card.expansionId
@@ -551,6 +551,10 @@ export function useCanvas(): {
           doomedTurns.add(card.turnId)
           continue
         }
+        if (card.kind === 'page') {
+          doomedTurns.add(card.turnId)
+          continue
+        }
         const location = findExpansionInTurns(turns, card.expansionId)
         if (location) {
           for (const nodeId of expansionSubtreeIds(location.node)) doomedExpansions.add(nodeId)
@@ -617,7 +621,7 @@ export function useCanvas(): {
     (id: string): void => {
       const { turns, layout } = docRef.current
       const card = layout.cards.find((item) => item.id === id)
-      if (!card || card.kind === 'note') return
+      if (!card || card.kind === 'note' || card.kind === 'page') return
       const dependents = cascadeCardIds(layout.cards, id)
       dependents.delete(id)
 
@@ -663,7 +667,7 @@ export function useCanvas(): {
   const editCard = useCallback(
     (id: string, question: string): void => {
       const card = docRef.current.layout.cards.find((item) => item.id === id)
-      if (!card || card.kind === 'note') return
+      if (!card || card.kind === 'note' || card.kind === 'page') return
       updateDoc((prev) => ({
         ...prev,
         turns:

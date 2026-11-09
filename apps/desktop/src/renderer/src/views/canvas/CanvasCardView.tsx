@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
 import type {
   CanvasExpansionCard,
   CanvasMessageCard,
+  CanvasPageCard,
   CanvasRect,
   CanvasSide
 } from '@delta/core/canvas'
@@ -39,7 +40,7 @@ export interface CanvasCardActions {
 }
 
 interface CanvasCardViewProps extends CanvasCardActions {
-  card: CanvasMessageCard | CanvasExpansionCard
+  card: CanvasMessageCard | CanvasExpansionCard | CanvasPageCard
   rect: CanvasRect
   caption: string
   /** The question typed about an expanded term; a message's caption is its question. */
@@ -68,6 +69,8 @@ interface CanvasCardViewProps extends CanvasCardActions {
 
 /** Expansions here are cards, so a term has nothing to fold. */
 const noop = (): void => undefined
+
+const CARD_KIND_LABEL = { message: 'Question', expansion: 'Expansion', page: 'Page' } as const
 
 function Skeleton({ lines }: { lines: number }): React.JSX.Element {
   return (
@@ -259,7 +262,10 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
   const canContinue = status === 'done' && !collapsed
   const waiting = status === 'streaming' && answer === ''
   const expansionId = card.kind === 'expansion' ? card.expansionId : undefined
-  const hasSource = card.kind === 'expansion' || card.parentId !== undefined
+  const hasSource =
+    card.kind === 'expansion' || (card.kind === 'message' && card.parentId !== undefined)
+  // A page is the text it was opened on: nothing to edit or answer again.
+  const answered = card.kind !== 'page'
   const label = question ? `${caption}: ${question}` : caption
 
   return (
@@ -269,7 +275,7 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
       data-canvas-card={card.id}
       data-color={card.color}
       tabIndex={0}
-      aria-label={`${card.kind === 'expansion' ? 'Expansion' : 'Question'}: ${label.slice(0, 120)}`}
+      aria-label={`${CARD_KIND_LABEL[card.kind]}: ${label.slice(0, 120)}`}
       aria-busy={status === 'streaming'}
       style={{
         transform: `translate(${rect.x}px, ${rect.y}px)`,
@@ -303,7 +309,9 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
           onContextMenu={(e) => onCardMenu(e, card.id)}
         >
           <div className="canvas-card-caption">
-            {card.kind === 'expansion' ? <span className="canvas-card-kind">Expansion</span> : null}
+            {card.kind !== 'message' ? (
+              <span className="canvas-card-kind">{CARD_KIND_LABEL[card.kind]}</span>
+            ) : null}
             <span title={question ?? caption}>{label}</span>
           </div>
           <div className="canvas-card-actions">
@@ -357,7 +365,7 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
                 </ActionIcon>
               </button>
             ) : null}
-            {status !== 'streaming' && !editing && !collapsed ? (
+            {answered && status !== 'streaming' && !editing && !collapsed ? (
               <button
                 type="button"
                 className="canvas-icon-btn"
@@ -384,7 +392,7 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
                 Ask…
               </button>
             ) : null}
-            {status === 'done' && !editing && !collapsed ? (
+            {answered && status === 'done' && !editing && !collapsed ? (
               <button
                 type="button"
                 className="canvas-icon-btn"

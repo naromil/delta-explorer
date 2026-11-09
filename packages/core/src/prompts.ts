@@ -138,6 +138,21 @@ export function buildScreenContextMessage(context: string): string {
   return `The following context was extracted from my screen:\n\n"${context}"`
 }
 
+/** Where a page's text came from, as the extension shows it. */
+export interface PageSource {
+  title?: string
+  url?: string
+}
+
+/** Text from the web page the user is reading (the extension's counterpart of screen context). */
+export function buildPageContextMessage(context: string, page?: PageSource): string {
+  const source =
+    page && (page.title || page.url)
+      ? ` (${[page.title, page.url].filter(Boolean).join(' — ')})`
+      : ''
+  return `The following text is from a web page I am reading${source}:\n\n"${context}"`
+}
+
 /* ---- Canvas ---- */
 
 /** A canvas answer fills a rectangle the user drew, so its size replaces every other length rule. */
@@ -188,6 +203,17 @@ export function buildCanvasContextNote(items: CanvasContextExcerpt[]): string {
     'The user linked this material from elsewhere on their canvas into this conversation: a <note> is their own text, a <card> one question and answer, and a <branch> a separate conversation. It is not part of this conversation, so do not assume it was said here. Use it where it is relevant.',
     ...blocks
   ].join('\n\n')
+}
+
+export const PAGE_LINKS_NOTE = [
+  "The page text is markdown, with the page's own links kept as [text](address); links from elsewhere on the page are listed at the end.",
+  'When the user asks for links, sources, or where to go next, answer with the relevant ones as markdown links, copying each address exactly as it appears in the page text.',
+  'Never make up or alter an address. If the page has no link for what they want, say so.'
+].join(' ')
+
+/** A page on a canvas: the page context, with its links and how to give them. */
+export function buildPageCanvasContextMessage(context: string, page?: PageSource): string {
+  return `${buildPageContextMessage(context, page)}\n\n${PAGE_LINKS_NOTE}`
 }
 
 /* ---- Expand Instructions ---- */

@@ -19,6 +19,15 @@ export interface CanvasCardContent {
 export function cardContent(card: CanvasCard, canvas: CanvasContentSource): CanvasCardContent {
   if (card.kind === 'note')
     return { caption: '', answer: card.text, expansions: [], status: 'done' }
+  if (card.kind === 'page') {
+    const turn = canvas.turns.find((item) => item.id === card.turnId)
+    return {
+      caption: card.title || card.url,
+      answer: turn?.content ?? '',
+      expansions: turn?.expansions ?? [],
+      status: 'done'
+    }
+  }
   if (card.kind === 'message') {
     const user = canvas.turns.find((turn) => turn.id === card.userTurnId)
     const turn = canvas.turns.find((item) => item.id === card.turnId)

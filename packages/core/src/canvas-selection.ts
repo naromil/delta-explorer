@@ -119,7 +119,7 @@ export function sessionAncestorIds(cards: CanvasCard[], id: string): Set<string>
   const ancestors = new Set<string>()
   const byId = new Map(cards.map((card) => [card.id, card]))
   let card = byId.get(id)
-  while (card && card.kind !== 'note') {
+  while (card && card.kind !== 'note' && card.kind !== 'page') {
     const next: string | undefined = card.kind === 'expansion' ? card.hostId : card.parentId
     if (next === undefined || ancestors.has(next) || next === id) break
     ancestors.add(next)
@@ -147,6 +147,12 @@ export function cardAtPoint(
 /** A card's title and body as text: a note has only a body. */
 export function cardText(card: CanvasCard, turns: Turn[]): { title: string; body: string } {
   if (card.kind === 'note') return { title: '', body: card.text }
+  if (card.kind === 'page') {
+    return {
+      title: card.title || card.url || 'Web page',
+      body: turns.find((turn) => turn.id === card.turnId)?.content ?? ''
+    }
+  }
   if (card.kind === 'message') {
     return {
       title: turns.find((turn) => turn.id === card.userTurnId)?.content ?? '',
