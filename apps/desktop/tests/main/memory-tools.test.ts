@@ -26,7 +26,7 @@ vi.mock('../../src/main/services/model-catalog', () => ({ getCachedModel }))
 
 import { memoriesDir } from '../../src/main/memory/store'
 import { memoryAgentFor, withAutoLoadedMemories } from '../../src/main/memory/tools'
-import { KB_MEMORY_SYSTEM_PROMPT, MEMORY_INBOX_FILE } from '../../src/shared/prompts'
+import { KB_MEMORY_SYSTEM_PROMPT, MEMORY_INBOX_FILE } from '@delta/core/prompts'
 import { callProvider, callProviderStream } from '../../src/main/provider'
 import type { ProviderMessage } from '../../src/main/provider'
 import type { RoleId } from '../../src/shared/models'

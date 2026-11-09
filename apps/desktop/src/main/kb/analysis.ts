@@ -1,7 +1,7 @@
-import { KB_MEMORY_SYSTEM_PROMPT } from '../../shared/prompts'
-import { normalizeCanvasLayout } from '../../shared/canvas'
-import type { CanvasRecord, ConversationRecord, Turn } from '../../shared/conversation'
-import type { ExpansionNode } from '../../shared/rich-text'
+import { KB_MEMORY_SYSTEM_PROMPT } from '@delta/core/prompts'
+import { normalizeCanvasLayout } from '@delta/core/canvas'
+import type { CanvasRecord, ConversationRecord, Turn } from '@delta/core/conversation'
+import type { ExpansionNode } from '@delta/core/rich-text'
 import type { ProviderMessage } from '../provider'
 
 const ANSWER_LIMIT = 300

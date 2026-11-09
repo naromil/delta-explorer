@@ -5,9 +5,9 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import type { ConversationState, LinearSource } from '../../../../shared/conversation'
-import { linearRecordOf, persistableTurns } from '../../../../shared/conversation'
-import { finalizeTurns } from '../../../../shared/rich-text'
+import type { ConversationState, LinearSource } from '@delta/core/conversation'
+import { linearRecordOf, persistableTurns } from '@delta/core/conversation'
+import { finalizeTurns } from '@delta/core/rich-text'
 
 export interface ConversationMeta {
   id: string

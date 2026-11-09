@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { LayoutEdge, LayoutNode, LayoutPosition } from '../../src/shared/layered-layout'
-import { layeredLayout } from '../../src/shared/layered-layout'
+import type { LayoutEdge, LayoutNode, LayoutPosition } from '../src/layered-layout'
+import { layeredLayout } from '../src/layered-layout'
 
 const GAPS = { layer: 50, sibling: 20 }
 const node = (crossAt = 0, crossLength = 100, mainLength = 100): LayoutNode => ({

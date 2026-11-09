@@ -7,7 +7,7 @@ import type {
   CanvasSide,
   CanvasViewport,
   SnapResult
-} from '../../../../shared/canvas'
+} from '@delta/core/canvas'
 import {
   CLICK_DRAG_LIMIT,
   DEFAULT_EXPANSION_SIZE,
@@ -54,15 +54,15 @@ import {
   visibleWorldRect,
   wheelZoomFactor,
   zoomAt
-} from '../../../../shared/canvas'
-import type { CanvasArrangeResult } from '../../../../shared/canvas-arrange'
+} from '@delta/core/canvas'
+import type { CanvasArrangeResult } from '@delta/core/canvas-arrange'
 import {
   alignSelection,
   distributeSelection,
   selectionBlockCount
-} from '../../../../shared/canvas-arrange'
-import { tidySelection } from '../../../../shared/canvas-tidy'
-import { canvasOutline } from '../../../../shared/canvas-outline'
+} from '@delta/core/canvas-arrange'
+import { tidySelection } from '@delta/core/canvas-tidy'
+import { canvasOutline } from '@delta/core/canvas-outline'
 import {
   boundsOf,
   cardAtPoint,
@@ -74,12 +74,12 @@ import {
   selectionMarkdown,
   sessionAncestorIds,
   sharedColor
-} from '../../../../shared/canvas-selection'
-import type { CanvasContextLink } from '../../../../shared/canvas-context'
-import { contextExcerpts, sessionContextLinks } from '../../../../shared/canvas-context'
-import { estimateTokens } from '../../../../shared/context-budget'
-import type { ExpansionTarget } from '../../../../shared/rich-text'
-import { flattenMarkdown } from '../../../../shared/rich-text'
+} from '@delta/core/canvas-selection'
+import type { CanvasContextLink } from '@delta/core/canvas-context'
+import { contextExcerpts, sessionContextLinks } from '@delta/core/canvas-context'
+import { estimateTokens } from '@delta/core/context-budget'
+import type { ExpansionTarget } from '@delta/core/rich-text'
+import { flattenMarkdown } from '@delta/core/rich-text'
 import ContextMenu from '../../components/conversation/ContextMenu'
 import type { ContextMenuItem, ContextMenuState } from '../../components/conversation/ContextMenu'
 import ExpandPrompt from '../../components/conversation/ExpandPrompt'
@@ -87,8 +87,8 @@ import ExpandSelectionBar from '../../components/conversation/ExpandSelectionBar
 import type { useCanvas } from '../../hooks/useCanvas'
 import { useExpansionContextMenu } from '../../hooks/useExpansionContextMenu'
 import { formatRelativeTime } from '../../lib/format'
-import type { ConversationMeta } from '../../../../shared/conversation'
-import { CONVERSATION_SOURCE_LABELS } from '../../../../shared/conversation'
+import type { ConversationMeta } from '@delta/core/conversation'
+import { CONVERSATION_SOURCE_LABELS } from '@delta/core/conversation'
 import type { ViewportMotion } from '../../lib/viewport-motion'
 import { createViewportMotion } from '../../lib/viewport-motion'
 import CanvasCardView from './CanvasCardView'

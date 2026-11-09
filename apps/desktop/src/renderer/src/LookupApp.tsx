@@ -6,7 +6,7 @@ import { useStickToBottom } from './hooks/useStickToBottom'
 import Turn from './components/conversation/Turn'
 import ContextMenu from './components/conversation/ContextMenu'
 import ConversationSearch from './components/conversation/ConversationSearch'
-import { LOOKUP_DEFAULT_QUERY } from '../../shared/prompts'
+import { LOOKUP_DEFAULT_QUERY } from '@delta/core/prompts'
 import ExpandPrompt from './components/conversation/ExpandPrompt'
 import ExpandSelectionBar from './components/conversation/ExpandSelectionBar'
 

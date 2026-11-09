@@ -1,6 +1,10 @@
 import type { ProviderMessage } from './provider'
-import { MAX_ATTACHMENTS_PER_MESSAGE, isImageAttachment, isImageInput } from '../shared/attachments'
-import type { ConversationRecord, ConversationState } from '../shared/conversation'
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  isImageAttachment,
+  isImageInput
+} from '@delta/core/attachments'
+import type { ConversationRecord, ConversationState } from '@delta/core/conversation'
 
 /* ---- IPC payload validation ----
  * The renderer is our own bundle, but main still owns what reaches a provider

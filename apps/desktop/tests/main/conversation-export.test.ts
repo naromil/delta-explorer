@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ConversationRecord, ExpansionNode } from '../../src/shared/conversation'
+import type { ConversationRecord, ExpansionNode } from '@delta/core/conversation'
 
 vi.mock('electron', () => ({
   app: { getPath: (): string => '' },

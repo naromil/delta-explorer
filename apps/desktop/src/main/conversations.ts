@@ -7,10 +7,10 @@ import type {
   ConversationMeta,
   ConversationSource,
   ConversationSearchResult
-} from '../shared/conversation'
-import { migrateConversationRecord, toConversationMeta } from '../shared/conversation'
-import type { ExpansionNode } from '../shared/rich-text'
-import { flattenMarkdown } from '../shared/rich-text'
+} from '@delta/core/conversation'
+import { migrateConversationRecord, toConversationMeta } from '@delta/core/conversation'
+import type { ExpansionNode } from '@delta/core/rich-text'
+import { flattenMarkdown } from '@delta/core/rich-text'
 import { writeFileAtomic } from './services/atomic-file'
 
 /** Conversation ids are UUIDs; anything else must never reach the filesystem. */

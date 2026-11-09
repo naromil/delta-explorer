@@ -4,8 +4,8 @@ import {
   budgetFor,
   estimateTokens,
   trimMessages
-} from '../../src/shared/context-budget'
-import type { ProviderMessage } from '../../src/shared/models'
+} from '../src/context-budget'
+import type { ProviderMessage } from '../src/messages'
 
 function message(role: ProviderMessage['role'], content: string): ProviderMessage {
   return { role, content }

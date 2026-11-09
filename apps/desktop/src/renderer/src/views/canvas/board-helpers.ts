@@ -1,4 +1,4 @@
-import { longestLine } from '../../../../shared/canvas'
+import { longestLine } from '@delta/core/canvas'
 
 const MINIMAP_STORAGE_KEY = 'delta-canvas-minimap'
 

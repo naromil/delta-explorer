@@ -13,7 +13,7 @@ import {
   buildCanvasSourcesNote,
   buildExpandAncestorQuestion
 } from './prompts'
-import type { ProviderMessage } from './models'
+import type { ProviderMessage } from './messages'
 import { expansionPath, findExpansionInTurns } from './rich-text'
 
 export interface CanvasPoint {

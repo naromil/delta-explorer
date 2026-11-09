@@ -4,10 +4,10 @@ import {
   isImageAttachment,
   isImageInput,
   scaledImageSize
-} from '../../src/shared/attachments'
-import { IMAGE_TOKEN_ESTIMATE, estimateMessageTokens } from '../../src/shared/context-budget'
-import { serializeForChat } from '../../src/shared/conversation'
-import type { Turn } from '../../src/shared/conversation'
+} from '../src/attachments'
+import { IMAGE_TOKEN_ESTIMATE, estimateMessageTokens } from '../src/context-budget'
+import { serializeForChat } from '../src/conversation'
+import type { Turn } from '../src/conversation'
 
 const image = { mediaType: 'image/jpeg', data: 'QUJD' }
 

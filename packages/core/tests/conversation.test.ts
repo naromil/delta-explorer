@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ConversationRecord, ExpansionNode, Turn } from '../../src/shared/conversation'
+import type { ConversationRecord, ExpansionNode, Turn } from '../src/conversation'
 import {
   linearRecordOf,
   linearStateOf,
@@ -7,8 +7,8 @@ import {
   migrateConversationRecord,
   persistableTurns,
   serializeForChat
-} from '../../src/shared/conversation'
-import { DELTA_SYSTEM_PROMPT, getSystemPrompt, LOOKUP_WINDOW_NOTE } from '../../src/shared/prompts'
+} from '../src/conversation'
+import { DELTA_SYSTEM_PROMPT, getSystemPrompt, LOOKUP_WINDOW_NOTE } from '../src/prompts'
 
 function turn(overrides: Partial<Turn> & Pick<Turn, 'id' | 'role' | 'content'>): Turn {
   return { expansions: [], ...overrides }

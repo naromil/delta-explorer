@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import type { CanvasNoteCard, CanvasRect } from '../../../../shared/canvas'
+import type { CanvasNoteCard, CanvasRect } from '@delta/core/canvas'
 import Markdown from '../../components/conversation/Markdown'
 
 const noop = (): void => undefined

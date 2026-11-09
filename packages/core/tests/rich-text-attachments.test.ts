@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ExpansionNode } from '../../src/shared/rich-text'
-import {
-  insertExpansionInTurns,
-  restartExpansion,
-  updateExpansion
-} from '../../src/shared/rich-text'
+import type { ExpansionNode } from '../src/rich-text'
+import { insertExpansionInTurns, restartExpansion, updateExpansion } from '../src/rich-text'
 
 const IMAGE = { name: 'a.jpg', mediaType: 'image/jpeg', data: 'AAAA' }
 const TURN = { id: 1, content: 'alpha beta', expansions: [] as ExpansionNode[] }

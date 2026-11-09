@@ -4,7 +4,7 @@ import type {
   ConversationMeta,
   ConversationSearchResult,
   ConversationTarget
-} from '../shared/conversation'
+} from '@delta/core/conversation'
 import type { Connection } from '../shared/models'
 import type { KbMaintenanceStatus, KbRunResult } from '../shared/kb'
 import type { ModelCatalogState } from '../shared/model-catalog'

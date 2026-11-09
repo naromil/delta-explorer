@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { EXPAND_INTENTS } from '../../../../shared/prompts'
+import { EXPAND_INTENTS } from '@delta/core/prompts'
 
 export interface ExpandSelectionBarState {
   /** Horizontal centre and top edge of the selection. */

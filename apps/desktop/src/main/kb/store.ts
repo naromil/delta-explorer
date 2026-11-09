@@ -2,7 +2,7 @@ import { join } from 'path'
 import { readFileSync, existsSync, mkdirSync, renameSync } from 'fs'
 import { app } from 'electron'
 import { emptyKbState, normalizeKbState, type KbPersistedState } from '../../shared/kb'
-import { LEARNING_PREFERENCES_FILE } from '../../shared/prompts'
+import { LEARNING_PREFERENCES_FILE } from '@delta/core/prompts'
 import { memoriesDir, writeMemory } from '../memory/store'
 import { writeFileAtomicSync } from '../services/atomic-file'
 

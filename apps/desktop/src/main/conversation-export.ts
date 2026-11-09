@@ -1,7 +1,7 @@
 import { BrowserWindow, dialog } from 'electron'
-import { cardText } from '../shared/canvas-selection'
-import type { CanvasRecord, ConversationRecord, ExpansionNode } from '../shared/conversation'
-import { flattenMarkdown } from '../shared/rich-text'
+import { cardText } from '@delta/core/canvas-selection'
+import type { CanvasRecord, ConversationRecord, ExpansionNode } from '@delta/core/conversation'
+import { flattenMarkdown } from '@delta/core/rich-text'
 import { loadConversation } from './conversations'
 import { writeFileAtomic } from './services/atomic-file'
 

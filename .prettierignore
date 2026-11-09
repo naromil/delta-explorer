@@ -8,4 +8,7 @@ tsconfig.*.json
 .kilo
 .opencode
 .supervision
-node_modules
+# The extension's own sources predate the shared formatting; only its build tooling follows it.
+apps/extension/*
+!apps/extension/scripts
+!apps/extension/package.json

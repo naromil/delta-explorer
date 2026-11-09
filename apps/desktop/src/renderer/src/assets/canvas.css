@@ -206,7 +206,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  /* The padding and line height are in estimateWords (shared/canvas.ts). */
+  /* The padding and line height are in estimateWords (packages/core/src/canvas.ts). */
   padding: 10px 12px 10px 16px;
   font-size: 12.5px;
   line-height: 18px;
@@ -327,7 +327,7 @@
 .canvas-card-body {
   flex: 1;
   min-height: 0;
-  /* The padding is in estimateWords (shared/canvas.ts). */
+  /* The padding is in estimateWords (packages/core/src/canvas.ts). */
   padding: 12px 8px 12px 16px;
   overflow: auto;
   /*

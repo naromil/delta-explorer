@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ImageAttachment } from '../../../shared/attachments'
-import { MAX_ATTACHMENTS_PER_MESSAGE } from '../../../shared/attachments'
+import type { ImageAttachment } from '@delta/core/attachments'
+import { MAX_ATTACHMENTS_PER_MESSAGE } from '@delta/core/attachments'
 import { fileToImageAttachment } from '../lib/image-attachments'
 
 const NOTICE_TIMEOUT_MS = 5000

@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import { flattenMarkdown } from '../../../../shared/rich-text'
-import type { ExpansionNode } from '../../../../shared/rich-text'
+import { flattenMarkdown } from '@delta/core/rich-text'
+import type { ExpansionNode } from '@delta/core/rich-text'
 import { attachmentSrc } from '../../lib/image-attachments'
 import { isPlainMarkdown } from '../../lib/markdown'
 import Markdown from './Markdown'

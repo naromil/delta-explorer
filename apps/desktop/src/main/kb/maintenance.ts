@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import type { ConversationMeta, ConversationRecord } from '../../shared/conversation'
+import type { ConversationMeta, ConversationRecord } from '@delta/core/conversation'
 import type { KbMaintenanceStatus, KbRunResult } from '../../shared/kb'
 import { loadAppSettings, onAppConfigChanged, resolveRole } from '../config'
 import { listUnfedConversations, onConversationSaved } from '../conversations'

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CanvasOutlineKind, CanvasOutlineRow } from '../../../../shared/canvas-outline'
-import { searchCanvasOutline } from '../../../../shared/canvas-outline'
+import type { CanvasOutlineKind, CanvasOutlineRow } from '@delta/core/canvas-outline'
+import { searchCanvasOutline } from '@delta/core/canvas-outline'
 import type { CanvasIconName } from './CanvasIcons'
 import CanvasIcon from './CanvasIcons'
 

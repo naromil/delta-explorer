@@ -6,7 +6,17 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default defineConfig(
-  { ignores: ['**/node_modules', '**/dist', '**/out', '.supervision/**'] },
+  {
+    ignores: [
+      '**/node_modules',
+      '**/dist',
+      '**/out',
+      '.supervision/**',
+      // The extension's sources are plain browser JS loaded as-is; only its tooling is linted.
+      'apps/extension/*',
+      '!apps/extension/scripts'
+    ]
+  },
   tseslint.configs.recommended,
   eslintPluginReact.configs.flat.recommended,
   eslintPluginReact.configs.flat['jsx-runtime'],
@@ -29,7 +39,7 @@ export default defineConfig(
     }
   },
   {
-    files: ['tools/**/*.mjs'],
+    files: ['**/tools/**/*.mjs', 'apps/extension/scripts/**/*.mjs'],
     rules: {
       // Plain-JS tooling: no TypeScript return annotations available.
       '@typescript-eslint/explicit-function-return-type': 'off'

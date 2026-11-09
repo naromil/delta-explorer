@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { CanvasCard } from '../../src/shared/canvas'
-import type { CanvasRecord, ConversationRecord, Turn } from '../../src/shared/conversation'
-import { migrateConversationRecord } from '../../src/shared/conversation'
-import type { LegacyTurn } from '../../src/shared/rich-text'
+import type { CanvasCard } from '@delta/core/canvas'
+import type { CanvasRecord, ConversationRecord, Turn } from '@delta/core/conversation'
+import { migrateConversationRecord } from '@delta/core/conversation'
+import type { LegacyTurn } from '@delta/core/rich-text'
 import { buildSingleMaterial } from '../../src/main/kb/analysis'
 
 function legacyRecord(turns: LegacyTurn[]): ConversationRecord {

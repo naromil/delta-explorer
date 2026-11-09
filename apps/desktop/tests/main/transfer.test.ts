@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { ConversationState } from '../../src/shared/conversation'
-import type { ExpansionNode } from '../../src/shared/rich-text'
+import type { ConversationState } from '@delta/core/conversation'
+import type { ExpansionNode } from '@delta/core/rich-text'
 import { prepareTransferredState } from '../../src/main/transfer'
-import { buildScreenContextMessage } from '../../src/shared/prompts'
+import { buildScreenContextMessage } from '@delta/core/prompts'
 
 function node(id: number, overrides: Partial<ExpansionNode> = {}): ExpansionNode {
   return {

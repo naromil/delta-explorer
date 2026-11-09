@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { ConversationState, Turn } from '../../src/shared/conversation'
-import { serializeForChat } from '../../src/shared/conversation'
-import { buildExpandMessages, buildExpandRequest } from '../../src/shared/expand-prompt'
+import type { ConversationState, Turn } from '../src/conversation'
+import { serializeForChat } from '../src/conversation'
+import { buildExpandMessages, buildExpandRequest } from '../src/expand-prompt'
 import {
   EXPAND_DEFAULT_PROMPT,
   buildExpandPromptedInstruction,
   buildExpandUserInstruction,
   isTermSelection
-} from '../../src/shared/prompts'
-import type { ExpansionNode } from '../../src/shared/rich-text'
+} from '../src/prompts'
+import type { ExpansionNode } from '../src/rich-text'
 
 function frame(id: number, overrides: Partial<ExpansionNode>): ExpansionNode {
   return {

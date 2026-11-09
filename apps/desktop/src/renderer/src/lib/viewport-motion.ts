@@ -1,5 +1,5 @@
-import type { CanvasViewport } from '../../../shared/canvas'
-import { chaseViewport } from '../../../shared/canvas'
+import type { CanvasViewport } from '@delta/core/canvas'
+import { chaseViewport } from '@delta/core/canvas'
 
 /** Holds the layer and the React state back until a run of wheel events is over. */
 const SETTLE_MS = 120

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { ExpansionNode } from '../../src/shared/rich-text'
+import type { ExpansionNode } from '@delta/core/rich-text'
 import Markdown from '../../src/renderer/src/components/conversation/Markdown'
 import ExpansionFrame from '../../src/renderer/src/components/conversation/ExpansionFrame'
 import {

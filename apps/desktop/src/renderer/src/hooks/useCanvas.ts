@@ -17,7 +17,7 @@ import type {
   CanvasMessageCard,
   CanvasRect,
   CanvasViewport
-} from '../../../shared/canvas'
+} from '@delta/core/canvas'
 import {
   DEFAULT_VIEWPORT,
   cascadeCardIds,
@@ -31,26 +31,22 @@ import {
   withCanvasFit,
   withoutField,
   withCanvasSources
-} from '../../../shared/canvas'
-import type { CanvasFrameUpdate } from '../../../shared/canvas-arrange'
-import { duplicateSelection } from '../../../shared/canvas-arrange'
-import type {
-  CanvasPatch,
-  CanvasPatchDirection,
-  CanvasSnapshot
-} from '../../../shared/canvas-history'
-import { applyCanvasPatch, diffCanvas } from '../../../shared/canvas-history'
-import type { CanvasContextLink } from '../../../shared/canvas-context'
-import { requestContext } from '../../../shared/canvas-context'
-import { sourceExcerpts } from '../../../shared/canvas-selection'
-import type { ConversationMeta, ProviderMessage, Turn } from '../../../shared/conversation'
+} from '@delta/core/canvas'
+import type { CanvasFrameUpdate } from '@delta/core/canvas-arrange'
+import { duplicateSelection } from '@delta/core/canvas-arrange'
+import type { CanvasPatch, CanvasPatchDirection, CanvasSnapshot } from '@delta/core/canvas-history'
+import { applyCanvasPatch, diffCanvas } from '@delta/core/canvas-history'
+import type { CanvasContextLink } from '@delta/core/canvas-context'
+import { requestContext } from '@delta/core/canvas-context'
+import { sourceExcerpts } from '@delta/core/canvas-selection'
+import type { ConversationMeta, ProviderMessage, Turn } from '@delta/core/conversation'
 import {
   CONVERSATION_TITLE_MAX_LENGTH,
   buildConversationTitle,
   serializeForChat
-} from '../../../shared/conversation'
-import { buildExpandRequest } from '../../../shared/expand-prompt'
-import type { ExpansionTarget } from '../../../shared/rich-text'
+} from '@delta/core/conversation'
+import { buildExpandRequest } from '@delta/core/expand-prompt'
+import type { ExpansionTarget } from '@delta/core/rich-text'
 import {
   applyExpansionChunk,
   expansionMessageInput,
@@ -63,7 +59,7 @@ import {
   removeExpansionInTurns,
   restartExpansion,
   updateExpansion
-} from '../../../shared/rich-text'
+} from '@delta/core/rich-text'
 import { isAnchoredRange } from '../lib/markdown'
 import { generateRequestId } from './chat/requests'
 import type { ExpandOutcome } from './useChatStreaming'

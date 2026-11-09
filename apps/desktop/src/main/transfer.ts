@@ -1,6 +1,6 @@
-import type { ConversationState } from '../shared/conversation'
-import { finalizeTurns } from '../shared/rich-text'
-import { buildScreenContextMessage } from '../shared/prompts'
+import type { ConversationState } from '@delta/core/conversation'
+import { finalizeTurns } from '@delta/core/rich-text'
+import { buildScreenContextMessage } from '@delta/core/prompts'
 
 /**
  * Prepares the lookup window's live state before it is persisted and forwarded

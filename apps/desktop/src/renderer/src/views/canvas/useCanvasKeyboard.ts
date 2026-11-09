@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { RefObject } from 'react'
-import type { CanvasFrame, CanvasLink, CanvasSide, CanvasViewport } from '../../../../shared/canvas'
+import type { CanvasFrame, CanvasLink, CanvasSide, CanvasViewport } from '@delta/core/canvas'
 import type { CanvasTool } from './CanvasToolRail'
 import { isTyping, ownsKeys } from './board-helpers'
 

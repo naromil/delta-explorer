@@ -12,7 +12,8 @@ files:
   - '!tests/*'
   - '!node_modules/@tesseract.js-data/**'
 extraResources:
-  - from: node_modules/@tesseract.js-data/eng/4.0.0_best_int
+  # npm workspaces hoist dependencies to the repository root.
+  - from: ../../node_modules/@tesseract.js-data/eng/4.0.0_best_int
     to: tessdata
     filter:
       - eng.traineddata.gz

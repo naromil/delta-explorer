@@ -9,8 +9,8 @@ import CanvasView from './views/canvas/CanvasView'
 import { useChatStreaming } from './hooks/useChatStreaming'
 import { useCanvas } from './hooks/useCanvas'
 import MemoryIndicator from './components/MemoryIndicator'
-import type { ImageAttachment } from '../../shared/attachments'
-import type { ConversationTarget } from '../../shared/conversation'
+import type { ImageAttachment } from '@delta/core/attachments'
+import type { ConversationTarget } from '@delta/core/conversation'
 
 type View = 'home' | 'chat' | 'canvas' | 'knowledge' | 'lookup-guide' | 'settings'
 

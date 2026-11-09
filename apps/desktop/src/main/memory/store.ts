@@ -3,7 +3,7 @@ import type { Stats } from 'fs'
 import { dirname, join } from 'path'
 import { app } from 'electron'
 import { writeFileAtomicSync } from '../services/atomic-file'
-import { AUTO_LOADED_MEMORY_PREFIX, type AutoLoadedMemory } from '../../shared/prompts'
+import { AUTO_LOADED_MEMORY_PREFIX, type AutoLoadedMemory } from '@delta/core/prompts'
 
 /* ---- Memory document base ----
  * A tree of markdown files under `{userData}/memories/`, managed by the

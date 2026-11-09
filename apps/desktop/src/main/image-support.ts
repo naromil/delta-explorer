@@ -1,4 +1,4 @@
-import { IMAGE_OMITTED_NOTE } from '../shared/prompts'
+import { IMAGE_OMITTED_NOTE } from '@delta/core/prompts'
 import type { RoleId } from '../shared/models'
 import { resolveRole } from './config'
 import type { ProviderMessage } from './provider'

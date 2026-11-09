@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type {
-  CanvasCard,
-  CanvasExpansionCard,
-  CanvasMessageCard,
-  CanvasRect
-} from '../../src/shared/canvas'
+import type { CanvasCard, CanvasExpansionCard, CanvasMessageCard, CanvasRect } from '../src/canvas'
 import {
   adjacentSlot,
   cardStackRanks,
@@ -50,10 +45,10 @@ import {
   gridSpacing,
   withCanvasFit,
   zoomAt
-} from '../../src/shared/canvas'
-import type { Turn } from '../../src/shared/conversation'
-import { serializeForChat } from '../../src/shared/conversation'
-import type { ExpansionNode } from '../../src/shared/rich-text'
+} from '../src/canvas'
+import type { Turn } from '../src/conversation'
+import { serializeForChat } from '../src/conversation'
+import type { ExpansionNode } from '../src/rich-text'
 
 const rect = (x: number, y: number, w = 100, h = 100): CanvasRect => ({ x, y, w, h })
 

@@ -4,9 +4,9 @@ import type {
   CanvasMessageCard,
   CanvasRect,
   CanvasSide
-} from '../../../../shared/canvas'
-import type { ExpansionNode } from '../../../../shared/rich-text'
-import { flattenMarkdown } from '../../../../shared/rich-text'
+} from '@delta/core/canvas'
+import type { ExpansionNode } from '@delta/core/rich-text'
+import { flattenMarkdown } from '@delta/core/rich-text'
 import Markdown from '../../components/conversation/Markdown'
 import { OriginalText } from '../../components/conversation/ExpansionFrame'
 import { nextPinned } from '../../hooks/useStickToBottom'

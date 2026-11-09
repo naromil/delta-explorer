@@ -7,7 +7,7 @@ import type {
   CanvasPoint,
   CanvasRect,
   CanvasSide
-} from '../../../../shared/canvas'
+} from '@delta/core/canvas'
 import {
   askedAboutRelations,
   canvasContinuations,
@@ -16,7 +16,7 @@ import {
   containsPoint,
   linkPath,
   sourceCardId
-} from '../../../../shared/canvas'
+} from '@delta/core/canvas'
 import { termPoint } from './board-helpers'
 
 interface CanvasLinksProps {

@@ -7,7 +7,7 @@ import type {
   CanvasMessageCard,
   CanvasNoteCard,
   CanvasRect
-} from '../../src/shared/canvas'
+} from '../src/canvas'
 import {
   askedAboutRelations,
   canvasContinuations,
@@ -23,17 +23,17 @@ import {
   sharesSide,
   turnsThroughCard,
   withCanvasSources
-} from '../../src/shared/canvas'
+} from '../src/canvas'
 import {
   alignSelection,
   distributeSelection,
   duplicateSelection,
   selectionBlockCount
-} from '../../src/shared/canvas-arrange'
-import { tidySelection } from '../../src/shared/canvas-tidy'
-import type { CanvasSnapshot } from '../../src/shared/canvas-history'
-import { applyCanvasPatch, diffCanvas } from '../../src/shared/canvas-history'
-import { canvasOutline, searchCanvasOutline } from '../../src/shared/canvas-outline'
+} from '../src/canvas-arrange'
+import { tidySelection } from '../src/canvas-tidy'
+import type { CanvasSnapshot } from '../src/canvas-history'
+import { applyCanvasPatch, diffCanvas } from '../src/canvas-history'
+import { canvasOutline, searchCanvasOutline } from '../src/canvas-outline'
 import {
   cardAtPoint,
   marqueeHits,
@@ -42,9 +42,9 @@ import {
   sessionAncestorIds,
   sharedColor,
   sourceExcerpts
-} from '../../src/shared/canvas-selection'
-import type { Turn } from '../../src/shared/conversation'
-import type { ExpansionNode } from '../../src/shared/rich-text'
+} from '../src/canvas-selection'
+import type { Turn } from '../src/conversation'
+import type { ExpansionNode } from '../src/rich-text'
 
 const rect = (x: number, y: number, w = 100, h = 100): CanvasRect => ({ x, y, w, h })
 

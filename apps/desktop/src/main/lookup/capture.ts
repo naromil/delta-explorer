@@ -1,4 +1,6 @@
 import { app, screen, desktopCapturer, nativeImage } from 'electron'
+import { createRequire } from 'module'
+import { dirname } from 'path'
 import { join } from 'path/posix'
 import type { Worker } from 'tesseract.js'
 import type { LookupSession } from './state'
@@ -20,12 +22,14 @@ function enqueue<T>(task: () => Promise<T>): Promise<T> {
 
 /**
  * Directory holding `eng.traineddata.gz`. Packaged builds ship it as an extra
- * resource (see `electron-builder.yml`); dev reads it from node_modules. Either
- * way OCR never downloads the model, so the first look-up works offline.
+ * resource (see `electron-builder.yml`); dev resolves the package, which npm workspaces
+ * hoist to the repository root. Either way OCR never downloads the model, so the first
+ * look-up works offline.
  */
 function tessdataDir(): string {
   if (app.isPackaged) return join(process.resourcesPath, 'tessdata')
-  return join(app.getAppPath(), 'node_modules/@tesseract.js-data/eng/4.0.0_best_int')
+  const require = createRequire(join(app.getAppPath(), 'package.json'))
+  return join(dirname(require.resolve('@tesseract.js-data/eng/package.json')), '4.0.0_best_int')
 }
 
 /**

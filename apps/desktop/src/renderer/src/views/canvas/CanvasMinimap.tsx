@@ -5,9 +5,9 @@ import type {
   CanvasPoint,
   CanvasRect,
   CanvasViewport
-} from '../../../../shared/canvas'
-import { unionRect, visibleWorldRect } from '../../../../shared/canvas'
-import { boundsOf } from '../../../../shared/canvas-selection'
+} from '@delta/core/canvas'
+import { unionRect, visibleWorldRect } from '@delta/core/canvas'
+import { boundsOf } from '@delta/core/canvas-selection'
 
 export interface CanvasMinimapHandle {
   /** Follows the viewport frame by frame, without rendering anything. */

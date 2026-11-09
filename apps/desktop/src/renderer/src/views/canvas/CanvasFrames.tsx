@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from 'react'
-import type { CanvasFrame } from '../../../../shared/canvas'
+import type { CanvasFrame } from '@delta/core/canvas'
 
 interface FrameTitleEditorProps {
   title: string

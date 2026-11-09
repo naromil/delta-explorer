@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CanvasColor } from '../../../../shared/canvas'
-import { CANVAS_COLORS } from '../../../../shared/canvas'
-import type { CanvasAlignEdge, CanvasAxis } from '../../../../shared/canvas-arrange'
+import type { CanvasColor } from '@delta/core/canvas'
+import { CANVAS_COLORS } from '@delta/core/canvas'
+import type { CanvasAlignEdge, CanvasAxis } from '@delta/core/canvas-arrange'
 import type { CanvasIconName } from './CanvasIcons'
 import CanvasIcon from './CanvasIcons'
 

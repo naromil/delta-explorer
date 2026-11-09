@@ -1,4 +1,4 @@
-import { budgetFor, estimateMessageTokens, trimMessages } from '../shared/context-budget'
+import { budgetFor, estimateMessageTokens, trimMessages } from '@delta/core/context-budget'
 import type { ProviderMessage } from './provider'
 import type { RoleId } from '../shared/models'
 import { resolveRole } from './config'

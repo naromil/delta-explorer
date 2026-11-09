@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ImageAttachment } from '../../../shared/attachments'
-import type { Turn } from '../../../shared/conversation'
-import type { ExpansionRange, ExpansionTarget } from '../../../shared/rich-text'
+import type { ImageAttachment } from '@delta/core/attachments'
+import type { Turn } from '@delta/core/conversation'
+import type { ExpansionRange, ExpansionTarget } from '@delta/core/rich-text'
 import {
   findExpansionInNodes,
   findExpansionInTurns,
   flattenMarkdown,
   isSameRange,
   validateExpansionTarget
-} from '../../../shared/rich-text'
-import { isTermSelection } from '../../../shared/prompts'
+} from '@delta/core/rich-text'
+import { isTermSelection } from '@delta/core/prompts'
 import { anchoredRange, isAnchoredRange } from '../lib/markdown'
 import type { ContextMenuItem, ContextMenuState } from '../components/conversation/ContextMenu'
 import type { ExpandPromptState } from '../components/conversation/ExpandPrompt'

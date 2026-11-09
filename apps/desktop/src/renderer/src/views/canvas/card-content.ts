@@ -1,6 +1,6 @@
-import type { CanvasCard } from '../../../../shared/canvas'
-import type { ExpansionNode } from '../../../../shared/rich-text'
-import { findExpansionInTurns, flattenMarkdown } from '../../../../shared/rich-text'
+import type { CanvasCard } from '@delta/core/canvas'
+import type { ExpansionNode } from '@delta/core/rich-text'
+import { findExpansionInTurns, flattenMarkdown } from '@delta/core/rich-text'
 import type { useCanvas } from '../../hooks/useCanvas'
 import type { CanvasCardStatus } from './CanvasCardView'
 

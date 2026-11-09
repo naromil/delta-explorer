@@ -1,23 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type {
-  CanvasCard,
-  CanvasLink,
-  CanvasMessageCard,
-  CanvasNoteCard
-} from '../../src/shared/canvas'
+import type { CanvasCard, CanvasLink, CanvasMessageCard, CanvasNoteCard } from '../src/canvas'
 import {
   normalizeCanvasLayout,
   resizeDraftRect,
   sessionCardIds,
   withCanvasContext
-} from '../../src/shared/canvas'
-import {
-  contextExcerpts,
-  requestContext,
-  sessionContextLinks
-} from '../../src/shared/canvas-context'
-import { duplicateSelection } from '../../src/shared/canvas-arrange'
-import type { Turn } from '../../src/shared/conversation'
+} from '../src/canvas'
+import { contextExcerpts, requestContext, sessionContextLinks } from '../src/canvas-context'
+import { duplicateSelection } from '../src/canvas-arrange'
+import type { Turn } from '../src/conversation'
 
 const rect = { x: 0, y: 0, w: 400, h: 280 }
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConversationMeta, ConversationRecord } from '../../src/shared/conversation'
+import type { ConversationMeta, ConversationRecord } from '@delta/core/conversation'
 import { emptyKbState, type KbMaintenanceStatus, type KbPersistedState } from '../../src/shared/kb'
 
 const h = vi.hoisted(() => {

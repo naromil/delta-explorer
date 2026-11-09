@@ -1,9 +1,9 @@
-import type { ImageAttachment } from '../../../shared/attachments'
+import type { ImageAttachment } from '@delta/core/attachments'
 import {
   MAX_ATTACHMENT_NAME_LENGTH,
   isSupportedImageType,
   scaledImageSize
-} from '../../../shared/attachments'
+} from '@delta/core/attachments'
 
 const OUTPUT_TYPE = 'image/jpeg'
 const OUTPUT_QUALITY = 0.85

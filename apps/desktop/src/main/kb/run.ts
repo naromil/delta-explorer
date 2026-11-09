@@ -1,4 +1,4 @@
-import type { ConversationMeta, ConversationRecord } from '../../shared/conversation'
+import type { ConversationMeta, ConversationRecord } from '@delta/core/conversation'
 import type { KbRunResult } from '../../shared/kb'
 import { callProvider } from '../provider'
 import { loadConversation, markConversationKbFed } from '../conversations'

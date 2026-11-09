@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConversationRecord, ConversationState, Turn } from '../../src/shared/conversation'
-import type { ExpansionNode } from '../../src/shared/rich-text'
-import { EXPANSION_EMPTY_ERROR, EXPANSION_INTERRUPTED_ERROR } from '../../src/shared/rich-text'
+import type { ConversationRecord, ConversationState, Turn } from '@delta/core/conversation'
+import type { ExpansionNode } from '@delta/core/rich-text'
+import { EXPANSION_EMPTY_ERROR, EXPANSION_INTERRUPTED_ERROR } from '@delta/core/rich-text'
 import {
   SAVE_FAILED_MESSAGE,
   saveConversationState

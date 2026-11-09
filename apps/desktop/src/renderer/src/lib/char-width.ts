@@ -1,4 +1,4 @@
-import { BODY_CHAR_WIDTH } from '../../../shared/canvas'
+import { BODY_CHAR_WIDTH } from '@delta/core/canvas'
 
 /** Ordinary English with spaces, so the average matches what an answer's lines hold. */
 const SAMPLE =

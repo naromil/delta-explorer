@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConversationRecord } from '../../src/shared/conversation'
+import type { ConversationRecord } from '@delta/core/conversation'
 
 const paths = vi.hoisted(() => ({ userData: '' }))
 

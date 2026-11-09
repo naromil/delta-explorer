@@ -1,13 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import type { ConversationState, Turn, ProviderMessage } from '../../../shared/conversation'
+import type { ConversationState, Turn, ProviderMessage } from '@delta/core/conversation'
 import {
   serializeForChat,
   buildConversationTitle,
   linearStateOf,
   CONVERSATION_TITLE_MAX_LENGTH
-} from '../../../shared/conversation'
-import type { ImageAttachment } from '../../../shared/attachments'
-import type { ExpansionTarget } from '../../../shared/rich-text'
+} from '@delta/core/conversation'
+import type { ImageAttachment } from '@delta/core/attachments'
+import type { ExpansionTarget } from '@delta/core/rich-text'
 import {
   expansionMessageInput,
   expansionSubtreeIds,
@@ -19,9 +19,9 @@ import {
   restartExpansion,
   setExpansionFolded,
   updateExpansion
-} from '../../../shared/rich-text'
+} from '@delta/core/rich-text'
 import { isAnchoredRange } from '../lib/markdown'
-import { buildExpandRequest } from '../../../shared/expand-prompt'
+import { buildExpandRequest } from '@delta/core/expand-prompt'
 import {
   clearRequests,
   createRequests,

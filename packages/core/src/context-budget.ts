@@ -1,4 +1,4 @@
-import type { ProviderMessage } from './models'
+import type { ProviderMessage } from './messages'
 
 /** Reserved for the reply when the caller does not know the model's output cap. */
 export const DEFAULT_OUTPUT_RESERVE = 4096

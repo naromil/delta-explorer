@@ -7,7 +7,7 @@ import {
   buildMemoryPrompt,
   MEMORY_PATH_HINT,
   MEMORY_TOOL_DESCRIPTIONS
-} from '../../shared/prompts'
+} from '@delta/core/prompts'
 import type { RoleId } from '../../shared/models'
 import { resolveRole } from '../config'
 import type { AgentTools, ProviderMessage } from '../provider'

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { IMAGE_OMITTED_NOTE } from '../../src/shared/prompts'
+import { IMAGE_OMITTED_NOTE } from '@delta/core/prompts'
 
 const h = vi.hoisted(() => ({ resolveRole: vi.fn(), getCachedModel: vi.fn() }))
 vi.mock('../../src/main/config', () => ({ resolveRole: h.resolveRole }))

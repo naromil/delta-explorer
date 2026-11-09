@@ -1,0 +1,47 @@
+{
+  "name": "delta-monorepo",
+  "private": true,
+  "description": "Delta Explorer: the desktop app, the Firefox extension and the code they share.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w apps/desktop",
+    "dev:extension": "npm run dev -w apps/extension",
+    "build": "npm run build -w apps/desktop",
+    "build:extension": "npm run build -w apps/extension",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint --cache .",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run format:check && npm run build:extension"
+  },
+  "devDependencies": {
+    "@electron-toolkit/eslint-config-prettier": "^3.0.0",
+    "@electron-toolkit/eslint-config-ts": "^3.1.0",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "prettier": "^3.7.4",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  },
+  "allowScripts": {
+    "electron@39.8.10": true,
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.1": true
+  },
+  "overrides": {
+    "micromark-extension-math": {
+      "katex": "^0.19.1"
+    },
+    "extract-zip": {
+      "yauzl": "^3.4.0"
+    }
+  }
+}

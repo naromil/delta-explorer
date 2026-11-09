@@ -6,9 +6,9 @@
  * dropped instead of being applied to a turn that may already be gone.
  */
 import type { Dispatch, SetStateAction } from 'react'
-import type { ConversationState } from '../../../../shared/conversation'
-import type { ExpansionChunk } from '../../../../shared/rich-text'
-import { applyExpansionChunk } from '../../../../shared/rich-text'
+import type { ConversationState } from '@delta/core/conversation'
+import type { ExpansionChunk } from '@delta/core/rich-text'
+import { applyExpansionChunk } from '@delta/core/rich-text'
 import { pendingRequest, settleRequest } from './requests'
 import type { RequestBookkeeping } from './requests'
 

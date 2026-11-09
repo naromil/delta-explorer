@@ -1,4 +1,4 @@
-import type { ImageInput } from './models'
+import type { ImageInput } from './messages'
 
 /** An image on a user turn. Stored inline in the conversation record, base64 encoded. */
 export interface ImageAttachment extends ImageInput {

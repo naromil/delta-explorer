@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ExpansionNode } from '../../src/shared/rich-text'
-import type { LegacySegment } from '../../src/shared/rich-text'
+import type { ExpansionNode } from '../src/rich-text'
+import type { LegacySegment } from '../src/rich-text'
 import {
   EXPANSION_EMPTY_ERROR,
   EXPANSION_INTERRUPTED_ERROR,
@@ -25,7 +25,7 @@ import {
   updateExpansion,
   validateExpansionTarget,
   validateInsertion
-} from '../../src/shared/rich-text'
+} from '../src/rich-text'
 
 interface TestTurn {
   id: number

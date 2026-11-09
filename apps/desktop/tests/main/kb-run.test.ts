@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConversationRecord } from '../../src/shared/conversation'
+import type { ConversationRecord } from '@delta/core/conversation'
 
 const { callProvider, loadConversation, markConversationKbFed, memoryAgentFor } = vi.hoisted(
   () => ({
