@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delta Explorer look-up</title>
+  <link rel="stylesheet" href="../vendor/katex/katex.min.css" />
+  <link rel="stylesheet" href="../src/ui/base.css" />
+  <link rel="stylesheet" href="../src/ui/conversation.css" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="lookup">
+    <header class="lookup-header">
+      <span class="brand-mark" aria-hidden="true">Δ</span>
+      <span class="lookup-title" id="lookup-title">Look-up</span>
+      <div class="lookup-header-actions" id="header-actions"></div>
+    </header>
+    <div class="lookup-setup" id="lookup-setup" hidden></div>
+    <div class="lookup-conversation" id="lookup-conversation"></div>
+  </div>
+  <script src="../vendor/katex/katex.min.js"></script>
+  <script src="../src/shared/markdown.js"></script>
+  <script src="../src/ui/math.js"></script>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

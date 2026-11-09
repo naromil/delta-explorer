@@ -1,0 +1,36 @@
+/* The canvas page: the board alone, in a tab or over a web page. */
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.canvas-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Over a web page, the frame's rounded corners show the page is still underneath. */
+.is-overlay body {
+  background: var(--bg);
+}
+
+.canvas-app-message {
+  margin: auto;
+  max-width: 420px;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-2);
+}
+
+.canvas-app-message h1 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--text-1);
+}
+
+.canvas-tool--close {
+  font-size: 16px;
+}

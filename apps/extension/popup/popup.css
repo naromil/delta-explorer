@@ -1,0 +1,56 @@
+/* The look-up popup: compact conversation. Firefox caps popups at 800×600. */
+
+html, body { width: 440px; height: 560px; overflow: hidden; }
+
+.lookup { display: flex; flex-direction: column; height: 100%; }
+
+.lookup-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  flex: none;
+}
+
+.lookup-title { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lookup-header-actions { display: flex; align-items: center; gap: 2px; }
+
+.lookup-setup {
+  flex: none;
+  margin: 10px 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+}
+.lookup-setup p { margin: 0 0 8px; }
+
+.lookup-conversation { flex: 1 1 auto; min-height: 0; }
+
+.lookup .conv-scroll { padding-top: 12px; }
+.lookup .conv-scroll > * { padding-left: 12px; padding-right: 12px; }
+.lookup .composer { padding: 6px 10px 10px; }
+.lookup .message-list { gap: 14px; }
+.lookup .message-avatar { width: 24px; height: 24px; }
+.lookup .conv-context p { max-height: 120px; }
+.lookup .expand-notice { bottom: 70px; }
+
+.lookup-empty { color: var(--text-3); text-align: center; padding: 28px 12px; font-size: 13px; }
+.lookup-empty p { margin: 0; }

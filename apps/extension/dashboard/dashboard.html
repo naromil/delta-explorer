@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delta Explorer</title>
+  <link rel="icon" href="../icons/icon.svg" />
+  <link rel="stylesheet" href="../vendor/katex/katex.min.css" />
+  <link rel="stylesheet" href="../src/ui/base.css" />
+  <link rel="stylesheet" href="../src/ui/conversation.css" />
+  <link rel="stylesheet" href="../src/ui/canvas.css" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+  <div class="app">
+    <nav class="sidebar" aria-label="Main">
+      <div class="sidebar-brand">
+        <span class="brand-mark" aria-hidden="true">Δ</span>
+        <span class="brand-name">Delta Explorer</span>
+      </div>
+      <div class="sidebar-nav" id="sidebar-nav"></div>
+      <div class="sidebar-footer">
+        <span class="memory-pill" id="memory-pill" hidden>Memory updated</span>
+        <button type="button" class="sidebar-search" id="sidebar-search">
+          <span class="sidebar-search-label">Search</span>
+          <kbd class="kbd" id="search-key">Ctrl+K</kbd>
+        </button>
+      </div>
+    </nav>
+
+    <main class="main" id="main">
+      <section class="view" id="view-home" data-view="home" hidden></section>
+      <section class="view view--chat" id="view-chat" data-view="chat" hidden></section>
+      <section class="view view--canvas" id="view-canvas" data-view="canvas" hidden></section>
+      <section class="view" id="view-knowledge" data-view="knowledge" hidden></section>
+      <section class="view" id="view-guide" data-view="guide" hidden></section>
+      <section class="view" id="view-settings" data-view="settings" hidden></section>
+    </main>
+  </div>
+
+  <script src="../vendor/katex/katex.min.js"></script>
+  <script src="../src/shared/markdown.js"></script>
+  <script src="../src/ui/math.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

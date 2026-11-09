@@ -1,0 +1,8 @@
+node_modules/
+*.zip
+ref_src/
+.vscode/
+.opencode/
+.kilo/
+.ua/
+dist/
