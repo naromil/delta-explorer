@@ -1201,8 +1201,13 @@
 .canvas-toolbar--title {
   top: 12px;
   left: 50%;
-  max-width: 36%;
+  /* Clear of the tool rail on both sides; the name gives way first. */
+  max-width: calc(100% - 160px);
   transform: translateX(-50%);
+}
+
+.canvas-toolbar--title .canvas-tool {
+  flex-shrink: 0;
 }
 
 .canvas-toolbar--zoom {
@@ -1214,6 +1219,7 @@
   height: 28px;
   min-width: 28px;
   padding: 0 10px;
+  white-space: nowrap;
   font-size: 13px;
   color: var(--text-2);
   background: transparent;

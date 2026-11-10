@@ -57,7 +57,11 @@ interface UseExpansionContextMenuOptions {
   onDismissExpansion?: (id: number) => void
   /** The prompt can attach images: only where the composer can. */
   allowImages?: boolean
+  /** Which turns hold expandable text; answers by default, and a canvas adds its pages. */
+  canExpandTurn?: (turn: Turn) => boolean
 }
+
+const isAnswer = (turn: Turn): boolean => turn.role === 'assistant'
 
 /** A selection in an answer, with what it would expand if the user asks. */
 interface LiveSelection {
@@ -251,7 +255,10 @@ function selectionBarPosition(range: Range): { x: number; y: number; bottom: num
   return { x: rect.left + rect.width / 2, y: rect.top, bottom: rect.bottom }
 }
 
-function readLiveSelection(turns: Turn[]): LiveSelection | null {
+function readLiveSelection(
+  turns: Turn[],
+  canExpandTurn: (turn: Turn) => boolean
+): LiveSelection | null {
   const selection = window.getSelection()
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null
   const text = selection.toString()
@@ -265,7 +272,7 @@ function readLiveSelection(turns: Turn[]): LiveSelection | null {
   if (!turnEl) return null
   const turnId = Number(turnEl.dataset.turnId)
   const turn = turns.find((item) => item.id === turnId)
-  if (!turn || turn.role !== 'assistant') return null
+  if (!turn || !canExpandTurn(turn)) return null
 
   const anchors = anchorsFromRange(range)
   const resolved: TargetResult = anchors
@@ -307,6 +314,48 @@ function answerDetail(node: Turn['expansions'][number]): string {
   return flattenMarkdown(node.answer).replace(/\s+/g, ' ').trim().slice(0, ANSWER_PREVIEW_LENGTH)
 }
 
+const WORD_CHAR = /[\p{L}\p{N}_'’-]/u
+
+/** Where a point lands in the text: `caretRangeFromPoint` (Chromium, newer Firefox) or the standard API. */
+function caretAt(x: number, y: number): { node: Node; offset: number } | null {
+  if (typeof document.caretRangeFromPoint === 'function') {
+    const range = document.caretRangeFromPoint(x, y)
+    return range ? { node: range.startContainer, offset: range.startOffset } : null
+  }
+  const position = document.caretPositionFromPoint?.(x, y)
+  return position ? { node: position.offsetNode, offset: position.offset } : null
+}
+
+/**
+ * The word under a point. Chromium widens a caret with `Range.expand('word')`; where that is
+ * missing (Firefox), the word is read from the caret's text node.
+ */
+function wordRangeAt(x: number, y: number): Range | null {
+  const caret = caretAt(x, y)
+  if (!caret || caret.node.nodeType !== Node.TEXT_NODE) return null
+  const range = document.createRange()
+  range.setStart(caret.node, caret.offset)
+  // Range.expand() is Chromium-only and absent from lib.dom.d.ts.
+  const expandable = range as unknown as { expand?: (unit: string) => void }
+  if (typeof expandable.expand === 'function') {
+    try {
+      expandable.expand('word')
+    } catch {
+      /* expand('word') can throw on an empty text node */
+    }
+    return range
+  }
+  const text = (caret.node as Text).data
+  let start = caret.offset
+  let end = caret.offset
+  while (start > 0 && WORD_CHAR.test(text[start - 1])) start -= 1
+  while (end < text.length && WORD_CHAR.test(text[end])) end += 1
+  if (start === end) return null
+  range.setStart(caret.node, start)
+  range.setEnd(caret.node, end)
+  return range
+}
+
 export function useExpansionContextMenu(options: UseExpansionContextMenuOptions): {
   ctxMenu: ContextMenuState | null
   expandPrompt: ExpandPromptState | null
@@ -329,14 +378,16 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
   const [notice, setNotice] = useState<string | null>(null)
   const { turns, onExpand, onUnfold, onRetryExpansion, onEditExpansion, onDismissExpansion } =
     options
-  const { allowImages = false } = options
+  const { allowImages = false, canExpandTurn = isAnswer } = options
 
   // Submits happen after the menu opened; read the newest turns, not the
   // closure captured when the menu rendered.
   const turnsRef = useRef(turns)
+  const canExpandTurnRef = useRef(canExpandTurn)
   useEffect(() => {
     turnsRef.current = turns
-  }, [turns])
+    canExpandTurnRef.current = canExpandTurn
+  }, [turns, canExpandTurn])
 
   const pendingRef = useRef<PendingSelection | null>(null)
   const barRangeRef = useRef<Range | null>(null)
@@ -466,8 +517,8 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
         }
       }
 
-      // User turns get Copy / Select All only: they are not model answers.
-      if (turn.role === 'user') {
+      // Questions get Copy / Select All only: they are not text to explore.
+      if (!canExpandTurn(turn)) {
         pendingRef.current = null
         setCtxMenu({
           ...at,
@@ -512,23 +563,9 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
         return
       }
 
-      // Single-word right-click: the caret lands in a text node, then
-      // Range.expand('word') widens it to the word under the cursor.
-      const caret =
-        typeof document.caretRangeFromPoint === 'function'
-          ? document.caretRangeFromPoint(e.clientX, e.clientY)
-          : null
-
-      if (caret && caret.startContainer && turnEl.contains(caret.startContainer)) {
-        const wordRange = caret.cloneRange()
-        // Range.expand() is Chromium-only and absent from lib.dom.d.ts.
-        const expandableRange = wordRange as unknown as { expand: (unit: string) => void }
-        try {
-          expandableRange.expand('word')
-        } catch {
-          /* expand('word') can throw on an empty text node */
-        }
-
+      // Single-word right-click: the word under the pointer, as if it were selected.
+      const wordRange = wordRangeAt(e.clientX, e.clientY)
+      if (wordRange && turnEl.contains(wordRange.startContainer)) {
         const wordText = wordRange.toString()
         if (wordText.trim() !== '') {
           const anchors = anchorsFromRange(wordRange)
@@ -586,7 +623,7 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
         onSelectAll: () => selectAllInTurn(turnEl)
       })
     },
-    [turns, submit, openPrompt]
+    [canExpandTurn, turns, submit, openPrompt]
   )
 
   /* ---- Selection bar and shortcuts ---- */
@@ -611,7 +648,7 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
   )
 
   const refreshSelectionBar = useCallback(() => {
-    const live = readLiveSelection(turnsRef.current)
+    const live = readLiveSelection(turnsRef.current, canExpandTurnRef.current)
     const position = live?.resolved.ok ? selectionBarPosition(live.range) : null
     if (!live || !position) {
       barRangeRef.current = null
@@ -653,7 +690,7 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
 
     /** Ctrl/Cmd+E expands the selection; with Shift it asks first. Returns whether it acted. */
     const runShortcut = (prompted: boolean): boolean => {
-      const live = readLiveSelection(turnsRef.current)
+      const live = readLiveSelection(turnsRef.current, canExpandTurnRef.current)
       if (!live) return false
       if (!live.resolved.ok) {
         showNotice(refusalMessage(live.resolved.reason))

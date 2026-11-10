@@ -1,6 +1,7 @@
 /* Main CSS entry point that imports all application stylesheets */
 @import 'home.css';
 @import 'chat.css';
+@import '@delta/ui/styles/attachments.css';
 @import 'settings.css';
 @import '@delta/ui/styles/markdown.css';
 @import '@delta/ui/styles/expand.css';

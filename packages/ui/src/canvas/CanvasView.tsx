@@ -88,7 +88,7 @@ import type { useCanvas } from './useCanvas'
 import { useExpansionContextMenu } from '../conversation/useExpansionContextMenu'
 import { isEditableTarget } from '../lib/editable'
 import { formatRelativeTime } from '../lib/format'
-import type { ConversationMeta } from '@delta/core/conversation'
+import type { ConversationMeta, Turn } from '@delta/core/conversation'
 import { CONVERSATION_SOURCE_LABELS } from '@delta/core/conversation'
 import type { ViewportMotion } from '../lib/viewport-motion'
 import { createViewportMotion } from '../lib/viewport-motion'
@@ -498,7 +498,7 @@ function CanvasBoard({
     const host = cardsRef.current.find((card) =>
       target.parentExpansionId !== undefined
         ? card.kind === 'expansion' && card.expansionId === target.parentExpansionId
-        : card.kind === 'message' && card.turnId === turnId
+        : (card.kind === 'message' || card.kind === 'page') && card.turnId === turnId
     )
     if (!host) return { ok: false as const, reason: 'turn-not-found' }
     window.getSelection()?.removeAllRanges()
@@ -513,10 +513,20 @@ function CanvasBoard({
     return { ok: true as const }
   }, [])
 
+  // A page's text is a user turn, and as expandable as an answer.
+  const pageTurnIds = useMemo(
+    () => new Set(cards.flatMap((card) => (card.kind === 'page' ? [card.turnId] : []))),
+    [cards]
+  )
+  const canExpandTurn = useCallback(
+    (turn: Turn): boolean => turn.role === 'assistant' || pageTurnIds.has(turn.id),
+    [pageTurnIds]
+  )
   const selection = useExpansionContextMenu({
     turns,
     onExpand: beginPlacing,
-    onUnfold: () => {}
+    onUnfold: () => {},
+    canExpandTurn
   })
 
   /* ---- Drawing ---- */
@@ -1518,14 +1528,21 @@ function CanvasBoard({
     [openDraft, showNotice]
   )
 
-  /* A page just put down by `startFromPage` gets its question box beside it; following the
-     draft brings both on screen. */
+  /* A page just put down by `startFromPage` gets its question box beside it, with the view
+     zoomed out far enough to show both, since a page is taller than most windows. */
   const { startedPageId, clearStartedPage } = canvas
   useEffect(() => {
     if (startedPageId === null) return
     clearStartedPage()
+    const page = cardsRef.current.find((card) => card.id === startedPageId)
+    const { left, width, height } = openArea()
+    if (page && width > 0) {
+      const both = unionRect(page.rect, rectAgainst(page.rect, 'right', DEFAULT_MESSAGE_SIZE))
+      const fit = fitViewport([both], { width, height })
+      glideTo({ ...fit, x: fit.x + left })
+    }
     continueCard(startedPageId, ['right'])
-  }, [clearStartedPage, continueCard, startedPageId])
+  }, [clearStartedPage, continueCard, glideTo, openArea, startedPageId])
 
   /**
    * A question about what is selected: a single answer simply continues, as its history
