@@ -12,11 +12,21 @@ unmodified in `vendor/katex/`.
 The browsers load `dist/firefox/` and `dist/chrome/`, never the sources: the pages and the background
 import `@delta/core`, which only a bundler can resolve.
 1. From the repository root: `npm install`, then `npm run build:extension` (or
-   `npm run dev:extension` to rebuild on every change). Both browsers are built; pass
-   `-- --browser=firefox` (or `chrome`) to build one.
+   `npm run dev:extension` to rebuild on every change, into `dist/dev/firefox/` and
+   `dist/dev/chrome/` instead). Both browsers are built; pass `-- --browser=firefox` (or `chrome`)
+   to build one.
 2. Firefox: `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** →
    `apps/extension/dist/firefox/manifest.json`.
 3. Chrome: `chrome://extensions` → Developer mode → **Load unpacked** → `apps/extension/dist/chrome/`.
+
+While `npm run dev:extension` runs, a build loaded from `dist/dev/` reloads itself after every rebuild, so it is
+loaded once and never reloaded by hand. The watcher serves a WebSocket on `127.0.0.1:35730`
+(`DELTA_RELOAD_PORT` changes it); the manifest's background becomes `dev-background.js`, which
+imports `background.js` and `src/dev/auto-reload.js`. That module takes the first build id it
+receives as its baseline (`storage.session`, cleared by a reload) and calls `runtime.reload()` on a
+new one. Tabs that were already open keep the old content script until they are refreshed. A release
+build (`npm run build:extension`, also run by `npm run verify`) has none of this, and each kind of
+build clears only its own folders, so neither breaks the other while a browser has it loaded.
 
 `scripts/build.mjs` bundles the four module entries (`background.js`, `popup/popup.js`,
 `dashboard/js/app.js`, `canvas/canvas.jsx`, the one React page) with esbuild, unminified, plus
@@ -255,6 +265,13 @@ Legacy keys migrated and removed on first use: `deltaConfig`, `deltaKbConfig`, `
   `.prettierignore` and ESLint config skip it; `scripts/` is linted and formatted). The shared model it
   imports is tested in `packages/core/tests`, the shared canvas in `packages/ui/tests` (both typechecked
   and linted). Verify UI changes by loading `dist/` in Firefox.
+- Claude in Chrome (the user's own Chrome, signed in to the chat sites): load `dist/dev/chrome` once and
+  keep `npm run dev:extension` running; refresh a tab after a rebuild for its new content script. Its
+  simulated keys never reach extension shortcuts, so drive the extension through the dev-only
+  `src/dev/page-hooks.js`: dispatch `delta-dev` on `document` with a JSON string `{ action, … }` and
+  read `delta-dev-result` (`read-web-chat`, `read-web-chat-settled`, `open-canvas`, `canvas-state`,
+  `canvas-records`, and `ask`, which sends a real message: use a temporary chat). While the canvas
+  iframe is open, Claude in Chrome can neither script nor screenshot that tab.
 - Automation: WebDriver BiDi (Puppeteer with `browser: 'firefox'`) can install `dist/` as a temporary
   add-on, but only scripts extension pages with `MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1` and cannot navigate to
   `moz-extension:` URLs: open them with `browser.tabs.create` from an extension page reached through the
