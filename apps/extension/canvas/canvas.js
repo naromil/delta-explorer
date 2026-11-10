@@ -4,11 +4,14 @@
  * canvas, and no parameter shows the newest.
  *
  * The seed is the page's title, address and readable text, stashed by the content script in
- * the background under a single-use token bound to its tab. */
+ * the background under a single-use token bound to its tab. On a web chat (ChatGPT, Claude,
+ * Gemini) it is the chat's exchanges instead: the canvas mirrors the chat as a line of cards and
+ * asks that chat, through the tab, whatever is asked on it. */
 
 import { CanvasBoard } from '../src/ui/canvas/board.js';
 import { CanvasStore } from '../src/ui/canvas/store.js';
 import { onBroadcast, rpc } from '../src/ui/api.js';
+import { createWebChatTransport } from '../src/ui/canvas/web-chat.js';
 import { applyTheme, h, toast } from '../src/ui/dom.js';
 
 const params = new URLSearchParams(location.search);
@@ -56,13 +59,47 @@ function mountBoard() {
     host: app,
     store,
     toolbarExtras: extras,
-    historyExtras: () => (pageSeed
-      ? [{ label: 'New canvas from this page', detail: pageSeed.title || pageSeed.url, onSelect: () => board.startFromPage(pageSeed) }]
-      : []),
+    historyExtras: () => {
+      if (!pageSeed) return [];
+      if (pageSeed.webChat) {
+        return [{ label: 'New canvas from this chat', detail: pageSeed.title || pageSeed.url, onSelect: () => restartFromWebChat() }];
+      }
+      return [{ label: 'New canvas from this page', detail: pageSeed.title || pageSeed.url, onSelect: () => board.startFromPage(pageSeed) }];
+    },
     onOpenConversation: (meta) => rpc('openDashboard', { hash: `chat/${meta.id}` }).catch(() => {}),
     onEscapeIdle: overlay ? close : undefined
   });
   board.setActive(true);
+}
+
+/** A fresh canvas holding the chat as it stands now. */
+async function restartFromWebChat() {
+  const chat = (await store.webChat.read()) || pageSeed.webChat;
+  store.webChat.url = chat.url;
+  store.newCanvas();
+  store.syncWebChat(chat);
+  board.fitAll();
+  board.startWebChat(store.doc.layout.webChat.exchanges.at(-1));
+}
+
+/** Opens this chat's canvas, or starts one, and brings it up to date with the chat. */
+async function startFromWebChat(chat) {
+  // A chat with nothing in it yet has no address of its own, so it shares no canvas.
+  const previous = chat.exchanges.length > 0 ? await canvasForPage(chat.url) : null;
+  if (previous && (await store.openCanvas(previous.id))) {
+    const added = store.syncWebChat(chat);
+    board.fitAll();
+    board.showNotice(added === -1
+      ? `${store.webChat.siteName} has fewer messages than this canvas remembers, so new ones are matched from where it stands now.`
+      : added > 0
+        ? `Your canvas for this chat, with ${added} new message${added === 1 ? '' : 's'} from ${store.webChat.siteName}.`
+        : 'Your canvas for this chat. The history menu (▾) starts a new one.');
+  } else {
+    store.newCanvas();
+    store.syncWebChat(chat);
+    board.fitAll();
+  }
+  board.startWebChat(store.doc.layout.webChat.exchanges.at(-1));
 }
 
 /** The newest canvas made on this page, if any. */
@@ -89,6 +126,7 @@ async function start() {
       showMessage('Canvas unavailable', 'Open the canvas again from the page’s right-click menu or the toolbar look-up.');
       return;
     }
+    if (pageSeed.webChat) store.webChat = createWebChatTransport(pageSeed.webChat);
   }
 
   mountBoard();
@@ -96,6 +134,10 @@ async function start() {
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   board.measureSurface();
 
+  if (pageSeed?.webChat) {
+    await startFromWebChat(pageSeed.webChat);
+    return;
+  }
   if (pageSeed) {
     const previous = await canvasForPage(pageSeed.url);
     if (previous && (await store.openCanvas(previous.id))) {

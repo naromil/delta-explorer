@@ -45,8 +45,18 @@ function canvasEscapeLineStart(text) {
   });
 }
 
+var CANVAS_SCREEN_READER_ONLY = /(^|\s)(sr-only|visually-hidden|cdk-visually-hidden|screen-reader-only|screenreader-only)(\s|$)/;
+
+/** Text kept for screen readers only ("You said", "Copy code"): visible to checkVisibility, not to the eye. */
+function canvasIsScreenReaderOnly(el) {
+  if (typeof el.className === 'string' && CANVAS_SCREEN_READER_ONLY.test(el.className)) return true;
+  var rect = el.getBoundingClientRect();
+  return rect.width <= 1 && rect.height <= 1 && el.childNodes.length > 0 && getComputedStyle(el).overflow === 'hidden';
+}
+
 function canvasIsHidden(el) {
   if (el.hidden || el.getAttribute('aria-hidden') === 'true') return true;
+  if (canvasIsScreenReaderOnly(el)) return true;
   if (typeof el.checkVisibility === 'function') return !el.checkVisibility({ visibilityProperty: true });
   return el.getClientRects().length === 0;
 }
@@ -67,10 +77,22 @@ function canvasLinkUrl(anchor) {
   return href.replace(/[\s()<>]/g, function (ch) { return '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'); });
 }
 
-/** The inline markdown of a run of nodes: emphasis, code and links kept. */
+/** A KaTeX formula (web chats render math with it) as its TeX source, or null for anything else. */
+function canvasMathTex(el) {
+  var classes = el.classList;
+  if (!classes || !(classes.contains('katex') || classes.contains('katex-display'))) return null;
+  var annotation = el.querySelector('annotation[encoding="application/x-tex"]');
+  var tex = annotation ? (annotation.textContent || '').trim() : '';
+  if (!tex) return '';
+  return classes.contains('katex-display') || el.closest('.katex-display') ? ' $$' + tex + '$$ ' : '$' + tex + '$';
+}
+
+/** The inline markdown of a run of nodes: emphasis, code, formulas and links kept. */
 function canvasInline(node, root) {
   if (node.nodeType === 3) return canvasEscapeInline(node.nodeValue.replace(/\s+/g, ' '));
   if (node.nodeType !== 1 || canvasSkipped(node, root)) return '';
+  var tex = canvasMathTex(node);
+  if (tex !== null) return tex;
   if (node.tagName === 'BR') return ' ';
   var inner = '';
   for (var child = node.firstChild; child; child = child.nextSibling) {
@@ -158,8 +180,11 @@ function canvasBlocks(el, root, out, budget, indent) {
     return;
   }
   if (tag === 'PRE') {
-    var code = (el.textContent || '').replace(/\s+$/, '');
-    if (code.trim()) push(indent + '```\n' + code.replace(/```/g, '``​`') + '\n' + indent + '```');
+    // Web chats put a language label and buttons around the code element.
+    var codeEl = el.querySelector('code') || el;
+    var language = (String(codeEl.className || '').match(/language-([\w+#.-]+)/) || [])[1] || '';
+    var code = (codeEl.textContent || '').replace(/\s+$/, '');
+    if (code.trim()) push(indent + '```' + language + '\n' + code.replace(/```/g, '``​`') + '\n' + indent + '```');
     return;
   }
   if (tag === 'HR') { push(indent + '---'); return; }
@@ -269,7 +294,11 @@ function openPageCanvas() {
     canvasOverlayFrame.focus();
     return;
   }
-  var seed = { title: document.title || '', url: location.href, text: readablePageMarkdown() };
+  // On a web chat the canvas mirrors the conversation (web-chat.js) instead of reading the page.
+  var chat = readWebChat();
+  var seed = chat
+    ? { title: document.title || '', url: chat.url, text: '', webChat: chat }
+    : { title: document.title || '', url: location.href, text: readablePageMarkdown() };
   browser.runtime.sendMessage({ type: 'stashCanvasSeed', seed: seed }).then(function (token) {
     if (canvasOverlayEl || !token) return;
     var overlay = document.createElement('div');

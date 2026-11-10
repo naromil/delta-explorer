@@ -34,9 +34,10 @@ export function persistableTurns(turns) {
   return turns.filter((turn) => turn.role !== 'assistant' || String(turn.content).trim() !== '');
 }
 
-/** The page a canvas was opened on: the newest page card's address, or ''. */
+/** The page a canvas was opened on: the web chat it mirrors, else the newest page card's address, or ''. */
 export function canvasPageUrl(record) {
   if (record.source !== 'canvas') return '';
+  if (record.canvas.webChat?.url) return record.canvas.webChat.url;
   const pages = record.canvas.cards.filter((card) => card.kind === 'page' && card.url);
   return pages.length ? pages[pages.length - 1].url : '';
 }

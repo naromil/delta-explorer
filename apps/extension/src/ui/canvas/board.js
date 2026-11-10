@@ -102,6 +102,7 @@ import {
 } from './helpers.js';
 import { Minimap, Outline, selectionBar, shortcutsPanel, ToolRail } from './panels.js';
 import { CanvasPopups } from './popups.js';
+import { webChatElsewhereNotice } from './web-chat.js';
 
 const MD = globalThis.DeltaMarkdown;
 
@@ -469,6 +470,8 @@ export class CanvasBoard {
       this.titleInput.value = this.store.title;
       this.popups.close();
       this.popups.closeBar();
+      const webChat = this.store.doc.layout.webChat;
+      if (webChat && !this.store.usesWebChat) this.showNotice(webChatElsewhereNotice(webChat.site));
     }
     if (change.meta && document.activeElement !== this.titleInput) this.titleInput.value = this.store.title;
     if (change.viewport) {
@@ -3240,6 +3243,17 @@ export class CanvasBoard {
       this.store.setViewport({ ...fit, zoom: Math.min(fit.zoom, 1) });
     }
     this.srStatus.textContent = 'The page is on the canvas. Select text in it to expand it, or ask about it.';
+  }
+
+  /** A web chat canvas just opened: the composer under the newest exchange, or a fresh one. */
+  startWebChat(tailId) {
+    if (tailId && this.store.cards.some((card) => card.id === tailId)) {
+      this.currentId = tailId;
+      this.continueCard(tailId, ['bottom', 'right']);
+    } else {
+      this.newSession();
+    }
+    this.srStatus.textContent = 'The chat is on the canvas. Questions asked here are sent to the chat.';
   }
 
   /** Brings everything into view, for a canvas just opened. */

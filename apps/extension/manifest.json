@@ -37,6 +37,7 @@
         "src/content/selection-bar.js",
         "src/content/rehydrate.js",
         "src/content/page-canvas.js",
+        "src/content/web-chat.js",
         "src/content/init.js",
         "content.js"
       ],

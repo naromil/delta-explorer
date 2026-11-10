@@ -118,6 +118,66 @@ export function buildAutoLoadedMemoryPrompt(autoLoaded) {
   ].join('\n\n');
 }
 
+/* ---- Web chat canvas ---- */
+/* A canvas over a web chat (ChatGPT and the like) asks that chat, which keeps one line of history
+ * and cannot branch. These frame a question sent there, in the user's voice, so the chat can tell
+ * which earlier answer or passage it is about. */
+
+const WEB_CHAT_EXCERPT_LIMIT = 240;
+const WEB_CHAT_OUTSIDE_LIMIT = 4000;
+
+function webChatExcerpt(text, limit = WEB_CHAT_EXCERPT_LIMIT) {
+  const flat = String(text || '').replace(/\s+/g, ' ').trim();
+  return flat.length <= limit ? flat : `${flat.slice(0, limit).trimEnd()}…`;
+}
+
+function webChatBlockquote(text, limit) {
+  const body = String(text || '').trim();
+  const cut = body.length <= limit ? body : `${body.slice(0, limit).trimEnd()}…`;
+  return cut.split('\n').map((line) => `> ${line}`).join('\n');
+}
+
+/** How a question refers to the reply it is about. */
+export function buildWebChatReplyRef(kind, text) {
+  if (kind === 'latest') return 'your last reply';
+  if (kind === 'expansion') return `your earlier answer about “${webChatExcerpt(text, 120)}”`;
+  if (kind === 'outside') return `an answer I got elsewhere to the question “${webChatExcerpt(text)}”`;
+  return `your earlier answer to my question “${webChatExcerpt(text)}”`;
+}
+
+/** A question that starts a new line of thought on the canvas. */
+export function buildWebChatNewTopic(question) {
+  return `A new question, separate from what we have discussed so far:\n\n${question}`;
+}
+
+/** A follow-up to an earlier exchange of the chat rather than its latest. */
+export function buildWebChatBranch(ref, answer, question) {
+  return [
+    `This follows up on ${ref}, not on your latest reply. That answer began: “${webChatExcerpt(answer)}”`,
+    question
+  ].join('\n\n');
+}
+
+/** A follow-up to an answer the chat never saw (written by another model on the canvas). */
+export function buildWebChatOutside(ref, answer, question) {
+  return [
+    `For context, here is ${ref}:`,
+    webChatBlockquote(answer, WEB_CHAT_OUTSIDE_LIMIT),
+    `My follow-up: ${question}`
+  ].join('\n\n');
+}
+
+/** A question about a passage selected in one of the chat's answers. */
+export function buildWebChatExpand(ref, selection, prompt, isTerm) {
+  const question = String(prompt || '').trim();
+  const ask = question
+    ? `My question about it: ${question}`
+    : isTerm
+      ? `What does “${webChatExcerpt(selection, 120)}” mean here? Give just a short definition, without repeating the term or restating its sentence.`
+      : 'What does this passage mean, and why does it matter here? Explain it in plain words rather than defining each word.';
+  return [`In ${ref}, I selected this passage:`, webChatBlockquote(selection, WEB_CHAT_OUTSIDE_LIMIT), ask].join('\n\n');
+}
+
 /* ---- Shared with the desktop app ---- */
 
 export {

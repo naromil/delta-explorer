@@ -26,7 +26,8 @@ script must be referenced from the manifest or a page's HTML to be copied.
 
 ```
 background.js (module)   →  message router, streaming host (Ports), context menu, commands, KB scheduler
-content.js + src/content →  inline page bubbles, injected into all frames (classic scripts, shared scope)
+content.js + src/content →  inline page bubbles, page canvas reader, web chat driver (classic scripts,
+                            shared scope, all frames)
 popup/                   →  toolbar look-up (a ConversationView with role 'lookup')
 dashboard/               →  Home, Chat, Canvas, Knowledge Base, Guide, Settings (hash routes, ES modules)
 canvas/                  →  standalone canvas page: the in-page overlay frame, or a tab
@@ -85,6 +86,11 @@ src/background/
 - **Shortcuts:** `expand` (Ctrl+E), `expand-prompted` (Alt+Shift+E) and `open-canvas` (Alt+Shift+C) are
   commands. `open-canvas`, the page context menu item and the popup's Canvas button send `openPageCanvas`
   to the tab's top frame.
+- **Web chat port:** a canvas over a web chat connects a Port named `delta-web-chat` to the background,
+  which pipes it to the top frame of the canvas's own tab (`src/background/web-chat-relay.js`; only the
+  canvas page may connect). The frame cannot reach the tab's content script by itself. `{ type: 'read' }` answers
+  `{ chat }`; `{ type: 'ask', prompt }` answers `{ accepted }`, `{ text }` snapshots (whole text, not
+  deltas), then `{ done, text, url }` or `{ error, text }`. Disconnecting stops the chat's reply.
 - **Expand shortcuts:** for `expand` and `expand-prompted` the background sends `pageExpandCommand` to
   the active tab (every frame; only the one with a selection acts) and broadcasts `expandShortcut` for
   the dashboard, popup and canvas page, which never see the key themselves.
@@ -123,6 +129,49 @@ src/background/
   `canvas/canvas.html?overlay=1&seed=<token>`. The frame takes the seed, reopens the newest canvas whose
   meta `pageUrl` matches, or starts one with the page card. Embedded without a valid seed it shows nothing.
   It closes by posting `delta-canvas-close` to its parent.
+
+## Web chat canvas
+- On ChatGPT, Claude and Gemini the page canvas mirrors the conversation instead of reading the page:
+  `openPageCanvas` stashes `webChat: { site, name, url, exchanges: [{ question, answer }] }` in the seed,
+  read by `src/content/web-chat.js` (answers converted to markdown by page-canvas.js's converter, which
+  also keeps KaTeX as `$…$` and code languages).
+- The canvas binds `layout.webChat = { site, url, exchanges }` (core `CanvasWebChat`): `exchanges` names
+  the card holding each of the chat's exchanges in order, null where none does. Exchanges become a
+  chain of message cards (`importWebChatExchanges`); reopening the canvas over the same chat
+  (`pageUrl` is the chat's address) imports only what is new.
+- While its tab holds it (`store.webChat`, `src/ui/canvas/web-chat.js`), every question goes to the
+  chat, one at a time in a queue, instead of the user's model. The chat cannot branch, so every
+  question is asked at its end, framed by `src/shared/web-chat-request.js` with the wording in
+  `prompts.js` (`buildWebChat*`): plain when continuing the latest reply, otherwise naming the earlier
+  answer, quoting the selected passage, or carrying an answer the chat never saw. The prompt is built
+  when its turn in the queue comes, so "latest" is right. The question claims its exchange slot once
+  the chat shows it; regenerating a card moves the slot to the new exchange.
+- Anywhere else (a tab, the dashboard) the same canvas asks the user's own model and says so.
+- Site adapters are selector lists in `WEB_CHAT_SITES`. Chat sites change markup without notice: when
+  one breaks, fix its selectors there; every failure reports what it could not find. Typing goes
+  through the site's `fillers` order (`WEB_CHAT_FILLERS`: `execCommand` typing, a synthetic paste,
+  or paragraphs written into the editor plus an input event, which Quill on Gemini needs). The
+  composer is emptied before each try, and nothing is sent until it reads back as exactly the
+  prompt; a failure lists what was tried. Screen-reader-only labels ("You said") are never read.
+
+- **Known limitations (2026-11-09).** None of this has been checked by automation, only by hand, on two sites:
+  - ChatGPT: the message selectors match nothing on its current markup. A console check found
+    0 `[data-message-author-role]` elements, 0 `conversation-turn` test ids, 0 articles, and no
+    `#prompt-textarea` (the composer is a ProseMirror `div` without an id, which the generic fallback finds).
+    So a ChatGPT chat imports no cards, and the question is sent but the canvas never sees it arrive or
+    reads the reply. A new chat also failed with "Could not find ChatGPT's message box", seen before the
+    generic composer fallback existed. The next step is finding the new structure (attribute census of a
+    live conversation, iframes or shadow roots) and rewriting the `chatgpt` adapter.
+  - Gemini: questions reach the chat. The earlier mix-up of typing methods (a question arrived as "r") is
+    fixed by verifying the composer text before sending, but that fix is unverified. One imported card
+    showed "1" as Gemini's reply, unexplained; replies may be read from the wrong element.
+  - Claude: never tried.
+  - Sites that take older turns off the page in long chats would import incompletely and break the
+    count-based parts (exchange slots); suspected, not confirmed.
+  - An edit made on the site that keeps the message count is not noticed; deleting messages there
+    only truncates the slots.
+  - "Finished" means no Stop button and unchanged text for 1.2 s; a selector that matches a Stop button
+    that never goes away keeps a card loading until the 3-minute stall timeout.
 
 ## Markdown and selections
 `src/shared/markdown.js` is a classic script defining `globalThis.DeltaMarkdown` (content script,

@@ -6,6 +6,7 @@
  * Guide, Settings). */
 
 import { handleStreamPort, imageSupportForRole } from './src/background/streams.js';
+import { handleWebChatPort, WEB_CHAT_PORT } from './src/background/web-chat-relay.js';
 import { loadModelConfig, saveModelConfig, loadSettings, saveSettings } from './src/background/config.js';
 import { discoverConnectionModels, getModelCatalog, testConnection } from './src/background/model-catalog.js';
 import {
@@ -57,6 +58,7 @@ pruneExpired().catch(() => {});
 
 browser.runtime.onConnect.addListener((port) => {
   if (port.name === 'delta-stream') handleStreamPort(port, { onMemoryChanged: announceMemoryUpdated });
+  else if (port.name === WEB_CHAT_PORT) handleWebChatPort(port);
 });
 
 /* ---- Context menu (re-registered on every startup) ---- */
@@ -153,6 +155,8 @@ async function transferPageExpansion(message) {
 const CANVAS_SEED_PREFIX = 'deltaCanvasSeed:';
 const CANVAS_SEED_TTL_MS = 5 * 60_000;
 const CANVAS_SEED_TEXT_LIMIT = 21_000;
+const WEB_CHAT_EXCHANGES_MAX = 200;
+const WEB_CHAT_TEXT_LIMIT = 32_000;
 
 /** Asks the tab's top frame to open the canvas over the page; false where no content script runs. */
 async function openPageCanvas(tabId) {
@@ -162,6 +166,20 @@ async function openPageCanvas(tabId) {
   } catch {
     return false;
   }
+}
+
+/** A web chat read by the content script (src/content/web-chat.js), trimmed to what a canvas takes. */
+function soundWebChatSeed(chat) {
+  const exchanges = Array.isArray(chat.exchanges) ? chat.exchanges.slice(-WEB_CHAT_EXCHANGES_MAX) : [];
+  return {
+    site: String(chat.site || '').slice(0, 40),
+    name: String(chat.name || '').slice(0, 40),
+    url: String(chat.url || '').slice(0, 2000),
+    exchanges: exchanges.map((exchange) => ({
+      question: String(exchange?.question || '').slice(0, WEB_CHAT_TEXT_LIMIT),
+      answer: String(exchange?.answer || '').slice(0, WEB_CHAT_TEXT_LIMIT)
+    }))
+  };
 }
 
 async function stashCanvasSeed(message, sender) {
@@ -175,7 +193,8 @@ async function stashCanvasSeed(message, sender) {
       seed: {
         title: String(seed.title || '').slice(0, 300),
         url: String(seed.url || '').slice(0, 2000),
-        text: String(seed.text || '').slice(0, CANVAS_SEED_TEXT_LIMIT)
+        text: String(seed.text || '').slice(0, CANVAS_SEED_TEXT_LIMIT),
+        ...(seed.webChat ? { webChat: soundWebChatSeed(seed.webChat) } : {})
       }
     }
   });

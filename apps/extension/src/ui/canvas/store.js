@@ -6,7 +6,11 @@
  * sends is found by walking a card's session (src/shared/canvas-request.js).
  *
  * Listeners get `{ content, layout, viewport, meta, history, streaming }` flags saying what
- * changed; the board re-renders from `store.doc` and `store.meta`. */
+ * changed; the board re-renders from `store.doc` and `store.meta`.
+ *
+ * A canvas over a web chat (`layout.webChat`) asks that chat through `store.webChat`, a
+ * transport (web-chat.js) set while the chat's tab holds the canvas; anywhere else it asks the
+ * user's own model like any canvas. */
 
 import { openStream, rpc } from '../api.js';
 import {
@@ -35,6 +39,7 @@ import {
   restartExpansion,
   updateExpansion
 } from '../../shared/rich-text.js';
+import { importWebChatExchanges, webChatExpansionPrompt, webChatMessagePrompt } from '../../shared/web-chat-request.js';
 import { bodyCharWidth } from './helpers.js';
 
 const SAVE_DELAY_MS = 300;
@@ -82,6 +87,8 @@ export class CanvasStore {
     this.fitCardIds = new Set();
     this.listeners = new Set();
     this.onSaveError = null;
+    /** The web chat this canvas asks instead of the user's model, while its tab is open. */
+    this.webChat = null;
   }
 
   subscribe(listener) {
@@ -101,6 +108,11 @@ export class CanvasStore {
   get turns() { return this.doc.turns; }
   get canvasId() { return this.meta.id; }
   get title() { return this.meta.title; }
+  /** Whether questions go to the web chat this canvas mirrors. */
+  get usesWebChat() {
+    const chat = this.doc.layout.webChat;
+    return this.webChat !== null && chat !== undefined && chat.site === this.webChat.site && chat.url === this.webChat.url;
+  }
   get undoLabel() { return this.undoStack.at(-1)?.label ?? null; }
   get redoLabel() { return this.redoStack.at(-1)?.label ?? null; }
 
@@ -197,7 +209,11 @@ export class CanvasStore {
 
   /* ---- Requests ---- */
 
-  startRequest(request, messages) {
+  /**
+   * `payload` is the messages for the user's model, or `{ build }` for the web chat, where
+   * `build()` makes the question once the chat is free to take it.
+   */
+  startRequest(request, payload) {
     const key = `r${++this.requestCounter}`;
     const entry = { ...request, stream: null };
     this.requests.set(key, entry);
@@ -217,6 +233,7 @@ export class CanvasStore {
     const handlers = request.kind === 'send'
       ? {
         onDelta: (delta) => { if (live()) editTurn(request.turnId, (turn) => ({ ...turn, content: turn.content + delta })); },
+        onText: (text) => { if (live()) editTurn(request.turnId, (turn) => ({ ...turn, content: text })); },
         onDone: (text) => {
           if (!live()) return;
           if (text.trim() !== '') fitAnswered((card) => card.kind === 'message' && card.turnId === request.turnId);
@@ -239,6 +256,10 @@ export class CanvasStore {
           if (!live()) return;
           this.updateDoc((prev) => ({ ...prev, turns: applyExpansionChunk(prev.turns, request.expansionId, { delta }) }), { content: true });
         },
+        onText: (text) => {
+          if (!live()) return;
+          this.updateDoc((prev) => ({ ...prev, turns: updateExpansion(prev.turns, request.expansionId, { answer: text }) }), { content: true });
+        },
         onDone: (text) => {
           if (!live()) return;
           fitAnswered((card) => card.kind === 'expansion' && card.expansionId === request.expansionId);
@@ -258,7 +279,20 @@ export class CanvasStore {
           settle();
         }
       };
-    entry.stream = openStream({ kind: 'chat', role: 'chat', messages }, handlers);
+    if (Array.isArray(payload)) {
+      entry.stream = openStream({ kind: 'chat', role: 'chat', messages: payload }, handlers);
+    } else {
+      const onDone = handlers.onDone;
+      entry.stream = this.webChat.ask(payload.build, {
+        ...handlers,
+        // The question is in the chat now, whatever becomes of this card.
+        onAccepted: () => this.claimWebChatExchange(live() ? request.cardId : null),
+        onDone: (text, info) => {
+          if (live() && info?.url) this.noteWebChatUrl(info.url);
+          onDone(text);
+        }
+      });
+    }
     this.emit({ streaming: true });
   }
 
@@ -274,11 +308,31 @@ export class CanvasStore {
 
   sendCard(card) {
     if (card.kind !== 'message') return;
+    const request = { kind: 'send', turnId: card.turnId, cardId: card.id };
+    if (this.usesWebChat) {
+      this.startRequest(request, {
+        build: () => {
+          const { turns, layout } = this.doc;
+          const current = layout.cards.find((item) => item.id === card.id);
+          if (!current || !layout.webChat) return null;
+          return webChatMessagePrompt(layout.cards, layout.links, turns, layout.webChat, current, bodyCharWidth());
+        }
+      });
+      return;
+    }
     const { turns, layout } = this.doc;
-    this.startRequest({ kind: 'send', turnId: card.turnId }, messageCardRequest(layout.cards, layout.links, turns, card, bodyCharWidth()));
+    this.startRequest(request, messageCardRequest(layout.cards, layout.links, turns, card, bodyCharWidth()));
   }
 
-  expansionMessages(turn, target, prompt, rect, caption) {
+  /** What an expansion request sends (see `startRequest`); null when it cannot be asked. */
+  expansionPayload(turn, target, prompt, rect, caption) {
+    const build = () => {
+      const { turns, layout } = this.doc;
+      const current = turns.find((item) => item.id === turn.id);
+      if (!current || !layout.webChat) return null;
+      return webChatExpansionPrompt(layout.cards, layout.links, turns, layout.webChat, current, target, prompt, rect, caption, bodyCharWidth());
+    };
+    if (this.usesWebChat) return build() ? { build } : null;
     const { turns, layout } = this.doc;
     return expansionCardRequest(layout.cards, layout.links, turns, turn, target, prompt, rect, caption, bodyCharWidth());
   }
@@ -293,15 +347,15 @@ export class CanvasStore {
     const expansionId = this.expansionCounter;
     const insertion = insertExpansionInTurns(this.doc.turns, turnId, target, expansionId, prompt);
     if (!insertion.ok) return { ok: false, reason: insertion.reason };
-    const messages = this.expansionMessages(turn, target, prompt, placement.rect, input.selection);
-    if (!messages) return { ok: false, reason: 'turn-not-found' };
+    const payload = this.expansionPayload(turn, target, prompt, placement.rect, input.selection);
+    if (!payload) return { ok: false, reason: 'turn-not-found' };
     this.expansionCounter += 1;
     const card = { kind: 'expansion', id: newId(), rect: placement.rect, turnId, expansionId, hostId: placement.hostId };
     this.updateDoc((prev) => ({
       turns: insertion.turns,
       layout: { ...prev.layout, cards: [...prev.layout.cards, card] }
     }), { layout: true, content: true });
-    this.startRequest({ kind: 'expand', expansionId }, messages);
+    this.startRequest({ kind: 'expand', expansionId, cardId: card.id }, payload);
     this.requestSave(true);
     return { ok: true, id: card.id };
   }
@@ -455,12 +509,12 @@ export class CanvasStore {
         end: location.node.end,
         ...(location.parent ? { parentExpansionId: location.parent.id } : {})
       };
-      const messages = this.expansionMessages(location.turn, target, location.node.prompt, card.rect, location.node.originalText);
-      if (!messages) return;
+      const payload = this.expansionPayload(location.turn, target, location.node.prompt, card.rect, location.node.originalText);
+      if (!payload) return;
       this.removeCards(dependents);
       this.cancelRequests((request) => requestBelongsTo(request, card));
       this.updateDoc((prev) => ({ ...prev, turns: restartExpansion(prev.turns, card.expansionId) }), { content: true });
-      this.startRequest({ kind: 'expand', expansionId: card.expansionId }, messages);
+      this.startRequest({ kind: 'expand', expansionId: card.expansionId, cardId: card.id }, payload);
     }
     this.requestSave(true);
   }
@@ -475,6 +529,55 @@ export class CanvasStore {
         : prev.turns.map((turn) => (turn.id === card.userTurnId ? { ...turn, content: question } : turn))
     }), { content: true });
     this.regenerateCard(id);
+  }
+
+  /* ---- Web chat ---- */
+
+  /** The chat took a question for `cardId` (null when its card is gone): it now holds that exchange. */
+  claimWebChatExchange(cardId) {
+    const chat = this.doc.layout.webChat;
+    if (!chat) return;
+    const exchanges = [...chat.exchanges.map((id) => (id !== null && id === cardId ? null : id)), cardId];
+    this.doc = { ...this.doc, layout: { ...this.doc.layout, webChat: { ...chat, exchanges } } };
+    this.requestSave(false);
+  }
+
+  /** A new chat gets its own address once it is first asked. */
+  noteWebChatUrl(url) {
+    const chat = this.doc.layout.webChat;
+    if (!chat || typeof url !== 'string' || !url || url === chat.url) return;
+    if (this.webChat?.url === chat.url) this.webChat.url = url;
+    this.doc = { ...this.doc, layout: { ...this.doc.layout, webChat: { ...chat, url } } };
+    this.requestSave(false);
+  }
+
+  /**
+   * Brings the canvas up to date with the web chat `chat` (`{ site, url, exchanges }` as the
+   * content script read it): binds it, and adds what was said there since as cards. Returns how
+   * many exchanges were added, or -1 when the chat has fewer than the canvas knew of (edited or
+   * deleted there), in which case later ones are matched from where it stands now.
+   */
+  syncWebChat(chat) {
+    const known = this.doc.layout.webChat;
+    const bound = known && known.site === chat.site
+      ? { ...known, url: chat.url }
+      : { site: chat.site, url: chat.url, exchanges: [] };
+    const shrunk = chat.exchanges.length < bound.exchanges.length;
+    if (shrunk) bound.exchanges = bound.exchanges.slice(0, chat.exchanges.length);
+    const added = importWebChatExchanges(this.doc.layout.cards, bound, chat.exchanges, {
+      newId,
+      newTurnId: () => nextTurnId++
+    });
+    if (this.meta.title === UNTITLED && added.turns.length > 0) {
+      this.meta = { ...this.meta, title: buildConversationTitle(added.turns[0].content) };
+    }
+    for (const card of added.cards) this.fitCardIds.add(card.id);
+    this.updateDoc((prev) => ({
+      turns: [...prev.turns, ...added.turns],
+      layout: { ...prev.layout, cards: [...prev.layout.cards, ...added.cards], webChat: { ...bound, exchanges: added.exchanges } }
+    }), { layout: true, content: true, meta: true });
+    if (added.cards.length > 0) this.requestSave(true);
+    return shrunk ? -1 : added.cards.length;
   }
 
   /* ---- Layout ---- */
