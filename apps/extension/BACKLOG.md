@@ -12,3 +12,12 @@
   and there is no layout to judge what is hidden, so the result is weaker than reading a live tab.
   Decide between fetching, opening the page in a background tab and reading it through the content
   script, or offering both (e.g. a plain click opens a tab, a modifier or menu item adds a card).
+
+- [ ] A way to debug the web chat canvas against the real sites (see "Known limitations" in
+  `AGENTS.md`): every fix so far was guessed from error text, because nothing here can drive Firefox
+  on a signed-in chat. Options: drive Firefox with a signed-in profile (Playwright's Firefox or
+  `web-ext run` plus Marionette); save DOM snapshots of each site (a conversation, a new chat, mid-reply)
+  as fixtures and test the adapters in `src/content/web-chat.js` against them offline; or a debug
+  command that dumps what each adapter selector matches on the open tab. Snapshots also catch a site's
+  next markup change.
+

@@ -16,7 +16,8 @@ import type {
   CanvasLinkContext,
   CanvasMessageCard,
   CanvasRect,
-  CanvasViewport
+  CanvasViewport,
+  CanvasWebChat
 } from '@delta/core/canvas'
 import {
   DEFAULT_PAGE_SIZE,
@@ -54,7 +55,7 @@ import { generateRequestId } from '../lib/request-id'
 import type { ExpandOutcome } from '../conversation/expand-outcome'
 import { bodyCharWidth } from '../lib/char-width'
 import { useUiHost } from '../host'
-import type { ExportResult } from '../host'
+import type { ExportResult, StreamListener } from '../host'
 
 const SAVE_DELAY_MS = 300
 const UNTITLED = 'Untitled canvas'
@@ -99,7 +100,68 @@ export interface CanvasExpandPlacement {
   rect: CanvasRect
 }
 
+/** A question for a `CanvasAsker`, which builds what it sends from the canvas when it is free. */
+export type CanvasAskRequest =
+  | { kind: 'send'; cardId: string }
+  | {
+      kind: 'expand'
+      cardId: string
+      turnId: number
+      target: ExpansionTarget
+      prompt: string | undefined
+      rect: CanvasRect
+      caption: string
+    }
+
+/** How an asker reports back; anything after the request was dropped is ignored. */
+export interface CanvasAskEvents {
+  /** Whether the canvas still waits for this answer. */
+  live: () => boolean
+  /** The whole answer so far. */
+  text: (full: string) => void
+  done: (text: string, cancelled: boolean) => void
+  error: (message: string, partial: string) => void
+}
+
+/**
+ * Another assistant that answers a canvas instead of the host's model, such as the web chat
+ * the extension's canvas mirrors. `handles` decides per canvas; `ask` returns a stop handle,
+ * and a stopped question still ends with `done(partial, true)` or `error`.
+ */
+export interface CanvasAsker {
+  handles: (layout: CanvasLayout) => boolean
+  ask: (
+    request: CanvasAskRequest,
+    read: () => CanvasDocView,
+    events: CanvasAskEvents
+  ) => { stop: () => void }
+}
+
+export interface CanvasDocView {
+  turns: Turn[]
+  layout: CanvasLayout
+}
+
+export interface CanvasImport {
+  turns: Turn[]
+  cards: CanvasCard[]
+  webChat?: CanvasWebChat
+}
+
+/** What the board does once a canvas opens: fit everything, say something, open the composer. */
+export interface CanvasOpening {
+  fit?: boolean
+  notice?: string
+  /** Continue this card, or start a new session for null; undefined opens no composer. */
+  continueId?: string | null
+}
+
 let nextTurnId = Date.now()
+
+/** A turn id no other turn in this window holds, for turns made outside the hook. */
+export function allocateTurnId(): number {
+  return nextTurnId++
+}
 
 const emptyDoc = (): CanvasDoc => ({
   turns: [],
@@ -129,7 +191,7 @@ function requestBelongsTo(request: PendingRequest, card: CanvasCard): boolean {
     : request.kind === 'expand' && request.expansionId === card.expansionId
 }
 
-export function useCanvas(): {
+export function useCanvas(asker?: CanvasAsker | null): {
   loaded: boolean
   /** Every conversation, of every type, newest first. */
   sessions: ConversationMeta[]
@@ -151,12 +213,25 @@ export function useCanvas(): {
   fitCardIds: ReadonlySet<string>
   /** The page `startFromPage` just put down, until the board has opened a question beside it. */
   startedPageId: string | null
+  /** What `beginAt` asked of the board, until the board has done it. */
+  opening: CanvasOpening | null
+  /** The web chat this canvas mirrors, if any (the extension's). */
+  webChat: CanvasWebChat | undefined
   ensureLoaded: () => void
   refreshSessions: () => Promise<ConversationMeta[]>
   newCanvas: () => void
   /** A fresh canvas holding a web page; the board then opens a question beside it. */
   startFromPage: (page: CanvasPageInput) => void
   clearStartedPage: () => void
+  beginAt: (opening: CanvasOpening) => void
+  clearOpening: () => void
+  /** Rebinds the mirrored web chat; a layout change only. */
+  setWebChat: (change: (prev: CanvasWebChat | undefined) => CanvasWebChat | undefined) => void
+  /**
+   * Adds answered cards made elsewhere (a mirrored chat's exchanges), built from the canvas as
+   * it stands and fitted once on screen; a `webChat` given replaces the binding.
+   */
+  addImported: (build: (current: CanvasDocView) => CanvasImport) => CanvasImport
   /** Resolves false when there is no such canvas, which leaves the open one as it was. */
   openCanvas: (id: string) => Promise<boolean>
   /** Writes pending changes now, before something else reads the stored record. */
@@ -217,11 +292,17 @@ export function useCanvas(): {
   const [streamingTurnIds, setStreamingTurnIds] = useState<ReadonlySet<number>>(new Set())
   const [fitCardIds, setFitCardIds] = useState<ReadonlySet<string>>(new Set())
   const [startedPageId, setStartedPageId] = useState<string | null>(null)
+  const [opening, setOpening] = useState<CanvasOpening | null>(null)
 
   // Requests start from event handlers and must see the newest state at once.
   const docRef = useRef(doc)
   const metaRef = useRef(meta)
   const requestsRef = useRef(new Map<string, PendingRequest>())
+  const askerRef = useRef(asker ?? null)
+  /** Stop handles of the requests an asker took instead of the host. */
+  const askerStopsRef = useRef(new Map<string, () => void>())
+  /** The stream listener, which an asker's events go through as the host's do. */
+  const listenerRef = useRef<StreamListener | null>(null)
   const expansionCounterRef = useRef(1)
   const saveTimerRef = useRef<number | null>(null)
   const loadStartedRef = useRef(false)
@@ -360,36 +441,110 @@ export function useCanvas(): {
     setStreamingTurnIds(ids)
   }, [])
 
+  const cancelStream = useCallback(
+    (requestId: string): void => {
+      const stop = askerStopsRef.current.get(requestId)
+      if (stop) stop()
+      else host.cancel(requestId)
+    },
+    [host]
+  )
+
   const cancelRequests = useCallback(
     (matches: (request: PendingRequest) => boolean): void => {
       for (const [requestId, request] of [...requestsRef.current]) {
         if (!matches(request)) continue
         // Forgotten first, so a late chunk cannot land on what is being removed.
         requestsRef.current.delete(requestId)
-        host.cancel(requestId)
+        cancelStream(requestId)
+        askerStopsRef.current.delete(requestId)
       }
       syncStreaming()
     },
-    [host, syncStreaming]
+    [cancelStream, syncStreaming]
+  )
+
+  /** Whether this canvas's questions go to the asker rather than the host. */
+  const asksElsewhere = useCallback((): boolean => {
+    const current = askerRef.current
+    return current !== null && current.handles(docRef.current.layout)
+  }, [])
+
+  /** Hands a request to the asker; its events reach the canvas as the host's would. */
+  const askElsewhere = useCallback(
+    (requestId: string, request: CanvasAskRequest): void => {
+      const current = askerRef.current
+      if (!current) return
+      const send = request.kind === 'send'
+      const listener = (): StreamListener | null => listenerRef.current
+      const handle = current.ask(request, () => docRef.current, {
+        live: () => requestsRef.current.has(requestId),
+        text: (full) => {
+          const pending = requestsRef.current.get(requestId)
+          if (!pending) return
+          if (pending.kind === 'send') {
+            updateDoc((prev) => ({
+              ...prev,
+              turns: prev.turns.map((turn) =>
+                turn.id === pending.turnId ? { ...turn, content: full } : turn
+              )
+            }))
+          } else {
+            listener()?.expandChunk({ requestId, text: full })
+          }
+        },
+        done: (text, cancelled) => {
+          if (send) listener()?.response({ requestId, text, cancelled })
+          else listener()?.expandChunk({ requestId, text, done: true, cancelled })
+        },
+        error: (message, partial) => {
+          if (send) listener()?.error({ requestId, error: message })
+          else listener()?.expandChunk({ requestId, error: message, text: partial })
+        }
+      })
+      // An asker may settle at once; only a request still waiting keeps its handle.
+      if (requestsRef.current.has(requestId)) askerStopsRef.current.set(requestId, handle.stop)
+    },
+    [updateDoc]
   )
 
   const startSend = useCallback(
-    (card: CanvasMessageCard, messages: ProviderMessage[]): void => {
+    (card: CanvasMessageCard, messages: ProviderMessage[] | null): void => {
       const requestId = generateRequestId()
       requestsRef.current.set(requestId, { kind: 'send', turnId: card.turnId })
       syncStreaming()
-      host.send({ messages, requestId, role: 'chat' })
+      if (messages) host.send({ messages, requestId, role: 'chat' })
+      else askElsewhere(requestId, { kind: 'send', cardId: card.id })
     },
-    [host, syncStreaming]
+    [askElsewhere, host, syncStreaming]
   )
 
   const sendCard = useCallback(
     (card: CanvasCard): void => {
       if (card.kind !== 'message') return
+      if (asksElsewhere()) {
+        startSend(card, null)
+        return
+      }
       const { turns, layout } = docRef.current
       startSend(card, messageCardRequest(layout.cards, layout.links, turns, card, bodyCharWidth()))
     },
-    [startSend]
+    [asksElsewhere, startSend]
+  )
+
+  /** An expansion's request, to the asker or the host. */
+  const startExpand = useCallback(
+    (
+      expansionId: number,
+      messages: ProviderMessage[] | null,
+      asked: Extract<CanvasAskRequest, { kind: 'expand' }>
+    ): void => {
+      const requestId = generateRequestId()
+      requestsRef.current.set(requestId, { kind: 'expand', expansionId })
+      if (messages) host.expand({ messages, requestId, role: 'chat' })
+      else askElsewhere(requestId, asked)
+    },
+    [askElsewhere, host]
   )
 
   const expansionMessages = useCallback(
@@ -438,10 +593,14 @@ export function useCanvas(): {
         prompt
       )
       if (!insertion.ok) return { ok: false, reason: insertion.reason }
-      const messages = expansionMessages(turn, target, prompt, placement.rect, input.selection)
-      if (!messages) return { ok: false, reason: 'turn-not-found' }
+      const elsewhere = asksElsewhere()
+      const messages = elsewhere
+        ? null
+        : expansionMessages(turn, target, prompt, placement.rect, input.selection)
+      if (!elsewhere && !messages) return { ok: false, reason: 'turn-not-found' }
 
       expansionCounterRef.current += 1
+      const cardId = crypto.randomUUID()
       updateDoc((prev) => ({
         turns: insertion.turns,
         layout: {
@@ -450,7 +609,7 @@ export function useCanvas(): {
             ...prev.layout.cards,
             {
               kind: 'expansion',
-              id: crypto.randomUUID(),
+              id: cardId,
               rect: placement.rect,
               turnId,
               expansionId,
@@ -459,13 +618,19 @@ export function useCanvas(): {
           ]
         }
       }))
-      const requestId = generateRequestId()
-      requestsRef.current.set(requestId, { kind: 'expand', expansionId })
-      host.expand({ messages, requestId, role: 'chat' })
+      startExpand(expansionId, messages, {
+        kind: 'expand',
+        cardId,
+        turnId,
+        target,
+        prompt,
+        rect: placement.rect,
+        caption: input.selection
+      })
       requestSave(true)
       return { ok: true }
     },
-    [expansionMessages, host, requestSave, updateDoc]
+    [asksElsewhere, expansionMessages, requestSave, startExpand, updateDoc]
   )
 
   const ask = useCallback(
@@ -555,11 +720,11 @@ export function useCanvas(): {
       const card = docRef.current.layout.cards.find((item) => item.id === id)
       if (!card) return
       // Stays in the book: main answers with the partial text, which settles it.
-      for (const [requestId, request] of requestsRef.current) {
-        if (requestBelongsTo(request, card)) host.cancel(requestId)
+      for (const [requestId, request] of [...requestsRef.current]) {
+        if (requestBelongsTo(request, card)) cancelStream(requestId)
       }
     },
-    [host]
+    [cancelStream]
   )
 
   const removeCards = useCallback(
@@ -668,24 +833,42 @@ export function useCanvas(): {
           end: location.node.end,
           ...(location.parent ? { parentExpansionId: location.parent.id } : {})
         }
-        const messages = expansionMessages(
-          location.turn,
-          target,
-          location.node.prompt,
-          card.rect,
-          location.node.originalText
-        )
-        if (!messages) return
+        const elsewhere = asksElsewhere()
+        const messages = elsewhere
+          ? null
+          : expansionMessages(
+              location.turn,
+              target,
+              location.node.prompt,
+              card.rect,
+              location.node.originalText
+            )
+        if (!elsewhere && !messages) return
         removeCards(dependents)
         cancelRequests((request) => requestBelongsTo(request, card))
         updateDoc((prev) => ({ ...prev, turns: restartExpansion(prev.turns, card.expansionId) }))
-        const requestId = generateRequestId()
-        requestsRef.current.set(requestId, { kind: 'expand', expansionId: card.expansionId })
-        host.expand({ messages, requestId, role: 'chat' })
+        startExpand(card.expansionId, messages, {
+          kind: 'expand',
+          cardId: card.id,
+          turnId: location.turn.id,
+          target,
+          prompt: location.node.prompt,
+          rect: card.rect,
+          caption: location.node.originalText
+        })
       }
       requestSave(true)
     },
-    [cancelRequests, expansionMessages, host, removeCards, requestSave, sendCard, updateDoc]
+    [
+      asksElsewhere,
+      cancelRequests,
+      expansionMessages,
+      removeCards,
+      requestSave,
+      sendCard,
+      startExpand,
+      updateDoc
+    ]
   )
 
   const editCard = useCallback(
@@ -991,9 +1174,56 @@ export function useCanvas(): {
   )
 
   const newCanvas = useCallback((): void => {
+    // Counts as loaded: the newest canvas must not be opened over it.
+    loadStartedRef.current = true
     replaceDoc(emptyDoc(), newMeta())
+    setLoaded(true)
     void refreshSessions()
   }, [refreshSessions, replaceDoc])
+
+  const beginAt = useCallback((next: CanvasOpening): void => setOpening(next), [])
+  const clearOpening = useCallback((): void => setOpening(null), [])
+
+  const setWebChat = useCallback(
+    (change: (prev: CanvasWebChat | undefined) => CanvasWebChat | undefined): void => {
+      updateDoc((prev) => {
+        const webChat = change(prev.layout.webChat)
+        const rest = withoutField(prev.layout, 'webChat')
+        return { ...prev, layout: webChat ? { ...rest, webChat } : rest }
+      })
+      requestSave(false)
+    },
+    [requestSave, updateDoc]
+  )
+
+  const addImported = useCallback(
+    (build: (current: CanvasDocView) => CanvasImport): CanvasImport => {
+      const imported = build(docRef.current)
+      const { turns, cards, webChat } = imported
+      const firstQuestion = turns.find((turn) => turn.role === 'user')
+      if (metaRef.current.title === UNTITLED && firstQuestion) {
+        updateMeta({ title: buildConversationTitle(firstQuestion.content) })
+      }
+      updateDoc((prev) => ({
+        turns: [...prev.turns, ...turns],
+        layout: {
+          ...prev.layout,
+          cards: [...prev.layout.cards, ...cards],
+          ...(webChat ? { webChat } : {})
+        }
+      }))
+      if (cards.length > 0) {
+        setFitCardIds((prev) => {
+          const next = new Set(prev)
+          for (const card of cards) next.add(card.id)
+          return next
+        })
+      }
+      requestSave(cards.length > 0)
+      return imported
+    },
+    [requestSave, updateDoc, updateMeta]
+  )
 
   const startFromPage = useCallback(
     (page: CanvasPageInput): void => {
@@ -1069,8 +1299,13 @@ export function useCanvas(): {
   /* ---- Streaming ---- */
 
   useEffect(() => {
+    askerRef.current = asker ?? null
+  }, [asker])
+
+  useEffect(() => {
     const settle = (requestId: string): void => {
       requestsRef.current.delete(requestId)
+      askerStopsRef.current.delete(requestId)
       syncStreaming()
       requestSave(true)
     }
@@ -1085,7 +1320,7 @@ export function useCanvas(): {
       }))
     }
 
-    return host.subscribe({
+    const listener: StreamListener = {
       chunk: ({ requestId, delta }) => {
         const request = requestsRef.current.get(requestId)
         if (request?.kind !== 'send') return
@@ -1127,7 +1362,13 @@ export function useCanvas(): {
           )
         }
       }
-    })
+    }
+    listenerRef.current = listener
+    const unsubscribe = host.subscribe(listener)
+    return () => {
+      unsubscribe()
+      listenerRef.current = null
+    }
   }, [host, requestFit, requestSave, syncStreaming, updateDoc])
 
   return {
@@ -1146,11 +1387,17 @@ export function useCanvas(): {
     streamingTurnIds,
     fitCardIds,
     startedPageId,
+    opening,
+    webChat: doc.layout.webChat,
     ensureLoaded,
     refreshSessions,
     newCanvas,
     startFromPage,
     clearStartedPage,
+    beginAt,
+    clearOpening,
+    setWebChat,
+    addImported,
     openCanvas,
     flushSave,
     deleteCanvas,

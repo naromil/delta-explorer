@@ -92,6 +92,20 @@ describe('page cards', () => {
     expect(broken.cards).toEqual([])
   })
 
+  it('keep the web chat a canvas mirrors, forgetting cards that are gone', () => {
+    const webChat = {
+      site: 'chatgpt',
+      url: 'https://chatgpt.com/c/1',
+      exchanges: ['q', 'gone', null]
+    }
+    const kept = normalizeCanvasLayout({ cards, webChat }, turns)
+    expect(kept.webChat).toEqual({ ...webChat, exchanges: ['q', null, null] })
+    expect(
+      normalizeCanvasLayout({ cards, webChat: { site: 'chatgpt' } }, turns).webChat
+    ).toBeUndefined()
+    expect('webChat' in normalizeCanvasLayout({ cards }, turns)).toBe(false)
+  })
+
   it('stay single when a selection is duplicated', () => {
     let next = 100
     const result = duplicateSelection(

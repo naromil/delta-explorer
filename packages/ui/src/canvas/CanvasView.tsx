@@ -1682,6 +1682,28 @@ function CanvasBoard({
     openDraft({ rect, sessions: [] })
   }, [openDraft, surfaceSize])
 
+  /* What the app asked for as this canvas opened (`beginAt`), such as the extension's web chat
+     canvas: everything in view, a notice, and the composer under the newest exchange. */
+  const { opening, clearOpening } = canvas
+  useEffect(() => {
+    if (opening === null) return
+    clearOpening()
+    if (opening.fit) {
+      zoomToRects([
+        ...cardsRef.current.map((card) => card.rect),
+        ...framesRef.current.map((frame) => frame.rect)
+      ])
+    }
+    if (opening.notice) showNotice(opening.notice)
+    if (opening.continueId === undefined) return
+    const tail = opening.continueId
+    if (tail !== null && cardsRef.current.some((card) => card.id === tail)) {
+      continueCard(tail, ['bottom', 'right'])
+    } else {
+      newSession()
+    }
+  }, [clearOpening, continueCard, newSession, opening, showNotice, zoomToRects])
+
   const pasteAsNote = useCallback(
     (text: string): void => {
       const point = lastPointerRef.current

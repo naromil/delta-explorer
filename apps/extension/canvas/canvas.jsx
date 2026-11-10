@@ -4,18 +4,22 @@
  *                     (the page's title, address and text, stashed under a single-use token bound
  *                     to its tab) reopens the newest canvas made on that page, or starts one with
  *                     the page as its first card. Esc closes it by posting `delta-canvas-close`.
+ *                     On a web chat (ChatGPT, Claude, Gemini) the seed is the chat's exchanges
+ *                     instead: the canvas mirrors the chat as a line of cards and asks that chat,
+ *                     through the tab, whatever is asked on it (src/ui/canvas/web-chat.js).
  *   In the dashboard  `?embed=dashboard`, the Canvas route's iframe. The dashboard routes with
  *                     `delta-canvas-open`; the frame asks it for search, chats and the address.
  *   In a tab          `?id=<id>` shows one canvas, no parameter the newest.
  *
  * The dashboard holds it in a frame because its chat still styles the same class names its own way. */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CanvasView, useCanvas } from '@delta/ui/canvas';
 import { UiHostProvider } from '@delta/ui/host';
 import { onBroadcast, rpc } from '../src/ui/api.js';
 import { applyTheme } from '../src/ui/dom.js';
+import { createWebChatAsker, createWebChatTransport, syncWebChat, webChatElsewhereNotice } from '../src/ui/canvas/web-chat.js';
 import { createExtensionHost } from '../src/ui/ui-host.js';
 
 const params = new URLSearchParams(location.search);
@@ -60,16 +64,52 @@ function Message({ title, text }) {
   );
 }
 
-function CanvasApp({ seed }) {
-  const canvas = useCanvas();
+function CanvasApp({ seed, transport }) {
+  // The asker needs the canvas's setter, and the canvas needs the asker.
+  const setWebChatRef = useRef(null);
+  const [asker] = useState(() => (transport
+    ? createWebChatAsker(transport, (change) => setWebChatRef.current?.(change))
+    : null));
+  const canvas = useCanvas(asker);
+  useEffect(() => {
+    setWebChatRef.current = canvas.setWebChat;
+  }, [canvas.setWebChat]);
   const [ready, setReady] = useState(false);
-  const { openCanvas, newCanvas, startFromPage, canvasId, cards, streamingTurnIds } = canvas;
+  const { openCanvas, newCanvas, startFromPage, beginAt, canvasId, cards, streamingTurnIds, webChat } = canvas;
+
+  /** Opens this chat's canvas, or starts one, and brings it up to date with the chat. */
+  async function startFromWebChat(chat) {
+    // A chat with nothing in it yet has no address of its own, so it shares no canvas.
+    const previous = chat.exchanges.length > 0 ? await canvasForPage(chat.url) : null;
+    if (previous && (await openCanvas(previous.id))) {
+      const { added, tailId } = syncWebChat(canvas, chat);
+      const notice = added === -1
+        ? `${transport.siteName} has fewer messages than this canvas remembers, so new ones are matched from where it stands now.`
+        : added > 0
+          ? `Your canvas for this chat, with ${added} new message${added === 1 ? '' : 's'} from ${transport.siteName}.`
+          : 'Your canvas for this chat. The history menu starts a new one.';
+      beginAt({ fit: true, notice, continueId: tailId });
+    } else {
+      newCanvas();
+      beginAt({ fit: true, continueId: syncWebChat(canvas, chat).tailId });
+    }
+  }
+
+  /** A fresh canvas holding the chat as it stands now. */
+  async function restartFromWebChat() {
+    const chat = (await transport.read()) || seed.webChat;
+    transport.url = chat.url;
+    newCanvas();
+    beginAt({ fit: true, continueId: syncWebChat(canvas, chat).tailId });
+  }
 
   // Decided before the view mounts, or the view would open the newest canvas over it.
   useEffect(() => {
     let live = true;
     (async () => {
-      if (seed) {
+      if (seed?.webChat) {
+        await startFromWebChat(seed.webChat);
+      } else if (seed) {
         const previous = await canvasForPage(seed.url);
         if (!(previous && (await openCanvas(previous.id)))) startFromPage(seed);
       } else if (params.get('id')) {
@@ -82,6 +122,13 @@ function CanvasApp({ seed }) {
     };
     // Once, on load: not StrictMode, which would run this twice and start two canvases.
   }, []);
+
+  // A canvas mirroring a web chat, open where that chat cannot be asked, says who answers here.
+  const mirrorsElsewhere = webChat !== undefined && !(asker && asker.handles({ webChat }));
+  useEffect(() => {
+    if (ready && mirrorsElsewhere) beginAt({ notice: webChatElsewhereNotice(webChat.site) });
+    // Once per canvas opened.
+  }, [ready, canvasId, mirrorsElsewhere]);
 
   // The dashboard routes here: `arg` is '', 'new' or a canvas id.
   useEffect(() => {
@@ -138,7 +185,11 @@ function CanvasApp({ seed }) {
     <CanvasView
       canvas={canvas}
       onOpenSearch={mode === 'dashboard' ? () => toParent({ type: 'delta-open-search' }) : undefined}
-      historyExtras={seed ? [{
+      historyExtras={seed ? [seed.webChat ? {
+        label: 'New canvas from this chat',
+        detail: seed.title || seed.url,
+        onSelect: () => void restartFromWebChat()
+      } : {
         label: 'New canvas from this page',
         detail: seed.title || seed.url,
         onSelect: () => startFromPage(seed)
@@ -193,9 +244,10 @@ async function start() {
     }
   }
   if (mode === 'dashboard') forwardDashboardKeys();
+  const transport = seed?.webChat ? createWebChatTransport(seed.webChat) : null;
   root.render(
     <UiHostProvider host={host}>
-      <CanvasApp seed={seed} />
+      <CanvasApp seed={seed} transport={transport} />
     </UiHostProvider>
   );
 }

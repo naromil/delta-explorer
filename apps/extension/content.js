@@ -9,4 +9,7 @@
   if (typeof initContentScript === 'function') {
     initContentScript();
   }
+  if (typeof initWebChat === 'function') {
+    initWebChat();
+  }
 })();

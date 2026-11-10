@@ -115,6 +115,18 @@ export interface CanvasLink {
   context?: CanvasLinkContext
 }
 
+/**
+ * The web chat (ChatGPT and the like) a canvas mirrors, which the extension asks instead of the
+ * user's own model while the chat's tab is open. The chat is one line, so `exchanges` names the
+ * card holding each of its question/answer pairs in the chat's order: null where none does (a
+ * deleted card, or a card asked again since).
+ */
+export interface CanvasWebChat {
+  site: string
+  url: string
+  exchanges: Array<string | null>
+}
+
 export interface CanvasLayout {
   cards: CanvasCard[]
   viewport: CanvasViewport
@@ -122,6 +134,7 @@ export interface CanvasLayout {
   links: CanvasLink[]
   /** Standing cards brought forward, lowest first. Any card not named here is above them. */
   stack: string[]
+  webChat?: CanvasWebChat
 }
 
 export type CanvasSide = 'right' | 'bottom' | 'left' | 'top'
@@ -1488,6 +1501,17 @@ function soundStack(raw: unknown, ids: ReadonlySet<string>): string[] {
   return [...new Set(raw)].filter((id): id is string => ids.has(id as string))
 }
 
+function soundWebChat(raw: unknown, ids: ReadonlySet<string>): CanvasWebChat | undefined {
+  const value = raw as Partial<CanvasWebChat> | null | undefined
+  if (typeof value?.site !== 'string' || typeof value.url !== 'string') return undefined
+  const exchanges = Array.isArray(value.exchanges) ? value.exchanges : []
+  return {
+    site: value.site,
+    url: value.url,
+    exchanges: exchanges.map((id) => (typeof id === 'string' && ids.has(id) ? id : null))
+  }
+}
+
 /** A stored layout is never trusted: a card that lost its turn or host is left out. */
 export function normalizeCanvasLayout(raw: unknown, turns: Turn[]): CanvasLayout {
   const value = (typeof raw === 'object' && raw !== null ? raw : {}) as Partial<CanvasLayout>
@@ -1498,6 +1522,7 @@ export function normalizeCanvasLayout(raw: unknown, turns: Turn[]): CanvasLayout
   const viewport = value.viewport
   const viewportOk =
     Number.isFinite(viewport?.x) && Number.isFinite(viewport?.y) && Number.isFinite(viewport?.zoom)
+  const webChat = soundWebChat(value.webChat, ids)
   return {
     cards: cards.map((card) => soundCard(card, ids)),
     frames: soundFrames(value.frames),
@@ -1509,6 +1534,7 @@ export function normalizeCanvasLayout(raw: unknown, turns: Turn[]): CanvasLayout
           y: viewport!.y,
           zoom: Math.min(Math.max(viewport!.zoom, MIN_ZOOM), MAX_ZOOM)
         }
-      : DEFAULT_VIEWPORT
+      : DEFAULT_VIEWPORT,
+    ...(webChat ? { webChat } : {})
   }
 }
