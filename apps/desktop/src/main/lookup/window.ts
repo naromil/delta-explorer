@@ -5,6 +5,7 @@ import { clamp, type LookupSession } from './state'
 import { handlePasteText, handlePasteImage } from './handlers'
 import { ocrImageBuffer } from './capture'
 import { guardWindowNavigation } from '../window-guards'
+import { installEditMenu } from '../edit-menu'
 
 /* ---- Constants ---- */
 export const LOOKUP_WINDOW_WIDTH = 420
@@ -62,6 +63,7 @@ export function createLookupSession(cursorX: number, cursorY: number): LookupSes
     }
   })
   guardWindowNavigation(window)
+  installEditMenu(window)
 
   const session: LookupSession = {
     window,

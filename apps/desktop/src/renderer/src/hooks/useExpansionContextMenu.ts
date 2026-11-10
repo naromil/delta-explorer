@@ -10,6 +10,7 @@ import {
   validateExpansionTarget
 } from '@delta/core/rich-text'
 import { isTermSelection } from '@delta/core/prompts'
+import { isEditableTarget } from '../lib/editable'
 import { anchoredRange, isAnchoredRange } from '../lib/markdown'
 import type { ContextMenuItem, ContextMenuState } from '../components/conversation/ContextMenu'
 import type { ExpandPromptState } from '../components/conversation/ExpandPrompt'
@@ -422,6 +423,7 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
+      if (isEditableTarget(e.target)) return
       e.preventDefault()
       setSelectionBar(null)
 

@@ -80,4 +80,22 @@ describe('canvas keys', () => {
     expect(actions.toggleOutline).not.toHaveBeenCalled()
     expect(e.preventDefault).not.toHaveBeenCalled()
   })
+
+  it('leaves Escape to the IME while text is being composed', () => {
+    const actions = actionsWith(['card'])
+    const e = {
+      key: 'Escape',
+      isComposing: true,
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      defaultPrevented: false,
+      target: new (globalThis.Element as unknown as new () => Element)(),
+      preventDefault: vi.fn()
+    } as unknown as KeyboardEvent
+    handleKeyDown(e, actions)
+    expect(actions.clearSelection).not.toHaveBeenCalled()
+    press('Escape', actions)
+    expect(actions.clearSelection).toHaveBeenCalledOnce()
+  })
 })

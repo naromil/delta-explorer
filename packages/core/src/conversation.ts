@@ -109,6 +109,15 @@ export function persistableTurns(turns: Turn[]): Turn[] {
   return turns.filter((turn) => turn.role !== 'assistant' || turn.content.trim() !== '')
 }
 
+/** The newest user message with text, which Up in an empty composer edits; null when none. */
+export function lastUserTurnId(turns: Turn[]): number | null {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const turn = turns[i]
+    if (turn.role === 'user' && turn.content.trim() !== '') return turn.id
+  }
+  return null
+}
+
 export function toConversationMeta(record: ConversationRecord): ConversationMeta {
   return {
     id: record.id,

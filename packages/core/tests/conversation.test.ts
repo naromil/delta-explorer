@@ -4,6 +4,7 @@ import {
   linearRecordOf,
   linearStateOf,
   buildConversationTitle,
+  lastUserTurnId,
   migrateConversationRecord,
   persistableTurns,
   serializeForChat
@@ -138,6 +139,29 @@ describe('persistableTurns', () => {
     ]
 
     expect(persistableTurns(turns)).toEqual(turns)
+  })
+})
+
+describe('lastUserTurnId', () => {
+  it('finds the newest user message, past answers and failed answers', () => {
+    const turns = [
+      turn({ id: 1, role: 'user', content: 'first' }),
+      turn({ id: 2, role: 'assistant', content: 'answer' }),
+      turn({ id: 3, role: 'user', content: 'second' }),
+      turn({ id: 4, role: 'assistant', content: 'Error', error: true })
+    ]
+    expect(lastUserTurnId(turns)).toBe(3)
+  })
+
+  it('skips user messages with no text and gives null when nothing is editable', () => {
+    expect(
+      lastUserTurnId([
+        turn({ id: 1, role: 'user', content: 'question' }),
+        turn({ id: 2, role: 'user', content: '  ' })
+      ])
+    ).toBe(1)
+    expect(lastUserTurnId([turn({ id: 1, role: 'assistant', content: 'hi' })])).toBeNull()
+    expect(lastUserTurnId([])).toBeNull()
   })
 })
 

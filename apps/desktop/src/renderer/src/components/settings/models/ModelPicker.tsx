@@ -110,6 +110,8 @@ function ModelPicker({
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
+    // Arrows, Enter and Escape belong to the IME while CJK input is being composed.
+    if (event.nativeEvent.isComposing) return
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       if (!state.open) {
