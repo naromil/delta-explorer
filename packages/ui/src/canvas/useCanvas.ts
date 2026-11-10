@@ -61,9 +61,11 @@ import {
   updateExpansion
 } from '@delta/core/rich-text'
 import { isAnchoredRange } from '../lib/markdown'
-import { generateRequestId } from './chat/requests'
-import type { ExpandOutcome } from './useChatStreaming'
+import { generateRequestId } from '../lib/request-id'
+import type { ExpandOutcome } from '../conversation/expand-outcome'
 import { bodyCharWidth } from '../lib/char-width'
+import { useUiHost } from '../host'
+import type { ExportResult } from '../host'
 
 const SAVE_DELAY_MS = 300
 const UNTITLED = 'Untitled canvas'
@@ -182,7 +184,7 @@ export function useCanvas(): {
   requestFit: (id: string) => void
   /** `null` means there was nothing to measure, so the card stays as it is. */
   fitCard: (id: string, contentHeight: number | null) => void
-  exportCanvas: () => Promise<{ ok: true; path: string } | { ok: false; error: string }>
+  exportCanvas: () => Promise<ExportResult>
   /** Returns the new card's id. */
   ask: (
     rect: CanvasRect,
@@ -203,6 +205,7 @@ export function useCanvas(): {
   /** Removes cards with what depends on them, frames (not what they hold) and links. */
   removeItems: (ids: ReadonlySet<string>) => void
 } {
+  const host = useUiHost()
   const [doc, setDoc] = useState<CanvasDoc>(emptyDoc)
   const [loaded, setLoaded] = useState(false)
   const [sessions, setSessions] = useState<ConversationMeta[]>([])
@@ -235,7 +238,7 @@ export function useCanvas(): {
   }, [])
 
   const refreshSessions = useCallback((): Promise<ConversationMeta[]> => {
-    return window.api.listConversations().then(
+    return host.listConversations().then(
       (list) => {
         setSessions(list)
         return list
@@ -245,7 +248,7 @@ export function useCanvas(): {
         return []
       }
     )
-  }, [])
+  }, [host])
 
   /* ---- Persistence ---- */
 
@@ -259,13 +262,13 @@ export function useCanvas(): {
     if (layout.cards.length === 0 && layout.frames.length === 0) {
       if (!current.persisted) return Promise.resolve()
       updateMeta({ persisted: false })
-      return window.api.deleteConversation(current.id).then(() => {
+      return host.deleteConversation(current.id).then(() => {
         void refreshSessions()
       }, onFailure)
     }
     const firstSave = !current.persisted
     updateMeta({ persisted: true })
-    return window.api
+    return host
       .saveConversation({
         id: current.id,
         title: current.title,
@@ -279,7 +282,7 @@ export function useCanvas(): {
       .then(() => {
         if (firstSave) void refreshSessions()
       }, onFailure)
-  }, [refreshSessions, updateMeta])
+  }, [host, refreshSessions, updateMeta])
 
   /** `touchContent` is for content only: moving or panning never reorders the canvas list. */
   const requestSave = useCallback(
@@ -358,11 +361,11 @@ export function useCanvas(): {
         if (!matches(request)) continue
         // Forgotten first, so a late chunk cannot land on what is being removed.
         requestsRef.current.delete(requestId)
-        window.api.chatCancel(requestId)
+        host.cancel(requestId)
       }
       syncStreaming()
     },
-    [syncStreaming]
+    [host, syncStreaming]
   )
 
   const startSend = useCallback(
@@ -370,9 +373,9 @@ export function useCanvas(): {
       const requestId = generateRequestId()
       requestsRef.current.set(requestId, { kind: 'send', turnId: card.turnId })
       syncStreaming()
-      window.api.chatSend({ messages, requestId, role: 'chat' })
+      host.send({ messages, requestId, role: 'chat' })
     },
-    [syncStreaming]
+    [host, syncStreaming]
   )
 
   const sendCard = useCallback(
@@ -474,11 +477,11 @@ export function useCanvas(): {
       }))
       const requestId = generateRequestId()
       requestsRef.current.set(requestId, { kind: 'expand', expansionId })
-      window.api.chatExpand({ messages, requestId, role: 'chat' })
+      host.expand({ messages, requestId, role: 'chat' })
       requestSave(true)
       return { ok: true }
     },
-    [expansionMessages, requestSave, updateDoc]
+    [expansionMessages, host, requestSave, updateDoc]
   )
 
   const ask = useCallback(
@@ -529,14 +532,17 @@ export function useCanvas(): {
     [requestSave, sendCard, updateDoc, updateMeta]
   )
 
-  const stopCard = useCallback((id: string): void => {
-    const card = docRef.current.layout.cards.find((item) => item.id === id)
-    if (!card) return
-    // Stays in the book: main answers with the partial text, which settles it.
-    for (const [requestId, request] of requestsRef.current) {
-      if (requestBelongsTo(request, card)) window.api.chatCancel(requestId)
-    }
-  }, [])
+  const stopCard = useCallback(
+    (id: string): void => {
+      const card = docRef.current.layout.cards.find((item) => item.id === id)
+      if (!card) return
+      // Stays in the book: main answers with the partial text, which settles it.
+      for (const [requestId, request] of requestsRef.current) {
+        if (requestBelongsTo(request, card)) host.cancel(requestId)
+      }
+    },
+    [host]
+  )
 
   const removeCards = useCallback(
     (doomed: ReadonlySet<string>): void => {
@@ -657,11 +663,11 @@ export function useCanvas(): {
         updateDoc((prev) => ({ ...prev, turns: restartExpansion(prev.turns, card.expansionId) }))
         const requestId = generateRequestId()
         requestsRef.current.set(requestId, { kind: 'expand', expansionId: card.expansionId })
-        window.api.chatExpand({ messages, requestId, role: 'chat' })
+        host.expand({ messages, requestId, role: 'chat' })
       }
       requestSave(true)
     },
-    [cancelRequests, expansionMessages, removeCards, requestSave, sendCard, updateDoc]
+    [cancelRequests, expansionMessages, host, removeCards, requestSave, sendCard, updateDoc]
   )
 
   const editCard = useCallback(
@@ -931,11 +937,11 @@ export function useCanvas(): {
     [updateCards]
   )
 
-  const exportCanvas = useCallback(async (): ReturnType<typeof window.api.exportConversation> => {
-    // Main reads the record from disk, so the newest state has to be there first.
+  const exportCanvas = useCallback(async (): Promise<ExportResult> => {
+    // The host reads the stored record, so the newest state has to be there first.
     await flushSave()
-    return window.api.exportConversation(metaRef.current.id)
-  }, [flushSave])
+    return host.exportConversation(metaRef.current.id)
+  }, [flushSave, host])
 
   const rename = useCallback(
     (title: string): void => {
@@ -978,7 +984,7 @@ export function useCanvas(): {
         loadStartedRef.current = true
         void refreshSessions()
       }
-      void window.api.loadConversation(id).then((record) => {
+      void host.loadConversation(id).then((record) => {
         if (!record || record.source !== 'canvas') {
           void refreshSessions()
           setLoaded(true)
@@ -999,7 +1005,7 @@ export function useCanvas(): {
         setLoaded(true)
       })
     },
-    [refreshSessions, replaceDoc]
+    [host, refreshSessions, replaceDoc]
   )
 
   const deleteCanvas = useCallback((): void => {
@@ -1007,13 +1013,13 @@ export function useCanvas(): {
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
     saveTimerRef.current = null
     replaceDoc(emptyDoc(), newMeta())
-    if (persisted) void window.api.deleteConversation(id).then(refreshSessions)
-  }, [refreshSessions, replaceDoc])
+    if (persisted) void host.deleteConversation(id).then(refreshSessions)
+  }, [host, refreshSessions, replaceDoc])
 
   const ensureLoaded = useCallback((): void => {
     if (loadStartedRef.current) return
     loadStartedRef.current = true
-    void window.api
+    void host
       .listConversations()
       .then((list) => {
         setSessions(list)
@@ -1025,7 +1031,7 @@ export function useCanvas(): {
         console.warn('Failed to load canvases:', err)
         setLoaded(true)
       })
-  }, [openCanvas])
+  }, [host, openCanvas])
 
   /* ---- Streaming ---- */
 
@@ -1046,13 +1052,13 @@ export function useCanvas(): {
       }))
     }
 
-    const unsubs = [
-      window.api.chatOnChunk(({ requestId, delta }) => {
+    return host.subscribe({
+      chunk: ({ requestId, delta }) => {
         const request = requestsRef.current.get(requestId)
         if (request?.kind !== 'send') return
         editTurn(request.turnId, (turn) => ({ ...turn, content: turn.content + delta }))
-      }),
-      window.api.chatOnResponse(({ requestId, text, cancelled }) => {
+      },
+      response: ({ requestId, text, cancelled }) => {
         const request = requestsRef.current.get(requestId)
         if (request?.kind !== 'send') return
         editTurn(request.turnId, (turn) => ({ ...turn, content: text }))
@@ -1061,14 +1067,14 @@ export function useCanvas(): {
         if (!cancelled && text.trim() !== '') {
           fitAnswered((card) => card.kind === 'message' && card.turnId === request.turnId)
         }
-      }),
-      window.api.chatOnError(({ requestId, error }) => {
+      },
+      error: ({ requestId, error }) => {
         const request = requestsRef.current.get(requestId)
         if (request?.kind !== 'send') return
         editTurn(request.turnId, (turn) => ({ ...turn, content: error, error: true }))
         settle(requestId)
-      }),
-      window.api.chatOnExpandChunk((data) => {
+      },
+      expandChunk: (data) => {
         const request = requestsRef.current.get(data.requestId)
         if (request?.kind !== 'expand') return
         const { delta, text, done, error, cancelled } = data
@@ -1087,12 +1093,9 @@ export function useCanvas(): {
             (card) => card.kind === 'expansion' && card.expansionId === request.expansionId
           )
         }
-      })
-    ]
-    return () => {
-      for (const unsub of unsubs) unsub()
-    }
-  }, [requestFit, requestSave, syncStreaming, updateDoc])
+      }
+    })
+  }, [host, requestFit, requestSave, syncStreaming, updateDoc])
 
   return {
     loaded,

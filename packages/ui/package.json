@@ -1,0 +1,43 @@
+{
+  "name": "@delta/ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "React UI shared by the desktop app and the extension: the canvas and answer rendering.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./canvas": "./src/canvas/index.ts",
+    "./conversation": "./src/conversation/index.ts",
+    "./host": "./src/host.ts",
+    "./lib/*": "./src/lib/*.ts",
+    "./styles/*": "./src/styles/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "sideEffects": [
+    "*.css"
+  ],
+  "peerDependencies": {
+    "react": "^19.2.1"
+  },
+  "dependencies": {
+    "hast-util-to-jsx-runtime": "^2.3.6",
+    "katex": "^0.19.1",
+    "lowlight": "^3.3.0",
+    "mdast-util-to-hast": "^13.2.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5"
+  },
+  "devDependencies": {
+    "@delta/core": "*",
+    "@types/katex": "^0.16.8",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1"
+  }
+}

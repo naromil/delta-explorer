@@ -12,11 +12,11 @@ import {
 import { isTermSelection } from '@delta/core/prompts'
 import { isEditableTarget } from '../lib/editable'
 import { anchoredRange, isAnchoredRange } from '../lib/markdown'
-import type { ContextMenuItem, ContextMenuState } from '../components/conversation/ContextMenu'
-import type { ExpandPromptState } from '../components/conversation/ExpandPrompt'
-import type { ExpandSelectionBarState } from '../components/conversation/ExpandSelectionBar'
-import type { FramePopupAt } from '../components/conversation/ExpansionFrame'
-import type { ExpandOutcome } from './useChatStreaming'
+import type { ContextMenuItem, ContextMenuState } from './ContextMenu'
+import type { ExpandPromptState } from './ExpandPrompt'
+import type { ExpandSelectionBarState } from './ExpandSelectionBar'
+import type { FramePopupAt } from './ExpansionFrame'
+import type { ExpandOutcome } from './expand-outcome'
 
 export type { ExpansionTarget }
 

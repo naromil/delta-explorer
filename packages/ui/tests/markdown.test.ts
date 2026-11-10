@@ -2,13 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ExpansionNode } from '@delta/core/rich-text'
-import Markdown from '../../src/renderer/src/components/conversation/Markdown'
-import ExpansionFrame from '../../src/renderer/src/components/conversation/ExpansionFrame'
-import {
-  anchoredRange,
-  isAnchoredRange,
-  isPlainMarkdown
-} from '../../src/renderer/src/lib/markdown'
+import Markdown from '../src/conversation/Markdown'
+import ExpansionFrame from '../src/conversation/ExpansionFrame'
+import { anchoredRange, isAnchoredRange, isPlainMarkdown } from '../src/lib/markdown'
 
 const noop = (): void => {}
 

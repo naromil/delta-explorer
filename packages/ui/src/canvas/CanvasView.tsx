@@ -80,18 +80,18 @@ import { contextExcerpts, sessionContextLinks } from '@delta/core/canvas-context
 import { estimateTokens } from '@delta/core/context-budget'
 import type { ExpansionTarget } from '@delta/core/rich-text'
 import { flattenMarkdown } from '@delta/core/rich-text'
-import ContextMenu from '../../components/conversation/ContextMenu'
-import type { ContextMenuItem, ContextMenuState } from '../../components/conversation/ContextMenu'
-import ExpandPrompt from '../../components/conversation/ExpandPrompt'
-import ExpandSelectionBar from '../../components/conversation/ExpandSelectionBar'
-import type { useCanvas } from '../../hooks/useCanvas'
-import { useExpansionContextMenu } from '../../hooks/useExpansionContextMenu'
-import { isEditableTarget } from '../../lib/editable'
-import { formatRelativeTime } from '../../lib/format'
+import ContextMenu from '../conversation/ContextMenu'
+import type { ContextMenuItem, ContextMenuState } from '../conversation/ContextMenu'
+import ExpandPrompt from '../conversation/ExpandPrompt'
+import ExpandSelectionBar from '../conversation/ExpandSelectionBar'
+import type { useCanvas } from './useCanvas'
+import { useExpansionContextMenu } from '../conversation/useExpansionContextMenu'
+import { isEditableTarget } from '../lib/editable'
+import { formatRelativeTime } from '../lib/format'
 import type { ConversationMeta } from '@delta/core/conversation'
 import { CONVERSATION_SOURCE_LABELS } from '@delta/core/conversation'
-import type { ViewportMotion } from '../../lib/viewport-motion'
-import { createViewportMotion } from '../../lib/viewport-motion'
+import type { ViewportMotion } from '../lib/viewport-motion'
+import { createViewportMotion } from '../lib/viewport-motion'
 import CanvasCardView from './CanvasCardView'
 import type { CanvasCardActions } from './CanvasCardView'
 import type { CanvasDraftContext } from './CanvasDraft'
@@ -121,11 +121,12 @@ import {
   wheelPanDelta
 } from './board-helpers'
 import { cardContent } from './card-content'
-import { bodyCharWidth } from '../../lib/char-width'
+import { bodyCharWidth } from '../lib/char-width'
 import { createRightDrag } from './right-drag'
 import { cardMenuItems, frameMenuItems, linkMenuItems, planeMenuItems } from './canvas-menus'
 import { ZOOM_STEP, useCanvasKeyboard } from './useCanvasKeyboard'
 import { useEdgePan } from './useEdgePan'
+import { useUiHost } from '../host'
 
 type Canvas = ReturnType<typeof useCanvas>
 type DrawKind = 'answer' | 'note' | 'frame'
@@ -281,6 +282,7 @@ function CanvasBoard({
   canvas: Canvas
   onOpenSearch: () => void
 }): React.JSX.Element {
+  const host = useUiHost()
   const { cards, frames, links, stack, viewport, turns, setViewport, moveItems, raiseCards } =
     canvas
   const surfaceRef = useRef<HTMLDivElement>(null)
@@ -2048,7 +2050,7 @@ function CanvasBoard({
         ...others.slice(0, HISTORY_OTHERS_LIMIT).map((item) => ({
           label: item.title,
           detail: `${CONVERSATION_SOURCE_LABELS[item.source]} · ${formatRelativeTime(item.updatedAt)}`,
-          onSelect: () => window.api.openConversation({ id: item.id, source: item.source })
+          onSelect: () => host.openConversation({ id: item.id, source: item.source })
         })),
         ...(others.length > HISTORY_OTHERS_LIMIT
           ? [{ label: 'Search all conversations…', onSelect: onOpenSearch }]

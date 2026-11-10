@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ImageAttachment } from '@delta/core/attachments'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@delta/core/attachments'
+import { useUiHost } from '../host'
 import { fileToImageAttachment } from '../lib/image-attachments'
 
 const NOTICE_TIMEOUT_MS = 5000
@@ -14,6 +15,7 @@ export function useImageAttachments(
   busy: boolean
   addFiles: (files: File[]) => Promise<void>
 } {
+  const host = useUiHost()
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const timerRef = useRef<number | null>(null)
@@ -42,7 +44,7 @@ export function useImageAttachments(
       setBusy(true)
       try {
         // Asked per attempt: the model can change in Settings while a draft waits.
-        if ((await window.api.chatImageSupport('chat')) === 'no') {
+        if ((await host.imageSupport('chat')) === 'no') {
           showNotice("The selected model can't read images. Choose a vision model in Settings.")
           return
         }
@@ -69,7 +71,7 @@ export function useImageAttachments(
         setBusy(false)
       }
     },
-    [onChange, showNotice]
+    [host, onChange, showNotice]
   )
 
   return { notice, busy, addFiles }

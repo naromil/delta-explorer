@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CanvasLinkContext, CanvasRect, CanvasSide } from '@delta/core/canvas'
 import { estimateWords } from '@delta/core/canvas'
-import { bodyCharWidth } from '../../lib/char-width'
+import { bodyCharWidth } from '../lib/char-width'
 
 export interface CanvasDraftSession {
   id: string

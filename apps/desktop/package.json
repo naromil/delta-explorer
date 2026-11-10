@@ -37,6 +37,7 @@
   "devDependencies": {
     "@ai-sdk/openai-compatible": "^3.0.75",
     "@delta/core": "*",
+    "@delta/ui": "*",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@types/katex": "^0.16.8",
     "@types/node": "^22.19.1",

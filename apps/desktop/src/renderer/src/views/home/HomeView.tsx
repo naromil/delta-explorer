@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { ConversationMeta, ConversationTarget } from '@delta/core/conversation'
 import { CONVERSATION_SOURCE_LABELS } from '@delta/core/conversation'
-import { formatRelativeTime } from '../../lib/format'
+import { formatRelativeTime } from '@delta/ui/lib/format'
 
 type HomeTarget = 'chat' | 'knowledge' | 'lookup-guide'
 

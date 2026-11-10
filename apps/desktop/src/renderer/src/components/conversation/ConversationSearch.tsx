@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { ConversationSearchResult, ConversationTarget } from '@delta/core/conversation'
 import { CONVERSATION_SOURCE_LABELS } from '@delta/core/conversation'
-import { formatRelativeTime } from '../../lib/format'
+import { formatRelativeTime } from '@delta/ui/lib/format'
 
 interface ConversationSearchProps {
   onSelect: (target: ConversationTarget) => void

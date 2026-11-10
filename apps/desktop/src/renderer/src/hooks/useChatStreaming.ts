@@ -20,7 +20,8 @@ import {
   setExpansionFolded,
   updateExpansion
 } from '@delta/core/rich-text'
-import { isAnchoredRange } from '../lib/markdown'
+import { isAnchoredRange } from '@delta/ui/lib/markdown'
+import type { ExpandOutcome } from '@delta/ui/conversation'
 import { buildExpandRequest } from '@delta/core/expand-prompt'
 import {
   clearRequests,
@@ -38,9 +39,6 @@ import type { ConversationMeta } from './chat/persistence'
 import { subscribeChatTransport } from './chat/transport'
 
 let nextTurnId = Date.now()
-
-/** Why an expand request was refused; the UI surfaces this instead of silence. */
-export type ExpandOutcome = { ok: true } | { ok: false; reason: string }
 
 interface UseChatStreamingOptions {
   role?: 'chat' | 'lookup'

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { renderMath } from '../../src/renderer/src/lib/math'
+import { renderMath } from '../src/lib/math'
 
 describe('renderMath', () => {
   it('renders TeX to KaTeX markup, inline and as a display block', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nextPinned } from '../../src/renderer/src/hooks/useStickToBottom'
+import { nextPinned } from '../src/lib/stick-to-bottom'
 
 describe('stick-to-bottom pinning', () => {
   it('keeps following while content grows without a scroll', () => {

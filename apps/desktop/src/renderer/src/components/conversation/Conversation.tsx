@@ -3,15 +3,17 @@ import type { ImageAttachment } from '@delta/core/attachments'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@delta/core/attachments'
 import type { ConversationState } from '@delta/core/conversation'
 import { CONVERSATION_TITLE_MAX_LENGTH, lastUserTurnId } from '@delta/core/conversation'
-import { useExpansionContextMenu } from '../../hooks/useExpansionContextMenu'
-import type { ExpandRequest } from '../../hooks/useExpansionContextMenu'
-import { useImageAttachments } from '../../hooks/useImageAttachments'
-import { useStickToBottom } from '../../hooks/useStickToBottom'
-import { attachmentSrc } from '../../lib/image-attachments'
+import {
+  ContextMenu,
+  ExpandPrompt,
+  ExpandSelectionBar,
+  useExpansionContextMenu,
+  useImageAttachments
+} from '@delta/ui/conversation'
+import type { ExpandRequest } from '@delta/ui/conversation'
+import { useStickToBottom } from '@delta/ui/lib/stick-to-bottom'
+import { attachmentSrc } from '@delta/ui/lib/image-attachments'
 import Turn from './Turn'
-import ContextMenu from './ContextMenu'
-import ExpandPrompt from './ExpandPrompt'
-import ExpandSelectionBar from './ExpandSelectionBar'
 
 interface ConversationProps {
   state: ConversationState

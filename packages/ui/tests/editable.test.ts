@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isEditableTarget } from '../../src/renderer/src/lib/editable'
+import { isEditableTarget } from '../src/lib/editable'
 
 function fakeField(tagName: string, attributes: Record<string, string> = {}): EventTarget {
   const field = {

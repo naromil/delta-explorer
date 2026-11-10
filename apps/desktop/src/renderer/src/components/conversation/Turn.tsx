@@ -1,10 +1,9 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { Turn as TurnType } from '@delta/core/conversation'
 import type { ExpansionNode } from '@delta/core/rich-text'
-import { attachmentSrc } from '../../lib/image-attachments'
-import Markdown from './Markdown'
-import ExpansionFrame from './ExpansionFrame'
-import type { FramePopupAt } from './ExpansionFrame'
+import { attachmentSrc } from '@delta/ui/lib/image-attachments'
+import { ExpansionFrame, Markdown } from '@delta/ui/conversation'
+import type { FramePopupAt } from '@delta/ui/conversation'
 
 interface TurnProps {
   turn: TurnType

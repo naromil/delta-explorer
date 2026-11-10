@@ -104,7 +104,7 @@ src/background/
 ## Canvas
 - The model (`canvas*`, `layered-layout`, the page card included) is `@delta/core`, the same code the
   desktop runs. The store (`src/ui/canvas/store.js`) and board are ports of the desktop's
-  `hooks/useCanvas.ts` and `views/canvas/*` (React there, plain DOM here); keep them in step by hand.
+  `@delta/ui` canvas (`packages/ui/src/canvas/`, React there, plain DOM here); keep them in step by hand.
 - A canvas is a record with `source: 'canvas'` and a `canvas` layout `{ cards, frames, links, stack,
   viewport }`, normalized on every load (`normalizeCanvasLayout`). Cards: `message`, `expansion`, `note`,
   and the extension's `page` (`{ turnId, title, url }`, its text in a user turn).

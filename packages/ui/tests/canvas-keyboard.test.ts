@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import type { CanvasKeyboardActions } from '../../src/renderer/src/views/canvas/useCanvasKeyboard'
-import { handleKeyDown } from '../../src/renderer/src/views/canvas/useCanvasKeyboard'
+import type { CanvasKeyboardActions } from '../src/canvas/useCanvasKeyboard'
+import { handleKeyDown } from '../src/canvas/useCanvasKeyboard'
 
 /** Every action is a spy, so a test only names the keys it cares about. */
 function actionsWith(selected: string[] = []): CanvasKeyboardActions {

@@ -2,9 +2,9 @@
 @import 'home.css';
 @import 'chat.css';
 @import 'settings.css';
-@import 'markdown.css';
-@import 'expand.css';
-@import 'canvas.css';
+@import '@delta/ui/styles/markdown.css';
+@import '@delta/ui/styles/expand.css';
+@import '@delta/ui/styles/canvas.css';
 
 :root {
   color-scheme: dark;

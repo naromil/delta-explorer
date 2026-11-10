@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import type { RightDragHandlers } from '../../src/renderer/src/views/canvas/right-drag'
-import { createRightDrag } from '../../src/renderer/src/views/canvas/right-drag'
+import type { RightDragHandlers } from '../src/canvas/right-drag'
+import { createRightDrag } from '../src/canvas/right-drag'
 
 const RIGHT = 2
 

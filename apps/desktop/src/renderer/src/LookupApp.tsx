@@ -1,14 +1,16 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { useChatStreaming } from './hooks/useChatStreaming'
 import MemoryIndicator from './components/MemoryIndicator'
-import { useExpansionContextMenu } from './hooks/useExpansionContextMenu'
-import { useStickToBottom } from './hooks/useStickToBottom'
+import {
+  ContextMenu,
+  ExpandPrompt,
+  ExpandSelectionBar,
+  useExpansionContextMenu
+} from '@delta/ui/conversation'
+import { useStickToBottom } from '@delta/ui/lib/stick-to-bottom'
 import Turn from './components/conversation/Turn'
-import ContextMenu from './components/conversation/ContextMenu'
 import ConversationSearch from './components/conversation/ConversationSearch'
 import { LOOKUP_DEFAULT_QUERY } from '@delta/core/prompts'
-import ExpandPrompt from './components/conversation/ExpandPrompt'
-import ExpandSelectionBar from './components/conversation/ExpandSelectionBar'
 
 function readFileAsBase64(file: File): Promise<string | null> {
   return new Promise((resolve) => {

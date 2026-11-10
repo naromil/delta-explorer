@@ -1,7 +1,7 @@
 import type { CanvasCard } from '@delta/core/canvas'
 import type { ExpansionNode } from '@delta/core/rich-text'
 import { findExpansionInTurns, flattenMarkdown } from '@delta/core/rich-text'
-import type { useCanvas } from '../../hooks/useCanvas'
+import type { useCanvas } from './useCanvas'
 import type { CanvasCardStatus } from './CanvasCardView'
 
 type CanvasContentSource = Pick<ReturnType<typeof useCanvas>, 'turns' | 'streamingTurnIds'>

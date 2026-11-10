@@ -8,9 +8,9 @@ import type {
 } from '@delta/core/canvas'
 import type { ExpansionNode } from '@delta/core/rich-text'
 import { flattenMarkdown } from '@delta/core/rich-text'
-import Markdown from '../../components/conversation/Markdown'
-import { OriginalText } from '../../components/conversation/ExpansionFrame'
-import { nextPinned } from '../../hooks/useStickToBottom'
+import Markdown from '../conversation/Markdown'
+import { OriginalText } from '../conversation/ExpansionFrame'
+import { nextPinned } from '../lib/stick-to-bottom'
 
 export type CanvasCardStatus = 'streaming' | 'done' | 'failed'
 

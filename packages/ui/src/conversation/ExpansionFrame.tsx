@@ -1,8 +1,8 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { flattenMarkdown } from '@delta/core/rich-text'
 import type { ExpansionNode } from '@delta/core/rich-text'
-import { attachmentSrc } from '../../lib/image-attachments'
-import { isPlainMarkdown } from '../../lib/markdown'
+import { attachmentSrc } from '../lib/image-attachments'
+import { isPlainMarkdown } from '../lib/markdown'
 import Markdown from './Markdown'
 
 /** Screen point of the control that opened a popup, so the popup appears next to it. */

@@ -1,5 +1,5 @@
 import type { CanvasCard, CanvasLinkContext } from '@delta/core/canvas'
-import type { ContextMenuItem } from '../../components/conversation/ContextMenu'
+import type { ContextMenuItem } from '../conversation/ContextMenu'
 
 /** Right-click menus, one list per thing on the plane. Each names the key that does the same. */
 

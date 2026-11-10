@@ -2,8 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ImageAttachment } from '@delta/core/attachments'
 import { MAX_ATTACHMENTS_PER_MESSAGE } from '@delta/core/attachments'
 import { EXPAND_INTENTS } from '@delta/core/prompts'
-import { useImageAttachments } from '../../hooks/useImageAttachments'
-import { attachmentSrc } from '../../lib/image-attachments'
+import { useImageAttachments } from './useImageAttachments'
+import { attachmentSrc } from '../lib/image-attachments'
 
 export interface ExpandPromptState {
   x: number

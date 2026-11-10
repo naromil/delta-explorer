@@ -20,15 +20,10 @@ import type { Element, Root as HastRoot } from 'hast'
 import type { Root as MdastRoot } from 'mdast'
 import type { ExpansionNode } from '@delta/core/rich-text'
 import { isSameRange } from '@delta/core/rich-text'
-import { highlightCode } from '../../lib/highlight'
-import { renderMath } from '../../lib/math'
-import {
-  EXPANSION_NODE,
-  SOURCED_TEXT,
-  isDisplayMath,
-  prepareMarkdownTree
-} from '../../lib/markdown'
-import type { MarkdownNode } from '../../lib/markdown'
+import { highlightCode } from '../lib/highlight'
+import { renderMath } from '../lib/math'
+import { EXPANSION_NODE, SOURCED_TEXT, isDisplayMath, prepareMarkdownTree } from '../lib/markdown'
+import type { MarkdownNode } from '../lib/markdown'
 
 const EXPANSION_ELEMENT = 'expansion-frame'
 const MATH_ELEMENT = 'math-formula'
