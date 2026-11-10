@@ -17,10 +17,11 @@ only a bundler can resolve.
 3. Select `apps/extension/dist/manifest.json`
 
 `scripts/build.mjs` bundles the four module entries (`background.js`, `popup/popup.js`,
-`dashboard/js/app.js`, `canvas/canvas.js`) with esbuild, unminified, and copies everything else that
-ships: manifest, HTML, CSS, icons, `vendor/`, and the classic scripts named by the manifest's content
-scripts or loaded by a page without `type="module"`. A new module file needs nothing; a new classic
-script must be referenced from the manifest or a page's HTML to be copied.
+`dashboard/js/app.js`, `canvas/canvas.jsx`, the one React page) with esbuild, unminified, plus
+`canvas/canvas-ui.css` (the shared canvas styles and KaTeX's, fonts written to `assets/`). It copies
+everything else that ships: manifest, HTML, CSS, icons, `vendor/`, and the classic scripts named by the
+manifest's content scripts or loaded by a page without `type="module"`. A new module file needs nothing;
+a new classic script must be referenced from the manifest or a page's HTML to be copied.
 
 ## Architecture
 
@@ -29,13 +30,12 @@ background.js (module)   →  message router, streaming host (Ports), context me
 content.js + src/content →  inline page bubbles, injected into all frames (classic scripts, shared scope)
 popup/                   →  toolbar look-up (a ConversationView with role 'lookup')
 dashboard/               →  Home, Chat, Canvas, Knowledge Base, Guide, Settings (hash routes, ES modules)
-canvas/                  →  standalone canvas page: the in-page overlay frame, or a tab
-src/ui/                  →  shared page UI: ConversationView, api bridge, dom helpers, attachments, CSS
-src/ui/canvas/           →  canvas board (gestures, keys, keyed DOM), store (state, streams, undo, save),
-                            panels (rail, selection bar, outline, map, shortcuts), popups, helpers
+canvas/                  →  the canvas page (React, @delta/ui): over a web page, in a tab, or in the
+                            dashboard's Canvas route
+src/ui/                  →  page UI: ConversationView, api bridge, dom helpers, attachments, CSS, and
+                            ui-host.js (the shared canvas's host: requests and Ports)
 src/shared/              →  pure logic: prompts, models, conversation, rich-text, context-budget, markdown,
-                            canvas* (geometry, sessions, selection, arrange, tidy, history, outline,
-                            context links, requests), layered-layout
+                            canvas, canvas-selection (re-exports of @delta/core)
 src/background/
 ├── provider.js          →  OpenAI-compatible streaming client with a function-tool agent loop
 ├── config.js            →  model config (connections + roles) and settings, with legacy migration
@@ -55,7 +55,7 @@ src/background/
   instructions, `EXPAND_INTENTS`), which `prompts.js` re-exports. Never inline one elsewhere.
   Content scripts cannot import modules: `EXPAND_INTENTS` is mirrored in `src/content/state.js`; keep them
   in sync with core.
-- **Shared logic lives in `@delta/core`.** `src/shared/{canvas*,layered-layout,rich-text,context-budget}.js`
+- **Shared logic lives in `@delta/core`.** `src/shared/{canvas,canvas-selection,rich-text,context-budget}.js`
   are one-line re-exports of `packages/core/src/*.ts`. Change the TypeScript there, never add a copy here,
   and remember the desktop runs the same code (`npm run test` covers it). Only module code (background,
   pages) can import core; content scripts are classic scripts and cannot.
@@ -102,18 +102,28 @@ src/background/
   change clears it. `migrateConversationRecord` accepts the extension's pre-0.2 shape.
 
 ## Canvas
-- The model (`canvas*`, `layered-layout`, the page card included) is `@delta/core`, the same code the
-  desktop runs. The store (`src/ui/canvas/store.js`) and board are ports of the desktop's
-  `@delta/ui` canvas (`packages/ui/src/canvas/`, React there, plain DOM here); keep them in step by hand.
+- **The canvas is the desktop's**: model and requests in `@delta/core`, views and state in `@delta/ui`
+  (`packages/ui/src/canvas/`, React). Change it there; the desktop runs the same code. The extension
+  supplies only the page around it (`canvas/canvas.jsx`) and its host (`src/ui/ui-host.js`).
+- **The host** answers the shared UI's `UiHost`: conversations through background requests, streams
+  through `delta-stream` Ports turned into the desktop's event shapes (a stop reports the partial text),
+  and Ctrl+E from the `expandShortcut` broadcast. Requests are built with core's system prompt; the host
+  swaps in the extension's (`getSystemPrompt`) before sending. Export downloads markdown.
+- **One page, three places.** `canvas/canvas.html` is the overlay over a web page (`?overlay=1&seed=`),
+  a tab (`?id=`), or the dashboard's Canvas route (`?embed=dashboard`, an iframe). The dashboard frames
+  it because its plain-DOM chat styles the same class names (`.frame`, `.md-*`, menus) its own way. They
+  talk by `postMessage` on the extension's origin: the dashboard sends `delta-canvas-open` (`''`, `new`
+  or an id); the frame sends `delta-canvas-shown` (the address), `delta-open-search`,
+  `delta-open-conversation` and `delta-dashboard-key` (Ctrl+K, Ctrl+Shift+O, Ctrl+, pressed inside it).
+- **Tokens.** The shared stylesheets read the desktop's token names; `src/ui/base.css` defines the ones
+  the extension did not have (canvas colours, code colours, shadows, focus rings) in every theme block.
 - A canvas is a record with `source: 'canvas'` and a `canvas` layout `{ cards, frames, links, stack,
   viewport }`, normalized on every load (`normalizeCanvasLayout`). Cards: `message`, `expansion`, `note`,
   and the extension's `page` (`{ turnId, title, url }`, its text in a user turn).
 - A page card is the first context of every session that continues it: `turnsThroughCard` turns its
   turn into `buildPageContextMessage`, and expansions on it use the page-expand shape
-  (`canvas-request.js`). Never send a page turn as anything the user said; the curator skips it
+  (`expansionCardRequest` in core's `canvas-request.ts`). Never send a page turn as anything the user said; the curator skips it
   (`pageTurnIds`) except for what was expanded in it.
-- The board has no framework: `derive()` computes what is on screen, `renderNow()` updates DOM kept by
-  id (`syncKeyed`). Rebuild a card's text only when it changed, so selections and link animations survive.
 - Page links are kept: the content script writes the main content's links as `[text](address)` (http(s)
   only, no in-page jumps or overlong addresses, `()<>` and spaces percent-encoded) and appends the page's
   other links as a list. `PAGE_LINKS_NOTE` (`buildPageCanvasContextMessage`) tells the model to hand them
@@ -121,12 +131,13 @@ src/background/
 - The page canvas: the content script (`src/content/page-canvas.js`) reads the page as markdown, stashes
   it with `stashCanvasSeed` (in `storage.session`, single use, bound to the tab) and adds an iframe of
   `canvas/canvas.html?overlay=1&seed=<token>`. The frame takes the seed, reopens the newest canvas whose
-  meta `pageUrl` matches, or starts one with the page card. Embedded without a valid seed it shows nothing.
-  It closes by posting `delta-canvas-close` to its parent.
+  meta `pageUrl` matches, or starts one with the page card (`startFromPage`, a question box beside it).
+  Embedded without a valid seed it shows nothing. It closes by posting `delta-canvas-close` to its parent,
+  from its × button or Esc with nothing left to cancel.
 
 ## Markdown and selections
 `src/shared/markdown.js` is a classic script defining `globalThis.DeltaMarkdown` (content script,
-dashboard and popup all load it). Every node carries source offsets; rendered text nodes are leaf
+dashboard chat and popup all load it; the canvas renders with `@delta/ui`'s remark-based `Markdown`). Every node carries source offsets; rendered text nodes are leaf
 `[data-src]` spans; code blocks, inline code, math and images are atoms (`data-atom-start/end`).
 `anchoredRange` widens a selection to what can become one inline frame and refuses cross-block ranges.
 Keep `crossesBlockBoundary` (rich-text) and the parser's block rules consistent.
@@ -164,6 +175,11 @@ Legacy keys migrated and removed on first use: `deltaConfig`, `deltaKbConfig`, `
 - `npm run build:extension` / `npm run dev:extension` from the root (see above). `dist/` is ignored.
 - The extension's own JS has no typecheck, lint or tests, and is not Prettier-formatted (the root
   `.prettierignore` and ESLint config skip it; `scripts/` is linted and formatted). The shared model it
-  imports is tested in `packages/core/tests`. Verify UI changes by loading `dist/` in Firefox.
+  imports is tested in `packages/core/tests`, the shared canvas in `packages/ui/tests` (both typechecked
+  and linted). Verify UI changes by loading `dist/` in Firefox.
+- Automation: WebDriver BiDi (Puppeteer with `browser: 'firefox'`) can install `dist/` as a temporary
+  add-on, but only scripts extension pages with `MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1` and cannot navigate to
+  `moz-extension:` URLs: open them with `browser.tabs.create` from an extension page reached through the
+  web-accessible `canvas/canvas.html`. Pin the UUID with the `extensions.webextensions.uuids` pref.
 - `.vscode/` config is user-level (includes C++ settings) — ignore it.
 - `ref_src/` is gitignored reference material; the JS files are the source of truth.

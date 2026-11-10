@@ -140,6 +140,7 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 | `layered-layout.ts`    | Generic layered graph drawing (`layeredLayout`): cycle breaking, layers, crossing reduction, order-keeping settling; axis-free, no canvas knowledge                                                                                                                                       |
 | `canvas-outline.ts`    | The canvas as a list: `canvasOutline`, `searchCanvasOutline`                                                                                                                                                                                                                              |
 | `canvas-context.ts`    | What links send: `sessionContextLinks`, `contextExcerpts` (limits, shared history once), `requestContext`                                                                                                                                                                                 |
+| `canvas-request.ts`    | What a card sends: `messageCardRequest` (session, sources, links, fit) and `expansionCardRequest` (a page's terms get the page as context)                                                                                                                                                |
 | `prompts.ts`           | All LLM-facing prompt/instruction strings: system prompts, context template, lookup default, expand instructions                                                                                                                                                                          |
 
 ##### Shared UI (`packages/ui/src/`, imported as `@delta/ui/…`)
@@ -154,6 +155,11 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   (`ui/host.ts`): conversation list/load/save/delete/export/open, image support, and streams
   (`send`, `expand`, `cancel`, `subscribe`) keyed by a `requestId` the UI chooses. The app wraps
   its tree in `UiHostProvider`; the desktop's host is `desktop-host.ts` (IPC, mounted in `Root.tsx`).
+- The extension renders the same canvas: `apps/extension/canvas/canvas.jsx` mounts `CanvasView` with its
+  own host (`src/ui/ui-host.js`, Ports), which also reports Ctrl+E through `onExpandShortcut` because
+  Firefox takes the key as a command. `CanvasView`'s optional props (`toolbarExtras`, `historyExtras`,
+  `onEscapeIdle`, an optional `onOpenSearch`) and `useCanvas`'s `startFromPage`/`addPage` exist for it.
+  Test a change here in both apps (see `apps/extension/AGENTS.md` for driving Firefox).
 - `@delta/ui` follows `@delta/core`'s rules: no Electron or `browser.*` APIs, no imports from an app,
   sources compiled by each app (no build step), and a **devDependency** of the desktop. Its tests are
   `packages/ui/tests`.
@@ -479,7 +485,9 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   text in a user turn (`turnId`, `title`, `url`). It roots every session that continues it:
   `turnsThroughCard` sends it as `buildPageCanvasContextMessage`, and a term expanded on it is asked as
   a fresh expand instruction rather than an ancestor question. It has no source, never fits its
-  height, stays single on duplicate, and the desktop shows it read-only (no edit or regenerate).
+  height, stays single on duplicate, and shows read-only (no edit or regenerate) with a link to its page.
+  Its text expands like an answer (`canExpandTurn`), asked with the page as context, and a blank question
+  continuing it asks for a summary.
 - **A note is a card, a frame and a connection are not.** A note (`kind: 'note'`) stands on the plane
   like any card, so it snaps, joins and may overlap, but holds no turn, so it continues no session
   (`continuationCandidates`) and curator passes never see it: note edits save with `touchContent: false`.

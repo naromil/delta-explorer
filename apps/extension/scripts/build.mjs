@@ -19,7 +19,10 @@ const out = join(root, 'dist')
 const watching = process.argv.includes('--watch')
 
 /** Module entry points: everything they import is bundled into them. */
-const ENTRIES = ['background.js', 'popup/popup.js', 'dashboard/js/app.js', 'canvas/canvas.js']
+const ENTRIES = ['background.js', 'popup/popup.js', 'dashboard/js/app.js', 'canvas/canvas.jsx']
+
+/** Stylesheets that import others (the shared canvas's, KaTeX's): bundled, never copied as they are. */
+const CSS_ENTRIES = ['canvas/canvas-ui.css']
 
 /** Never shipped: tooling, docs and build output. */
 const SKIPPED = new Set(['dist', 'node_modules', 'scripts', 'docs', 'package.json', '.gitignore'])
@@ -42,7 +45,8 @@ function classicScripts() {
 function shipped(path, classic) {
   const rel = posix(relative(root, path))
   const top = rel.split('/')[0]
-  if (SKIPPED.has(top) || rel.endsWith('.md')) return false
+  if (SKIPPED.has(top) || rel.endsWith('.md') || rel.endsWith('.jsx')) return false
+  if (CSS_ENTRIES.includes(rel)) return false
   return !rel.endsWith('.js') || classic.has(rel)
 }
 
@@ -68,11 +72,19 @@ copyStatic()
 
 const ctx = await context({
   absWorkingDir: root,
-  entryPoints: ENTRIES.map((entry) => ({ in: entry, out: entry.replace(/\.js$/, '') })),
+  entryPoints: [...ENTRIES, ...CSS_ENTRIES].map((entry) => ({
+    in: entry,
+    out: entry.replace(/\.(jsx?|css)$/, '')
+  })),
   outdir: out,
   bundle: true,
   format: 'esm',
   target: 'firefox140',
+  // The canvas page renders the shared React UI (@delta/ui).
+  jsx: 'automatic',
+  define: { 'process.env.NODE_ENV': JSON.stringify(watching ? 'development' : 'production') },
+  loader: { '.woff2': 'file', '.woff': 'file', '.ttf': 'file' },
+  assetNames: 'assets/[name]-[hash]',
   // Readable output: add-on review reads what ships.
   minify: false,
   sourcemap: watching ? 'linked' : false,
