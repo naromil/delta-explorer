@@ -437,7 +437,7 @@
   /* ================= Inline parsing ================= */
 
   var PUNCT_RE = /[!-\/:-@\[-`{-~]/;
-  var WORD_RE = /[A-Za-z0-9À-￿]/;
+  var WORD_RE = /[A-Za-z0-9À-\uFFFF]/;
 
   function startOff(m, i) { return i < m.length ? m[i] : endOff(m, i); }
   function endOff(m, j) { return j <= 0 ? (m.length ? m[0] : 0) : m[j - 1] + 1; }

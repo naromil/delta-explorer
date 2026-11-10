@@ -1,7 +1,7 @@
 {
   "name": "delta-monorepo",
   "private": true,
-  "description": "Delta Explorer: the desktop app, the Firefox extension and the code they share.",
+  "description": "Delta Explorer: the desktop app, the browser extension (Firefox and Chrome) and the code they share.",
   "license": "MIT",
   "workspaces": [
     "packages/*",

@@ -21,6 +21,19 @@ function selectionParentEntry(data) {
   return hostEntryOf(data.range.startContainer);
 }
 
+var IS_CHROME = browser.runtime.getURL('').indexOf('chrome-extension:') === 0;
+
+/** Expands this frame's selection from a keyboard shortcut; false when it holds none. */
+function expandFromShortcut(prompted) {
+  var data = captureExpandData();
+  if (!data || isOwnChrome(data.range.startContainer)) return false;
+  var parent = selectionParentEntry(data);
+  lastSubParentEntry = null;
+  if (prompted) showPromptInput(data, parent);
+  else expandSelection(data, parent, '');
+  return true;
+}
+
 function loadContentSettings() {
   browser.storage.local.get('deltaSettings').then(function (obj) {
     var s = obj && obj.deltaSettings;
@@ -54,6 +67,22 @@ function initContentScript() {
     foldTopBubble();
   });
 
+  /* ---- Ctrl+E on Chrome ----
+   * Chrome keeps Ctrl+E for itself, so it cannot be the default of the `expand` command there; the
+   * page takes the key instead (Ctrl+Shift+E asks first, as in the desktop app). In Firefox the
+   * command consumes the key before the page sees it. */
+
+  if (IS_CHROME) {
+    document.addEventListener('keydown', function (e) {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 'e') return;
+      if (isEditable(e.target)) return;
+      if (expandFromShortcut(e.shiftKey)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+  }
+
   initSelectionBar();
 
   /* ---- Messages from the background and the popup ---- */
@@ -61,17 +90,13 @@ function initContentScript() {
   browser.runtime.onMessage.addListener(function (msg) {
     if (!msg) return;
     if (msg.type === 'pageExpandCommand') {
-      var data;
-      var parent;
       if (msg.fromShortcut) {
         // The shortcut reaches every frame; only the one holding the selection acts.
-        data = captureExpandData();
-        if (!data) return;
-        parent = selectionParentEntry(data);
-      } else {
-        data = lastExpandData;
-        parent = lastSubParentEntry;
+        expandFromShortcut(msg.prompted);
+        return;
       }
+      var data = lastExpandData;
+      var parent = lastSubParentEntry;
       lastSubParentEntry = null;
       if (!data) return;
       if (isOwnChrome(data.range.startContainer)) return;

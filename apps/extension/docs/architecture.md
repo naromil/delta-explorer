@@ -1,8 +1,8 @@
-# Delta Explorer for Firefox — Architecture
+# Delta Explorer for Firefox and Chrome — Architecture
 
 ## Overview
 
-A Firefox MV3 extension that mirrors the Delta Explorer desktop app (`~/Projects/delta-ai`) in the
+An MV3 extension for Firefox and Chrome that mirrors the Delta Explorer desktop app (`~/Projects/delta-ai`) in the
 browser. Five surfaces share one background:
 
 | Surface | Where | What it does |
@@ -13,7 +13,7 @@ browser. Five surfaces share one background:
 | Page canvas | iframe over any page (`canvas/canvas.html`) | The page as the first card of a canvas |
 | Background | ES module event page | Routing, streaming, model config, conversations, memories, curator |
 
-Firefox loads `dist/`, built by `scripts/build.mjs`: esbuild bundles the four module entries and
+Firefox loads `dist/firefox/` and Chrome `dist/chrome/` (see `AGENTS.md` → Chrome), built by `scripts/build.mjs`: esbuild bundles the four module entries and
 copies everything else unchanged. Shared logic lives in `src/shared/` as ES modules, except
 `src/shared/markdown.js`, a classic script so the content script can load it too. The canvas model,
 rich text and context budget there are re-exports of `@delta/core` (`packages/core/src`), the

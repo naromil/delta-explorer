@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Overview
-Firefox MV3 extension, the browser companion to the Delta Explorer desktop app. Both live in one
+MV3 extension for Firefox and Chrome, the browser companion to the Delta Explorer desktop app. Both live in one
 monorepo: this is the `@delta/extension` workspace (`apps/extension`), the desktop app is
 `apps/desktop`, and the pure logic they share is `@delta/core` (`packages/core`, TypeScript).
 Its features mirror the desktop app's, including the canvas; the desktop look-up's screen OCR becomes
@@ -9,12 +9,14 @@ page text, and any web page can be opened as a canvas whose first card is the pa
 unmodified in `vendor/katex/`.
 
 ## Building and loading the extension
-Firefox loads `dist/`, never the sources: the pages and the background import `@delta/core`, which
-only a bundler can resolve.
+The browsers load `dist/firefox/` and `dist/chrome/`, never the sources: the pages and the background
+import `@delta/core`, which only a bundler can resolve.
 1. From the repository root: `npm install`, then `npm run build:extension` (or
-   `npm run dev:extension` to rebuild on every change).
-2. Open `about:debugging#/runtime/this-firefox` and click **Load Temporary Add-on…**
-3. Select `apps/extension/dist/manifest.json`
+   `npm run dev:extension` to rebuild on every change). Both browsers are built; pass
+   `-- --browser=firefox` (or `chrome`) to build one.
+2. Firefox: `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** →
+   `apps/extension/dist/firefox/manifest.json`.
+3. Chrome: `chrome://extensions` → Developer mode → **Load unpacked** → `apps/extension/dist/chrome/`.
 
 `scripts/build.mjs` bundles the four module entries (`background.js`, `popup/popup.js`,
 `dashboard/js/app.js`, `canvas/canvas.jsx`, the one React page) with esbuild, unminified, plus
@@ -22,6 +24,26 @@ only a bundler can resolve.
 everything else that ships: manifest, HTML, CSS, icons, `vendor/`, and the classic scripts named by the
 manifest's content scripts or loaded by a page without `type="module"`. A new module file needs nothing;
 a new classic script must be referenced from the manifest or a page's HTML to be copied.
+
+## Chrome
+The sources are written for Firefox; `scripts/build.mjs` makes the Chrome build from them:
+- **`browser.*` comes from the WebExtension polyfill.** Chrome has only `chrome.*`, and its
+  `runtime.onMessage` cannot answer with a returned Promise, which every handler here does. Each module
+  bundle gets `src/chrome/browser-global.js` injected first, and `vendor/browser-polyfill.min.js` is
+  prepended to the content scripts. Keep writing `browser.*` with Promises.
+- **The manifest is derived** (`chromeManifest`): the background becomes a module service worker, icons
+  are the PNGs in `icons/` (Chrome reads no SVG), `browser_specific_settings` is dropped, and some
+  suggested keys change (`CHROME_SUGGESTED_KEYS`). Edit `manifest.json` only.
+- **The background is a service worker there**: no DOM, no `window`, no dynamic `import()`, and every
+  listener registered synchronously at the top level, as now. The same keep-alive works.
+- **Shortcuts.** Chrome never assigns a suggested key that is one of its own shortcuts: Ctrl+E (so
+  `expand` has no default there) and Alt+Shift+C (`open-canvas` is Alt+Shift+V). Pages take Ctrl+E
+  themselves: the extension pages already did, and on web pages the content script does when
+  `IS_CHROME` (`src/content/init.js`; Ctrl+Shift+E asks first). Chrome has no `commands.update`, so the
+  Shortcuts settings link to `chrome://extensions/shortcuts`.
+- **Chrome is stricter about what it loads.** A content script must be valid UTF-8 without
+  noncharacters (write `\uFFFF`, never the character), and `tabs.query({ url })` cannot match an
+  extension page (filter by `tab.url` instead). Messages are JSON-serialized, not structured-cloned.
 
 ## Architecture
 
@@ -60,12 +82,13 @@ src/background/
   are one-line re-exports of `packages/core/src/*.ts`. Change the TypeScript there, never add a copy here,
   and remember the desktop runs the same code (`npm run test` covers it). Only module code (background,
   pages) can import core; content scripts are classic scripts and cannot.
-- **`browser.*` only, Firefox only.** Background is an ES module (`import`, not `importScripts`).
+- **`browser.*` only, never `chrome.*`.** The Chrome build defines `browser` (see Chrome). Background is
+  an ES module (`import`, not `importScripts`); it must also run as Chrome's service worker.
 - **No innerHTML with dynamic content.** Build DOM with `h()` (`src/ui/dom.js`) or `createElement`.
   KaTeX renders through `katex.render` into a node.
 - **Model output is untrusted.** Links render only for `http(s)`, images render as alt text, memory
   paths are validated in `memory-store.js` (relative, no `..`, `.md` only), grep is literal.
-- **Firefox suspends the background after ~30s idle.** Timers that must survive use `browser.alarms`;
+- **Firefox suspends the background after ~30s idle** (Chrome's service worker likewise). Timers that must survive use `browser.alarms`;
   long work holds `keepAlive()` (`src/background/keep-alive.js`).
 - **Broadcast message types must not collide with request types.** Pages listen for
   `kbStatusChanged`, `memoryUpdated`, `conversationsChanged`, `configChanged`, `settingsChanged`,
@@ -84,7 +107,7 @@ src/background/
   `page-expand` (page context + chain of parent bubbles; the background builds the messages and records
   the expansion for the curator).
 - **Shortcuts:** `expand` (Ctrl+E), `expand-prompted` (Alt+Shift+E) and `open-canvas` (Alt+Shift+C) are
-  commands. `open-canvas`, the page context menu item and the popup's Canvas button send `openPageCanvas`
+  commands (Chrome's defaults differ, see Chrome). `open-canvas`, the page context menu item and the popup's Canvas button send `openPageCanvas`
   to the tab's top frame.
 - **Web chat port:** a canvas over a web chat connects a Port named `delta-web-chat` to the background,
   which pipes it to the top frame of the canvas's own tab (`src/background/web-chat-relay.js`; only the
@@ -225,6 +248,9 @@ Legacy keys migrated and removed on first use: `deltaConfig`, `deltaKbConfig`, `
 
 ## Tooling
 - `npm run build:extension` / `npm run dev:extension` from the root (see above). `dist/` is ignored.
+- Chrome automation: Puppeteer with `pipe: true, enableExtensions: true` and
+  `browser.installExtension('apps/extension/dist/chrome')` (Chrome 137+ ignores `--load-extension`);
+  the service worker is a `service_worker` target, and extension pages open as `chrome-extension://<id>/…`.
 - The extension's own JS has no typecheck, lint or tests, and is not Prettier-formatted (the root
   `.prettierignore` and ESLint config skip it; `scripts/` is linted and formatted). The shared model it
   imports is tested in `packages/core/tests`, the shared canvas in `packages/ui/tests` (both typechecked

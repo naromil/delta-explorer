@@ -285,7 +285,7 @@ export function createSettingsView(host, app) {
       rows.push(h('div.settings-field',
         h('label.settings-label.settings-label--sm', { text: 'Host' }),
         h('input.input', { value: conn.host || DEFAULT_OLLAMA_HOST, spellcheck: false, placeholder: DEFAULT_OLLAMA_HOST, on: { input: (e) => update({ host: e.target.value.trim() }) } }),
-        h('p.settings-hint', { text: 'If requests fail with HTTP 403, Ollama is refusing this extension’s origin: start it with OLLAMA_ORIGINS="moz-extension://*".' })));
+        h('p.settings-hint', { text: `If requests fail with HTTP 403, Ollama is refusing this extension’s origin: start it with OLLAMA_ORIGINS="${new URL(browser.runtime.getURL('')).protocol}//*".` })));
     }
     return h('div.card.connection-card',
       h('div.connection-header', label, h('div.connection-actions', testBtn, deleteBtn)),
@@ -407,8 +407,29 @@ export function createSettingsView(host, app) {
     return parts.join('+');
   }
 
+  /** Chrome lets only its own page change an extension's shortcuts. */
+  function renderBrowserShortcuts(commands) {
+    const rows = COMMANDS.map(({ name, label }) => {
+      const shortcut = commands.find((c) => c.name === name)?.shortcut;
+      return h('div.shortcut-row', h('span.shortcut-label', { text: label }),
+        h('input.input.shortcut-input', { readOnly: true, value: shortcut || '', placeholder: 'Not set' }));
+    });
+    const open = h('button.btn.btn--sm', { type: 'button', text: 'Change shortcuts…', on: { click: () => {
+      browser.tabs.create({ url: 'chrome://extensions/shortcuts' }).catch(() => {});
+    } } });
+    panel.replaceChildren(h('div.card',
+      h('p.settings-hint', { text: 'This browser changes extension shortcuts on its own page. They work in every tab.' }),
+      ...rows,
+      open,
+      h('p.settings-hint', { text: 'In the dashboard: Ctrl+K search, Ctrl+Shift+O new chat, Ctrl+, settings, Esc stops a response.' })));
+  }
+
   async function renderShortcuts() {
     const commands = await browser.commands.getAll().catch(() => []);
+    if (typeof browser.commands.update !== 'function') {
+      renderBrowserShortcuts(commands);
+      return;
+    }
     const rows = COMMANDS.map(({ name, label }) => {
       const command = commands.find((c) => c.name === name);
       const status = h('span.settings-hint');

@@ -108,7 +108,8 @@ browser.commands.onCommand.addListener(async (command) => {
 
 async function openDashboard(hash) {
   const url = DASHBOARD_URL + (hash ? '#' + hash : '');
-  const tabs = await browser.tabs.query({ url: DASHBOARD_URL + '*' });
+  // Filtered here: Chrome's match patterns cannot name an extension page.
+  const tabs = (await browser.tabs.query({})).filter((tab) => tab.url?.startsWith(DASHBOARD_URL));
   if (tabs.length > 0) {
     const tab = tabs[0];
     await browser.tabs.update(tab.id, { active: true, url });

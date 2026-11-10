@@ -1,4 +1,5 @@
-/* Firefox suspends an idle MV3 background page after ~30s, and a pending fetch
+/* Firefox suspends an idle MV3 background page after ~30s (Chrome its service
+ * worker likewise), and a pending fetch
  * does not count as activity. Any extension API call resets the idle timer, so
  * long work (a curator pass, a streamed answer) holds a keep-alive while it
  * runs. Returns a release function; holds are counted. */

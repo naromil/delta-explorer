@@ -1,10 +1,11 @@
-# Delta Explorer for Firefox
+# Delta Explorer for Firefox and Chrome
 
 **An AI helper for learning anything while you browse.** The browser companion to the
 [Delta Explorer](https://github.com/naromil/delta-ai) desktop app: bring your own model, expand any
 text inline, look things up, chat, explore on a canvas, and let it remember how you learn.
 
 ![Firefox 140+](https://img.shields.io/badge/Firefox-140%2B-orange)
+![Chrome 120+](https://img.shields.io/badge/Chrome-120%2B-blue)
 
 ## Features
 
@@ -13,7 +14,7 @@ text inline, look things up, chat, explore on a canvas, and let it remember how 
   Compare / Deeper**. The answer streams in as markdown right where the text was. Answers nest (select
   inside an answer to go deeper), can be regenerated, re-asked, copied, sent to Chat, folded back into
   the text or removed, and come back when you revisit the page. `Ctrl+E` expands the selection;
-  `Alt+Shift+E` asks first. An optional Expand bar can float over every selection.
+  `Alt+Shift+E` asks first (in Chrome, `Ctrl+Shift+E` does too). An optional Expand bar can float over every selection.
 - **Look-up popup.** The toolbar button (`Alt+Shift+D`) asks about the page you are on, with the
   selected text (or, if you choose, the readable page text) as context. Continue any look-up in Chat.
 - **Chat.** Persistent conversations with inline expansions inside answers (selection bar, right-click,
@@ -24,7 +25,7 @@ text inline, look things up, chat, explore on a canvas, and let it remember how 
   expand terms into cards of their own; add notes, frames and labelled connections; link cards into a
   question as context; undo, tidy, outline search, a map, and a full keyboard map (`?`).
 - **Any page as a canvas.** Right-click a page and choose **Explore this page on a canvas**, press
-  `Alt+Shift+C`, or use the look-up's Canvas button. The page's text becomes the first card, links
+  `Alt+Shift+C` (`Alt+Shift+V` in Chrome), or use the look-up's Canvas button. The page's text becomes the first card, links
   included: ask for links and the answer hands back the page's own, ready to click. Every
   conversation that continues it has the page as context, and its terms expand like an answer's. Opening
   it again on the same page brings your canvas back.
@@ -49,16 +50,20 @@ The extension lives in the Delta Explorer monorepo, next to the desktop app it s
 and prompts with (`packages/core`). It needs Node.js 22+ to build.
 
 1. Clone the repository and run `npm install` at its root.
-2. Run `npm run build:extension` (or `npm run dev:extension` to rebuild on every change).
-3. Open `about:debugging#/runtime/this-firefox` in Firefox.
-4. Click **Load Temporary Add-on…** and select `apps/extension/dist/manifest.json`.
+2. Run `npm run build:extension` (or `npm run dev:extension` to rebuild on every change). It builds
+   both browsers: `apps/extension/dist/firefox/` and `apps/extension/dist/chrome/`.
+3. Firefox: open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and select
+   `apps/extension/dist/firefox/manifest.json`.
+4. Chrome (or another Chromium browser): open `chrome://extensions`, turn on **Developer mode**, click
+   **Load unpacked** and select `apps/extension/dist/chrome/`.
 
 Then open the dashboard (the house icon in the look-up, or the add-on's Options) and go to
 **Settings → Models**: add a connection with your API key (or an Ollama host) and assign a model to
 each role.
 
-To package, zip the contents of `apps/extension/dist/` into an `.xpi`. The bundles are not minified,
-so the source submitted for review can be the repository itself.
+To package, zip the contents of `apps/extension/dist/firefox/` into an `.xpi`, or of
+`apps/extension/dist/chrome/` for the Chrome Web Store. The bundles are not minified, so the source
+submitted for review can be the repository itself.
 
 ## Supported providers
 
@@ -91,7 +96,7 @@ always-loaded notes as plain text instead). If Ollama answers HTTP 403, start it
 ## Project structure
 
 ```
-manifest.json            Firefox MV3 manifest
+manifest.json            MV3 manifest, written for Firefox (the build derives Chrome's)
 background.js            Message router, streaming host, KB scheduler (ES module)
 content.js, content.css  Content script entry + inline bubble styles
 src/content/             Page bubbles: anchors, streaming, selection bar, persistence, rehydrate

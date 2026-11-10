@@ -2,7 +2,7 @@
   "name": "@delta/extension",
   "version": "0.2.0",
   "private": true,
-  "description": "Delta Explorer for Firefox: the browser companion to the desktop app.",
+  "description": "Delta Explorer for Firefox and Chrome: the browser companion to the desktop app.",
   "license": "MIT",
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -13,6 +13,7 @@
     "@delta/ui": "*",
     "esbuild": "^0.25.12",
     "react": "^19.2.1",
-    "react-dom": "^19.2.1"
+    "react-dom": "^19.2.1",
+    "webextension-polyfill": "^0.12.0"
   }
 }

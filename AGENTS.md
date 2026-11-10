@@ -5,7 +5,7 @@ A monorepo (npm workspaces) holding two products and the code they share:
 | Workspace          | Path             | What it is                                                            |
 | ------------------ | ---------------- | --------------------------------------------------------------------- |
 | `delta-explorer`   | `apps/desktop`   | Electron desktop app — the main subject of this file                  |
-| `@delta/extension` | `apps/extension` | Firefox MV3 extension; its own guide is `apps/extension/AGENTS.md`    |
+| `@delta/extension` | `apps/extension` | Firefox + Chrome MV3 extension; guide: `apps/extension/AGENTS.md`     |
 | `@delta/core`      | `packages/core`  | Pure TypeScript both apps import: canvas model, rich text, prompts, … |
 | `@delta/ui`        | `packages/ui`    | React UI both apps render: the canvas, markdown answers, expanding    |
 
@@ -23,7 +23,7 @@ are still desktop files under `apps/desktop/src/shared/`.
 Run from the repository root:
 
 - `npm run dev` — Launch the desktop app with HMR (electron-vite)
-- `npm run dev:extension` — Rebuild the extension into `apps/extension/dist` on every change
+- `npm run dev:extension` — Rebuild the extension into `apps/extension/dist/{firefox,chrome}` on every change
 - `npm run typecheck` — `tsc --noEmit` in every workspace (desktop node: `src/main/**`, `src/preload/**`; web: `src/renderer/src/**`; core: `src/**`)
 - `npm run lint` — ESLint over the repo (Prettier-compatible config; `format:check` verifies formatting)
 - `npm run test` — Vitest in every workspace (`packages/core/tests/**`, `packages/ui/tests/**`; `apps/desktop/tests/**`, unit tests + acceptance gates)
