@@ -7,6 +7,8 @@
  * what makes a stopped request unable to land on a turn.
  */
 
+export { generateRequestId } from '@delta/ui/lib/request-id'
+
 export type PendingKind = 'send' | 'expand'
 
 export interface PendingRequest {
@@ -25,10 +27,6 @@ export interface RequestBookkeeping {
 export interface RequestDrain {
   book: RequestBookkeeping
   requestIds: string[]
-}
-
-export function generateRequestId(): string {
-  return `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
 export function createRequests(): RequestBookkeeping {

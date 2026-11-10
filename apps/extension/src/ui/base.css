@@ -27,6 +27,34 @@
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   color-scheme: dark;
+  /* Tokens the shared canvas and answer styles (@delta/ui) read. */
+  --text-muted: var(--text-3);
+  --error: var(--danger);
+  --accent-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  --focus-ring-inset: 0 0 0 2px var(--accent);
+  --radius-pill: 999px;
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --z-menu: 1000;
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --shadow-2: 0 6px 22px rgba(0, 0, 0, 0.22);
+  --shadow-3: 0 18px 48px rgba(0, 0, 0, 0.42);
+  --canvas-red: #d98a80;
+  --canvas-amber: #d9b36c;
+  --canvas-green: #8fbf8c;
+  --canvas-teal: #7fc0bb;
+  --canvas-blue: #88aedb;
+  --canvas-violet: #b49ae0;
+  --code-comment: rgba(228, 230, 240, 0.5);
+  --code-keyword: #c3a6e8;
+  --code-string: #9ccc9c;
+  --code-number: #e0b07a;
+  --code-title: #8fb8e8;
+  --code-attr: #e39a9a;
+  --code-meta: #7fc4c4;
 }
 
 @media (prefers-color-scheme: light) {
@@ -52,6 +80,22 @@
     --frame-border: rgba(63, 100, 151, 0.3);
     --shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
     color-scheme: light;
+    --shadow-1: 0 1px 2px rgba(30, 32, 50, 0.07);
+    --shadow-2: 0 6px 22px rgba(30, 32, 50, 0.09);
+    --shadow-3: 0 18px 48px rgba(30, 32, 50, 0.16);
+    --canvas-red: #b5564a;
+    --canvas-amber: #a67c23;
+    --canvas-green: #4d8350;
+    --canvas-teal: #3a817c;
+    --canvas-blue: #40709f;
+    --canvas-violet: #7557a8;
+    --code-comment: rgba(38, 39, 52, 0.7);
+    --code-keyword: #633a9a;
+    --code-string: #2a6030;
+    --code-number: #87480f;
+    --code-title: #25558f;
+    --code-attr: #8f3535;
+    --code-meta: #165f64;
   }
 }
 
@@ -77,6 +121,22 @@
   --frame-border: rgba(63, 100, 151, 0.3);
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
   color-scheme: light;
+  --shadow-1: 0 1px 2px rgba(30, 32, 50, 0.07);
+  --shadow-2: 0 6px 22px rgba(30, 32, 50, 0.09);
+  --shadow-3: 0 18px 48px rgba(30, 32, 50, 0.16);
+  --canvas-red: #b5564a;
+  --canvas-amber: #a67c23;
+  --canvas-green: #4d8350;
+  --canvas-teal: #3a817c;
+  --canvas-blue: #40709f;
+  --canvas-violet: #7557a8;
+  --code-comment: rgba(38, 39, 52, 0.7);
+  --code-keyword: #633a9a;
+  --code-string: #2a6030;
+  --code-number: #87480f;
+  --code-title: #25558f;
+  --code-attr: #8f3535;
+  --code-meta: #165f64;
 }
 
 * { box-sizing: border-box; }

@@ -1,71 +1,69 @@
-/* Canvas view: an infinite plane of answer rectangles (src/ui/canvas/board.js).
- * Routes: #canvas (the newest canvas), #canvas/new, #canvas/<id>. */
+/* Canvas view: the canvas page (canvas/canvas.html, the shared React canvas) in a frame.
+ * Routes: #canvas (the newest canvas), #canvas/new, #canvas/<id>.
+ *
+ * A frame, because the shared canvas styles the same class names (`.frame`, `.md-*`, menus)
+ * as this page's chat, in its own way. The two talk by `postMessage` on this extension's origin:
+ * the dashboard sends `delta-canvas-open`; the frame asks for search, a conversation or a
+ * dashboard shortcut, and says which canvas it shows. */
 
-import { CanvasBoard } from '../../src/ui/canvas/board.js';
-import { CanvasStore } from '../../src/ui/canvas/store.js';
-import { onBroadcast, rpc } from '../../src/ui/api.js';
-import { toast } from '../../src/ui/dom.js';
+import { h, toast } from '../../src/ui/dom.js';
 
 export function createCanvasView(host, app) {
   host.classList.add('view--canvas');
-  const store = new CanvasStore();
-  store.onSaveError = (err) => toast(`This canvas could not be saved: ${err.message || err}`);
-  const board = new CanvasBoard({
-    host,
-    store,
-    onOpenSearch: () => app.search(),
-    onOpenConversation: (meta) => app.openConversation(meta)
-  });
-
   let shownId = null;
-  // Keep the URL on the open canvas, once it is saved, without reloading it.
-  store.subscribe((change) => {
-    if (host.hidden || !(change.meta || change.replaced || change.content)) return;
-    const id = store.meta.persisted || store.cards.length > 0 ? store.canvasId : null;
-    if (id === shownId) return;
-    shownId = id;
-    history.replaceState(null, '', id ? `#canvas/${id}` : '#canvas');
-  });
+  let loaded = false;
+  let pendingArg = null;
 
-  async function open(arg) {
-    if (arg === 'new') {
-      if (store.cards.length > 0 || store.frames.length > 0 || !store.loaded) store.newCanvas();
-      history.replaceState(null, '', '#canvas');
-      return;
-    }
-    if (arg) {
-      if (arg === store.canvasId && store.loaded) return;
-      if (!(await store.openCanvas(arg))) {
-        toast('That canvas no longer exists.');
-        if (!store.loaded) store.newCanvas();
-      } else {
-        board.fitAll();
-      }
-      return;
-    }
-    if (store.loaded) return;
-    const list = await rpc('listConversations').catch(() => []);
-    const newest = list.find((item) => item.source === 'canvas');
-    if (!newest || !(await store.openCanvas(newest.id))) store.newCanvas();
+  const frame = h('iframe.canvas-frame', { title: 'Canvas', src: '../canvas/canvas.html?embed=dashboard' });
+  host.appendChild(frame);
+
+  function post(message) {
+    frame.contentWindow?.postMessage(message, location.origin);
   }
 
-  // Another tab deleted the canvas open here.
-  onBroadcast('conversationsChanged', (msg) => {
-    if (msg.deleted && msg.deleted === store.canvasId && store.meta.persisted) store.newCanvas();
+  function open(arg) {
+    // The frame opens the newest canvas itself on its first load.
+    if (!loaded) {
+      pendingArg = arg;
+      return;
+    }
+    if (arg === 'new') history.replaceState(null, '', '#canvas');
+    if (arg) post({ type: 'delta-canvas-open', arg });
+  }
+
+  frame.addEventListener('load', () => {
+    loaded = true;
+    if (pendingArg) open(pendingArg);
+    pendingArg = null;
   });
 
-  window.addEventListener('pagehide', () => store.flushSave());
+  window.addEventListener('message', (e) => {
+    if (e.source !== frame.contentWindow || e.origin !== location.origin) return;
+    const msg = e.data || {};
+    if (msg.type === 'delta-canvas-shown') {
+      shownId = msg.id || null;
+      if (!host.hidden) history.replaceState(null, '', shownId ? `#canvas/${shownId}` : '#canvas');
+    } else if (msg.type === 'delta-canvas-missing') {
+      toast('That canvas no longer exists.');
+    } else if (msg.type === 'delta-open-search') {
+      app.search();
+    } else if (msg.type === 'delta-open-conversation') {
+      app.openConversation(msg.target);
+    } else if (msg.type === 'delta-dashboard-key') {
+      if (msg.key === 'k') app.search();
+      else if (msg.key === 'o') app.newChat();
+      else if (msg.key === ',') app.navigate('settings');
+    }
+  });
 
   return {
     show(arg) {
-      board.setActive(true);
       open(arg);
+      frame.focus();
     },
-    hide() {
-      board.setActive(false);
-      store.flushSave();
-    },
-    currentId: () => (store.meta.persisted ? store.canvasId : null),
-    handleExpandShortcut: (prompted) => board.handleExpandShortcut(prompted)
+    hide() {},
+    currentId: () => shownId,
+    // The frame hears the shortcut itself (src/ui/ui-host.js).
+    handleExpandShortcut() {}
   };
 }

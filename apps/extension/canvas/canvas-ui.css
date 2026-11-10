@@ -1,0 +1,7 @@
+/* The shared canvas's styles, bundled by scripts/build.mjs with KaTeX's (fonts as files).
+ * The tokens they read are in src/ui/base.css. */
+@import 'katex/dist/katex.min.css';
+@import '@delta/ui/styles/attachments.css';
+@import '@delta/ui/styles/markdown.css';
+@import '@delta/ui/styles/expand.css';
+@import '@delta/ui/styles/canvas.css';
