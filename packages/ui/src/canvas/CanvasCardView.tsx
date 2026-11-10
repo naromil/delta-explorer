@@ -11,6 +11,7 @@ import { flattenMarkdown } from '@delta/core/rich-text'
 import Markdown from '../conversation/Markdown'
 import { OriginalText } from '../conversation/ExpansionFrame'
 import { nextPinned } from '../lib/stick-to-bottom'
+import { safeHref } from '../lib/safe-url'
 
 export type CanvasCardStatus = 'streaming' | 'done' | 'failed'
 
@@ -266,6 +267,8 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
     card.kind === 'expansion' || (card.kind === 'message' && card.parentId !== undefined)
   // A page is the text it was opened on: nothing to edit or answer again.
   const answered = card.kind !== 'page'
+  const pageUrl = card.kind === 'page' ? safeHref(card.url) : undefined
+  const copyLabel = answered ? 'Copy answer' : 'Copy the page text'
   const label = question ? `${caption}: ${question}` : caption
 
   return (
@@ -286,7 +289,7 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
       onClick={(e) => onCardClick(e, card.id)}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget || e.ctrlKey || e.metaKey || e.altKey) return
-        if ((e.key === 'e' || e.key === 'E') && status !== 'streaming' && !collapsed) {
+        if ((e.key === 'e' || e.key === 'E') && answered && status !== 'streaming' && !collapsed) {
           e.preventDefault()
           setEditing(true)
           return
@@ -345,12 +348,28 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
                 Retry
               </button>
             ) : null}
+            {pageUrl ? (
+              <a
+                className="canvas-icon-btn"
+                href={pageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Open ${pageUrl}`}
+                aria-label="Open the page"
+              >
+                <ActionIcon>
+                  <path d="M14 4h6v6" />
+                  <path d="M20 4l-9 9" />
+                  <path d="M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5" />
+                </ActionIcon>
+              </a>
+            ) : null}
             {answer !== '' ? (
               <button
                 type="button"
                 className="canvas-icon-btn"
-                aria-label={copied ? 'Copied' : 'Copy answer'}
-                title={copied ? 'Copied' : 'Copy answer'}
+                aria-label={copied ? 'Copied' : copyLabel}
+                title={copied ? 'Copied' : copyLabel}
                 onClick={() => void handleCopy()}
               >
                 <ActionIcon>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CanvasLinkContext, CanvasRect, CanvasSide } from '@delta/core/canvas'
 import { estimateWords } from '@delta/core/canvas'
+import { LOOKUP_DEFAULT_QUERY } from '@delta/core/prompts'
 import { bodyCharWidth } from '../lib/char-width'
 
 export interface CanvasDraftSession {
@@ -36,6 +37,8 @@ interface CanvasDraftProps {
   linkTarget: boolean
   /** Why it cannot be sent yet (the answer it continues is still being written), or null. */
   waiting: string | null
+  /** It continues a web page, so a blank question asks for a summary. */
+  onPage: boolean
   onParentChange: (parentId: string | undefined) => void
   /** Typing in a draft that is off screen brings it back. */
   onActivity: () => void
@@ -115,6 +118,7 @@ function CanvasDraft({
   contextClipped,
   linkTarget,
   waiting,
+  onPage,
   onParentChange,
   onActivity,
   onContextMode,
@@ -127,7 +131,8 @@ function CanvasDraft({
   const [question, setQuestion] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const trimmed = question.trim()
-  const canSend = trimmed !== '' && waiting === null
+  const asked = trimmed === '' && onPage ? LOOKUP_DEFAULT_QUERY : trimmed
+  const canSend = asked !== '' && waiting === null
 
   // Not autoFocus: that scrolls the clipped plane, which only the viewport may move.
   useEffect(() => {
@@ -135,7 +140,7 @@ function CanvasDraft({
   }, [])
 
   const submit = (): void => {
-    if (canSend) onSubmit(trimmed)
+    if (canSend) onSubmit(asked)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -205,7 +210,9 @@ function CanvasDraft({
           ref={inputRef}
           className="canvas-draft-input"
           aria-label="Question"
-          placeholder="What should go here?"
+          placeholder={
+            onPage ? 'Ask about this page, or press Enter to summarize it' : 'What should go here?'
+          }
           value={question}
           onChange={(e) => {
             setQuestion(e.target.value)

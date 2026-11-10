@@ -57,6 +57,11 @@ export interface UiHost {
   /** Stops a stream; it still ends with its terminal event, carrying the partial text. */
   cancel: (requestId: string) => void
   subscribe: (listener: StreamListener) => () => void
+  /**
+   * Reports Ctrl/Cmd+E (`prompted` with Shift) where the app takes the key before the page
+   * sees it, as the extension's commands do. The desktop leaves it out: the page gets the key.
+   */
+  onExpandShortcut?: (listener: (prompted: boolean) => void) => () => void
 }
 
 const HostContext = createContext<UiHost | null>(null)

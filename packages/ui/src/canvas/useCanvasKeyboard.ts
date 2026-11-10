@@ -17,6 +17,8 @@ export interface CanvasKeyboardActions {
   cancelDraft: (() => void) | null
   clearSelection: () => void
   resetTool: (() => void) | null
+  /** Esc with nothing left to cancel, such as closing the extension's canvas overlay. */
+  escapeIdle?: (() => void) | null
   toggleHelp: () => void
   holdSpace: (held: boolean) => void
   chooseTool: (tool: CanvasTool) => void
@@ -109,7 +111,9 @@ function handleEscape(actions: CanvasKeyboardActions): void {
     actions.closeHelp ??
     actions.cancelPlacing ??
     actions.cancelDraft ??
-    (actions.selectedRef.current.size > 0 ? actions.clearSelection : actions.resetTool)
+    (actions.selectedRef.current.size > 0
+      ? actions.clearSelection
+      : (actions.resetTool ?? actions.escapeIdle))
   cancel?.()
 }
 

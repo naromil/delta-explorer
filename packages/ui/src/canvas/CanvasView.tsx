@@ -275,13 +275,25 @@ const ARROW_SIDES: Readonly<Record<string, CanvasSide>> = {
 /** Keeps a run of wheel events on what it started moving as things pass under the pointer. */
 const WHEEL_LATCH_MS = 160
 
+export interface CanvasViewProps {
+  canvas: Canvas
+  /** "Search all conversations…" in the history menu; left out where there is no search. */
+  onOpenSearch?: () => void
+  /** Buttons after New and Export, such as the extension overlay's Open in tab and close. */
+  toolbarExtras?: React.ReactNode
+  /** Items after "New canvas" in the history menu. */
+  historyExtras?: ContextMenuItem[]
+  /** Esc with nothing left to cancel. */
+  onEscapeIdle?: () => void
+}
+
 function CanvasBoard({
   canvas,
-  onOpenSearch
-}: {
-  canvas: Canvas
-  onOpenSearch: () => void
-}): React.JSX.Element {
+  onOpenSearch,
+  toolbarExtras,
+  historyExtras,
+  onEscapeIdle
+}: CanvasViewProps): React.JSX.Element {
   const host = useUiHost()
   const { cards, frames, links, stack, viewport, turns, setViewport, moveItems, raiseCards } =
     canvas
@@ -1491,12 +1503,13 @@ function CanvasBoard({
         showNotice(NO_CONTINUE_FAILED)
         return
       }
-      const full = openCardSize(card)
+      // A page is long; what follows it is a message of the usual size.
+      const full = card.kind === 'page' ? DEFAULT_MESSAGE_SIZE : openCardSize(card)
       const side =
         sides.find((item) => adjacentSlot(card, item, cardsRef.current, full) !== null) ?? sides[0]
       currentIdRef.current = id
       openDraft({
-        rect: { ...card.rect, ...openCardSize(card) },
+        rect: { ...card.rect, ...full },
         parentId: id,
         side,
         sessions: [id]
@@ -1504,6 +1517,15 @@ function CanvasBoard({
     },
     [openDraft, showNotice]
   )
+
+  /* A page just put down by `startFromPage` gets its question box beside it; following the
+     draft brings both on screen. */
+  const { startedPageId, clearStartedPage } = canvas
+  useEffect(() => {
+    if (startedPageId === null) return
+    clearStartedPage()
+    continueCard(startedPageId, ['right'])
+  }, [clearStartedPage, continueCard, startedPageId])
 
   /**
    * A question about what is selected: a single answer simply continues, as its history
@@ -1811,6 +1833,7 @@ function CanvasBoard({
     cancelDraft: draft ? () => setDraft(null) : null,
     clearSelection: () => select([]),
     resetTool: tool !== 'select' ? () => chooseTool('select') : null,
+    escapeIdle: onEscapeIdle ?? null,
     toggleHelp: () => setHelpOpen((open) => !open),
     holdSpace: setSpaceHeld,
     chooseTool,
@@ -2040,6 +2063,7 @@ function CanvasBoard({
       label: 'History',
       items: [
         { label: 'New canvas', onSelect: canvas.newCanvas },
+        ...(historyExtras ?? []),
         ...sessions
           .filter((item) => item.source === 'canvas' && item.id !== canvas.canvasId)
           .map((item) => ({
@@ -2052,7 +2076,7 @@ function CanvasBoard({
           detail: `${CONVERSATION_SOURCE_LABELS[item.source]} · ${formatRelativeTime(item.updatedAt)}`,
           onSelect: () => host.openConversation({ id: item.id, source: item.source })
         })),
-        ...(others.length > HISTORY_OTHERS_LIMIT
+        ...(onOpenSearch && others.length > HISTORY_OTHERS_LIMIT
           ? [{ label: 'Search all conversations…', onSelect: onOpenSearch }]
           : []),
         ...(cards.length > 0
@@ -2592,6 +2616,7 @@ function CanvasBoard({
                       ? WAITING_CONTEXT
                       : null
               }
+              onPage={draftParent?.kind === 'page'}
               onParentChange={changeDraftParent}
               onActivity={refollow}
               onContextMode={setDraftContextMode}
@@ -2740,6 +2765,7 @@ function CanvasBoard({
               ? 'Saved'
               : 'Export'}
         </button>
+        {toolbarExtras}
       </div>
 
       {minimapOpen && cards.length + frames.length > 0 ? (
@@ -2913,19 +2939,14 @@ function CanvasBoard({
 }
 
 /** Remounts the board per canvas, so a half-drawn rectangle never carries over. */
-function CanvasView({
-  canvas,
-  onOpenSearch
-}: {
-  canvas: Canvas
-  onOpenSearch: () => void
-}): React.JSX.Element {
+function CanvasView(props: CanvasViewProps): React.JSX.Element {
+  const { canvas } = props
   const { ensureLoaded, loaded, canvasId } = canvas
   useEffect(() => {
     ensureLoaded()
   }, [ensureLoaded])
   if (!loaded) return <div className="canvas-view" />
-  return <CanvasBoard key={canvasId} canvas={canvas} onOpenSearch={onOpenSearch} />
+  return <CanvasBoard key={canvasId} {...props} />
 }
 
 export default CanvasView

@@ -19,33 +19,23 @@ import type {
   CanvasViewport
 } from '@delta/core/canvas'
 import {
+  DEFAULT_PAGE_SIZE,
   DEFAULT_VIEWPORT,
   cascadeCardIds,
-  estimateWords,
   fitCardHeight,
   raisedStack,
   normalizeCanvasLayout,
   setCardCollapsed,
-  turnsThroughCard,
-  withCanvasContext,
-  withCanvasFit,
-  withoutField,
-  withCanvasSources
+  withoutField
 } from '@delta/core/canvas'
 import type { CanvasFrameUpdate } from '@delta/core/canvas-arrange'
 import { duplicateSelection } from '@delta/core/canvas-arrange'
 import type { CanvasPatch, CanvasPatchDirection, CanvasSnapshot } from '@delta/core/canvas-history'
 import { applyCanvasPatch, diffCanvas } from '@delta/core/canvas-history'
 import type { CanvasContextLink } from '@delta/core/canvas-context'
-import { requestContext } from '@delta/core/canvas-context'
-import { sourceExcerpts } from '@delta/core/canvas-selection'
 import type { ConversationMeta, ProviderMessage, Turn } from '@delta/core/conversation'
-import {
-  CONVERSATION_TITLE_MAX_LENGTH,
-  buildConversationTitle,
-  serializeForChat
-} from '@delta/core/conversation'
-import { buildExpandRequest } from '@delta/core/expand-prompt'
+import { CONVERSATION_TITLE_MAX_LENGTH, buildConversationTitle } from '@delta/core/conversation'
+import { expansionCardRequest, messageCardRequest } from '@delta/core/canvas-request'
 import type { ExpansionTarget } from '@delta/core/rich-text'
 import {
   applyExpansionChunk,
@@ -53,7 +43,6 @@ import {
   expansionSubtreeIds,
   finalizeTurns,
   findExpansionInTurns,
-  flattenMarkdown,
   insertExpansionInTurns,
   maxExpansionId,
   removeExpansionInTurns,
@@ -70,6 +59,8 @@ import type { ExportResult } from '../host'
 const SAVE_DELAY_MS = 300
 const UNTITLED = 'Untitled canvas'
 const HISTORY_LIMIT = 100
+/** Page text kept on a page card; every session that continues it sends this much. */
+const PAGE_TEXT_LIMIT = 21_000
 
 interface CanvasDoc {
   turns: Turn[]
@@ -95,6 +86,13 @@ export interface CanvasCardUpdate {
 
 /** What undo or redo did, with the reason when it could not. */
 export type CanvasHistoryStep = { ok: true; label: string } | { ok: false; reason: string }
+
+/** A web page to put on the canvas as a card (the extension's page canvas). */
+export interface CanvasPageInput {
+  text: string
+  title: string
+  url: string
+}
 
 export interface CanvasExpandPlacement {
   hostId: string
@@ -124,10 +122,6 @@ function newMeta(): CanvasMeta {
   }
 }
 
-function captionLength(text: string): number {
-  return flattenMarkdown(text).length
-}
-
 function requestBelongsTo(request: PendingRequest, card: CanvasCard): boolean {
   if (card.kind === 'note' || card.kind === 'page') return false
   return card.kind === 'message'
@@ -155,10 +149,18 @@ export function useCanvas(): {
   streamingTurnIds: ReadonlySet<number>
   /** Cards whose height should be fitted to their answer the next time they are on screen. */
   fitCardIds: ReadonlySet<string>
+  /** The page `startFromPage` just put down, until the board has opened a question beside it. */
+  startedPageId: string | null
   ensureLoaded: () => void
   refreshSessions: () => Promise<ConversationMeta[]>
   newCanvas: () => void
-  openCanvas: (id: string) => void
+  /** A fresh canvas holding a web page; the board then opens a question beside it. */
+  startFromPage: (page: CanvasPageInput) => void
+  clearStartedPage: () => void
+  /** Resolves false when there is no such canvas, which leaves the open one as it was. */
+  openCanvas: (id: string) => Promise<boolean>
+  /** Writes pending changes now, before something else reads the stored record. */
+  flushSave: () => Promise<void>
   deleteCanvas: () => void
   rename: (title: string) => void
   setViewport: (viewport: CanvasViewport) => void
@@ -193,6 +195,8 @@ export function useCanvas(): {
     sources?: readonly string[],
     context?: readonly CanvasContextLink[]
   ) => string
+  /** Puts a page on the canvas as the first context of every session continuing it. */
+  addPage: (rect: CanvasRect | undefined, page: CanvasPageInput) => string
   expand: (
     turnId: number,
     target: ExpansionTarget,
@@ -212,6 +216,7 @@ export function useCanvas(): {
   const [meta, setMeta] = useState<CanvasMeta>(newMeta)
   const [streamingTurnIds, setStreamingTurnIds] = useState<ReadonlySet<number>>(new Set())
   const [fitCardIds, setFitCardIds] = useState<ReadonlySet<string>>(new Set())
+  const [startedPageId, setStartedPageId] = useState<string | null>(null)
 
   // Requests start from event handlers and must see the newest state at once.
   const docRef = useRef(doc)
@@ -382,21 +387,7 @@ export function useCanvas(): {
     (card: CanvasCard): void => {
       if (card.kind !== 'message') return
       const { turns, layout } = docRef.current
-      const question = turns.find((turn) => turn.id === card.userTurnId)
-      // The answer being written is blank, which serialization leaves out.
-      const path = turnsThroughCard(layout.cards, turns, card.id)
-      const sources = sourceExcerpts(layout.cards, turns, card.sources ?? [])
-      const context = requestContext(layout.cards, layout.links, turns, card.id, card.sources ?? [])
-      const messages = withCanvasContext(
-        withCanvasSources(serializeForChat({ turns: path }, 'chat'), sources),
-        context
-      )
-      const words = estimateWords(
-        card.rect,
-        captionLength(question?.content ?? ''),
-        bodyCharWidth()
-      )
-      startSend(card, withCanvasFit(messages, words))
+      startSend(card, messageCardRequest(layout.cards, layout.links, turns, card, bodyCharWidth()))
     },
     [startSend]
   )
@@ -410,23 +401,16 @@ export function useCanvas(): {
       caption: string
     ): ProviderMessage[] | null => {
       const { turns, layout } = docRef.current
-      const message = layout.cards.find(
-        (card) => card.kind === 'message' && card.turnId === turn.id
-      )
-      if (!message) return null
-      const messages = buildExpandRequest(
-        { turns: turnsThroughCard(layout.cards, turns, message.id) },
+      return expansionCardRequest(
+        layout.cards,
+        layout.links,
+        turns,
         turn,
-        target.parentExpansionId,
         target,
-        'chat',
-        prompt
-      )
-      if (!messages) return null
-      const context = requestContext(layout.cards, layout.links, turns, message.id)
-      return withCanvasFit(
-        withCanvasContext(messages, context),
-        estimateWords(rect, captionLength(caption), bodyCharWidth())
+        prompt,
+        rect,
+        caption,
+        bodyCharWidth()
       )
     },
     []
@@ -530,6 +514,40 @@ export function useCanvas(): {
       return card.id
     },
     [requestSave, sendCard, updateDoc, updateMeta]
+  )
+
+  const addPage = useCallback(
+    (rect: CanvasRect | undefined, page: CanvasPageInput): string => {
+      const turnId = nextTurnId++
+      const card: CanvasCard = {
+        kind: 'page',
+        id: crypto.randomUUID(),
+        rect: rect ?? { x: 0, y: 0, ...DEFAULT_PAGE_SIZE },
+        turnId,
+        title: page.title.slice(0, 300),
+        url: page.url.slice(0, 2000)
+      }
+      if (metaRef.current.title === UNTITLED) {
+        updateMeta({ title: buildConversationTitle(card.title || card.url || 'Web page') })
+      }
+      recorded('Add page', () => {
+        updateDoc((prev) => ({
+          turns: [
+            ...prev.turns,
+            {
+              id: turnId,
+              role: 'user',
+              content: page.text.slice(0, PAGE_TEXT_LIMIT),
+              expansions: []
+            }
+          ],
+          layout: { ...prev.layout, cards: [...prev.layout.cards, card] }
+        }))
+      })
+      requestSave(true)
+      return card.id
+    },
+    [recorded, requestSave, updateDoc, updateMeta]
   )
 
   const stopCard = useCallback(
@@ -977,18 +995,32 @@ export function useCanvas(): {
     void refreshSessions()
   }, [refreshSessions, replaceDoc])
 
+  const startFromPage = useCallback(
+    (page: CanvasPageInput): void => {
+      // Counts as loaded: the newest canvas must not be opened over it.
+      loadStartedRef.current = true
+      replaceDoc(emptyDoc(), newMeta())
+      setStartedPageId(addPage(undefined, page))
+      setLoaded(true)
+      void refreshSessions()
+    },
+    [addPage, refreshSessions, replaceDoc]
+  )
+
+  const clearStartedPage = useCallback((): void => setStartedPageId(null), [])
+
   const openCanvas = useCallback(
-    (id: string): void => {
+    (id: string): Promise<boolean> => {
       // Opened from another view's history: the first visit must not pick the newest instead.
       if (!loadStartedRef.current) {
         loadStartedRef.current = true
         void refreshSessions()
       }
-      void host.loadConversation(id).then((record) => {
+      return host.loadConversation(id).then((record) => {
         if (!record || record.source !== 'canvas') {
           void refreshSessions()
           setLoaded(true)
-          return
+          return false
         }
         const turns = finalizeTurns(record.state.turns)
         replaceDoc(
@@ -1003,6 +1035,7 @@ export function useCanvas(): {
           }
         )
         setLoaded(true)
+        return true
       })
     },
     [host, refreshSessions, replaceDoc]
@@ -1024,7 +1057,7 @@ export function useCanvas(): {
       .then((list) => {
         setSessions(list)
         const newest = list.find((item) => item.source === 'canvas')
-        if (newest) openCanvas(newest.id)
+        if (newest) void openCanvas(newest.id)
         else setLoaded(true)
       })
       .catch((err: unknown) => {
@@ -1112,10 +1145,14 @@ export function useCanvas(): {
     redoLabel: historyLabels.redo,
     streamingTurnIds,
     fitCardIds,
+    startedPageId,
     ensureLoaded,
     refreshSessions,
     newCanvas,
+    startFromPage,
+    clearStartedPage,
     openCanvas,
+    flushSave,
     deleteCanvas,
     rename,
     setViewport,
@@ -1138,6 +1175,7 @@ export function useCanvas(): {
     fitCard,
     exportCanvas,
     ask,
+    addPage,
     expand,
     stopCard,
     regenerateCard,

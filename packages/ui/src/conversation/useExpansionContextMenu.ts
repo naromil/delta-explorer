@@ -10,6 +10,7 @@ import {
   validateExpansionTarget
 } from '@delta/core/rich-text'
 import { isTermSelection } from '@delta/core/prompts'
+import { useUiHost } from '../host'
 import { isEditableTarget } from '../lib/editable'
 import { anchoredRange, isAnchoredRange } from '../lib/markdown'
 import type { ContextMenuItem, ContextMenuState } from './ContextMenu'
@@ -321,6 +322,7 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
   closeExpandPrompt: () => void
   dismissNotice: () => void
 } {
+  const host = useUiHost()
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null)
   const [expandPrompt, setExpandPrompt] = useState<ExpandPromptState | null>(null)
   const [selectionBar, setSelectionBar] = useState<ExpandSelectionBarState | null>(null)
@@ -649,23 +651,31 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
       setSelectionBar((prev) => (prev && position ? { ...prev, ...position } : null))
     }
 
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 'e') return
+    /** Ctrl/Cmd+E expands the selection; with Shift it asks first. Returns whether it acted. */
+    const runShortcut = (prompted: boolean): boolean => {
       const live = readLiveSelection(turnsRef.current)
-      if (!live) return
-      e.preventDefault()
+      if (!live) return false
       if (!live.resolved.ok) {
         showNotice(refusalMessage(live.resolved.reason))
-        return
+        return true
       }
       const pending = pendingFromLive(live)
-      if (e.shiftKey) {
+      if (prompted) {
         const position = selectionBarPosition(live.range)
         openPrompt(pending, { x: position?.x ?? 8, y: (position?.bottom ?? 8) + 6 })
       } else {
         submitLive(pending)
       }
+      return true
     }
+
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 'e') return
+      if (runShortcut(e.shiftKey)) e.preventDefault()
+    }
+
+    // Where the app takes the key itself (the extension's commands), it reports it instead.
+    const stopShortcuts = host.onExpandShortcut?.((prompted) => void runShortcut(prompted))
 
     document.addEventListener('mouseup', handleMouseUp)
     document.addEventListener('keyup', handleKeyUp)
@@ -678,8 +688,9 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
       document.removeEventListener('selectionchange', handleSelectionChange)
       document.removeEventListener('scroll', handleScroll, true)
       window.removeEventListener('keydown', handleKeyDown)
+      stopShortcuts?.()
     }
-  }, [refreshSelectionBar, pendingFromLive, submitLive, openPrompt, showNotice])
+  }, [host, refreshSelectionBar, pendingFromLive, submitLive, openPrompt, showNotice])
 
   /* ---- Frame actions ---- */
 

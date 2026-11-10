@@ -22,6 +22,7 @@ import type { ExpansionNode } from '@delta/core/rich-text'
 import { isSameRange } from '@delta/core/rich-text'
 import { highlightCode } from '../lib/highlight'
 import { renderMath } from '../lib/math'
+import { safeHref } from '../lib/safe-url'
 import { EXPANSION_NODE, SOURCED_TEXT, isDisplayMath, prepareMarkdownTree } from '../lib/markdown'
 import type { MarkdownNode } from '../lib/markdown'
 
@@ -86,16 +87,6 @@ type JsxOptions = Parameters<typeof toJsxRuntime>[1]
 interface AnchorProps {
   href?: string
   children?: React.ReactNode
-}
-
-/** Matches `isSafeExternalUrl` in `window-guards.ts`, the check that actually opens a link. */
-const SAFE_PROTOCOL = /^https?:/i
-
-/** Model output is untrusted: only absolute web URLs may become links. */
-function safeHref(href: string | undefined): string | undefined {
-  if (!href) return undefined
-  const value = href.trim()
-  return SAFE_PROTOCOL.test(value) ? value : undefined
 }
 
 /**
