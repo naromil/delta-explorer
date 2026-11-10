@@ -22,25 +22,32 @@ var WEB_CHAT_FIRST_WORD_MS = 90000;
 var WEB_CHAT_STALL_MS = 180000;
 /** Once the site stops answering, how long to look for the reply before saying it cannot be read. */
 var WEB_CHAT_NO_REPLY_MS = 20000;
+/** Reading the chat waits until every answer has text that holds this long, at most the second. */
+var WEB_CHAT_READ_STEADY_MS = 600;
+var WEB_CHAT_READ_WAIT_MS = 8000;
 
 var WEB_CHAT_SITES = [
   {
     id: 'chatgpt',
     name: 'ChatGPT',
     hosts: ['chatgpt.com', 'chat.openai.com'],
-    user: '[data-message-author-role="user"]',
-    assistant: '[data-message-author-role="assistant"]',
-    answerBody: '.markdown',
+    // An address naming a saved conversation, whose messages are still on their way after load.
+    conversationPath: /\/c\/[\w-]+/,
+    // 2026-11 markup first (bubble / selection message id), then the older author-role one.
+    user: '[data-user-message-bubble], [data-message-author-role="user"]',
+    assistant: '[data-chatgpt-selection-message-id], [data-message-author-role="assistant"]',
+    answerBody: '[data-markdown-copy="contents"], .markdown',
     questionBody: '.whitespace-pre-wrap',
     fillers: ['typing', 'paste'],
-    composer: ['#prompt-textarea', 'div.ProseMirror[contenteditable="true"]', 'form textarea'],
-    send: ['button[data-testid="send-button"]', '#composer-submit-button', 'button[aria-label*="Send"]'],
-    stop: ['button[data-testid="stop-button"]', 'button[aria-label*="Stop"]']
+    composer: ['div.ProseMirror[contenteditable="true"]', '#prompt-textarea', 'form textarea'],
+    send: ['form button[type="submit"][aria-label="Send"]', 'button[data-testid="send-button"]', '#composer-submit-button', 'button[aria-label*="Send"]'],
+    stop: ['form button[aria-label="Stop"]', 'button[data-testid="stop-button"]', 'button[aria-label*="Stop"]']
   },
   {
     id: 'claude',
     name: 'Claude',
     hosts: ['claude.ai'],
+    conversationPath: /^\/chat\/[\w-]+/,
     user: '[data-testid="user-message"]',
     assistant: '.font-claude-response, .font-claude-message',
     answerBody: null,
@@ -55,6 +62,7 @@ var WEB_CHAT_SITES = [
     id: 'gemini',
     name: 'Gemini',
     hosts: ['gemini.google.com'],
+    conversationPath: /^\/(app|gem\/[^/]+)\/\w+/,
     user: 'user-query',
     assistant: 'model-response',
     answerBody: '.markdown, message-content',
@@ -188,6 +196,43 @@ function webChatGenerating(site) {
   if (site.streaming && document.querySelector(site.streaming)) return true;
   return !!webChatFirst(site.stop);
 }
+
+/**
+ * `readWebChat()` once the page shows every answer. A chat may render loaded answers hidden and
+ * then reveal them gradually (ChatGPT, for about 4 s after the page loads), which would import
+ * empty or cut-off cards; so this waits until no answer is empty, except one still being written,
+ * and the text holds `WEB_CHAT_READ_STEADY_MS`. On a saved conversation's address
+ * (`conversationPath`) an empty page means the messages have not arrived yet. After `WEB_CHAT_READ_WAIT_MS` it reads what is
+ * there, since an answer can be empty for good (a failed reply). Resolves null off a web chat.
+ */
+function readWebChatSettled() {
+  var site = webChatSite();
+  if (!site) return Promise.resolve(null);
+  return new Promise(function (resolve) {
+    var started = Date.now();
+    var saved = !!site.conversationPath && site.conversationPath.test(location.pathname);
+    var last = null;
+    var steadySince = started;
+    (function poll() {
+      var chat = readWebChat();
+      var now = Date.now();
+      var key = JSON.stringify(chat.exchanges);
+      if (key !== last) {
+        last = key;
+        steadySince = now;
+      }
+      var generating = webChatGenerating(site);
+      var missing = (saved && chat.exchanges.length === 0) || chat.exchanges.some(function (exchange, i) {
+        var writing = generating && i === chat.exchanges.length - 1;
+        return !exchange.answer && !writing;
+      });
+      var steady = !missing && now - steadySince >= WEB_CHAT_READ_STEADY_MS;
+      if (steady || now - started >= WEB_CHAT_READ_WAIT_MS) return resolve(chat);
+      setTimeout(poll, WEB_CHAT_POLL_MS);
+    })();
+  });
+}
+
 
 function webChatComposerText(el) {
   return el.tagName === 'TEXTAREA' ? el.value : el.innerText || '';
@@ -442,7 +487,9 @@ function initWebChat() {
     var state = { closed: false, finished: false, started: false };
     port.onMessage.addListener(function (msg) {
       if (msg && msg.type === 'read') {
-        try { port.postMessage({ chat: readWebChat() }); } catch (e) { /* gone */ }
+        readWebChatSettled().then(function (chat) {
+          try { port.postMessage({ chat: chat }); } catch (e) { /* gone */ }
+        });
         return;
       }
       if (!msg || msg.type !== 'ask' || state.started || typeof msg.prompt !== 'string') return;

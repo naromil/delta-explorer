@@ -201,14 +201,14 @@ src/background/
   composer is emptied before each try, and nothing is sent until it reads back as exactly the
   prompt; a failure lists what was tried. Screen-reader-only labels ("You said") are never read.
 
-- **Known limitations (2026-11-09).** None of this has been checked by automation, only by hand, on two sites:
-  - ChatGPT: the message selectors match nothing on its current markup. A console check found
-    0 `[data-message-author-role]` elements, 0 `conversation-turn` test ids, 0 articles, and no
-    `#prompt-textarea` (the composer is a ProseMirror `div` without an id, which the generic fallback finds).
-    So a ChatGPT chat imports no cards, and the question is sent but the canvas never sees it arrive or
-    reads the reply. A new chat also failed with "Could not find ChatGPT's message box", seen before the
-    generic composer fallback existed. The next step is finding the new structure (attribute census of a
-    live conversation, iframes or shadow roots) and rewriting the `chatgpt` adapter.
+- **Known limitations (2026-11-10).** Checked by automation on ChatGPT only (Claude in Chrome with the dev
+  hooks, see Tooling); the other sites by hand:
+  - ChatGPT (fixed 2026-11-10): questions are `[data-user-message-bubble]`, answers
+    `[data-chatgpt-selection-message-id]` with the body in `[data-markdown-copy="contents"]`, bold runs
+    are `span[data-d-default-strong]` (no `<strong>`), Send is `form button[type=submit][aria-label="Send"]`
+    and Stop `button[aria-label="Stop"]`. Loaded answers stay hidden for ~2.6 s and are revealed over
+    ~1.4 s, which `readWebChatSettled` waits out. Reading a chat and asking a question (accepted,
+    snapshots, done) were verified in a temporary chat; long chats and regenerated answers were not.
   - Gemini: questions reach the chat. The earlier mix-up of typing methods (a question arrived as "r") is
     fixed by verifying the composer text before sending, but that fix is unverified. One imported card
     showed "1" as Gemini's reply, unexplained; replies may be read from the wrong element.

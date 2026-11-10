@@ -19,6 +19,8 @@ var CANVAS_OVERLAY_ID = 'delta-canvas-overlay';
 var canvasOverlayEl = null;
 var canvasOverlayFrame = null;
 var canvasOverlayRestore = null;
+/** Set while the chat is read and the seed stashed, so a second press opens nothing more. */
+var canvasOverlayOpening = false;
 
 var CANVAS_SKIP_TAGS = {
   SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, TEMPLATE: 1, SVG: 1, CANVAS: 1, IFRAME: 1, OBJECT: 1, EMBED: 1,
@@ -104,6 +106,8 @@ function canvasInline(node, root) {
   if (!trimmed) return inner;
   var lead = inner.match(/^\s*/)[0] ? ' ' : '';
   var tail = inner.match(/\s*$/)[0] ? ' ' : '';
+  // ChatGPT's renderer (2026-11) has no <strong>: a bold run is a span carrying this attribute.
+  if (node.hasAttribute('data-d-default-strong')) return lead + '**' + trimmed + '**' + tail;
   switch (node.tagName) {
     case 'STRONG': case 'B': return lead + '**' + trimmed + '**' + tail;
     case 'EM': case 'I': return lead + '*' + trimmed + '*' + tail;
@@ -294,12 +298,16 @@ function openPageCanvas() {
     canvasOverlayFrame.focus();
     return;
   }
+  if (canvasOverlayOpening) return;
+  canvasOverlayOpening = true;
   // On a web chat the canvas mirrors the conversation (web-chat.js) instead of reading the page.
-  var chat = readWebChat();
-  var seed = chat
-    ? { title: document.title || '', url: chat.url, text: '', webChat: chat }
-    : { title: document.title || '', url: location.href, text: readablePageMarkdown() };
-  browser.runtime.sendMessage({ type: 'stashCanvasSeed', seed: seed }).then(function (token) {
+  readWebChatSettled().then(function (chat) {
+    var seed = chat
+      ? { title: document.title || '', url: chat.url, text: '', webChat: chat }
+      : { title: document.title || '', url: location.href, text: readablePageMarkdown() };
+    return browser.runtime.sendMessage({ type: 'stashCanvasSeed', seed: seed });
+  }).then(function (token) {
+    canvasOverlayOpening = false;
     if (canvasOverlayEl || !token) return;
     var overlay = document.createElement('div');
     overlay.id = CANVAS_OVERLAY_ID;
@@ -337,7 +345,10 @@ function openPageCanvas() {
     canvasOverlayEl = overlay;
     canvasOverlayFrame = frame;
     frame.addEventListener('load', function () { frame.focus(); });
-  }).catch(function () { /* the background is unavailable */ });
+  }).catch(function () {
+    // The background is unavailable.
+    canvasOverlayOpening = false;
+  });
 }
 
 window.addEventListener('message', function (e) {
