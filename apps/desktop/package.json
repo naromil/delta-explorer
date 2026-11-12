@@ -9,7 +9,7 @@
   "homepage": "https://github.com/naromil/delta-ai/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/naromil/delta-explorer.git",
+    "url": "https://github.com/naromil/delta-ai.git",
     "directory": "apps/desktop"
   },
   "scripts": {
