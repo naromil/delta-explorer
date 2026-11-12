@@ -18,7 +18,7 @@
 - [ ] Expansion: map of what you've explored — a view of every expanded term across conversations, showing repeats and how they connect, with a jump back to the source. First step: tell the user "you expanded this term before" and offer the earlier answer
 - [x] Revisit the blanket concision rule in `DELTA_SYSTEM_PROMPT` ("Always answer in simple and concise words. Summarize in a few sentences if the answer is long.") — it conflicts with tailoring depth to the learner and the canvas fit note already overrides it. Let `index-learning.md` set depth and keep the hard limit only in `LOOKUP_WINDOW_NOTE`
 - [ ] Split `CanvasView.tsx` (2,991 lines) and `useCanvas.ts` (1,432 lines), and move the canvas conventions out of the root `AGENTS.md` (876 lines, loaded into every agent session) into `packages/ui/AGENTS.md`
-- [ ] Check the 40-second idle timeout in `provider.ts` against reasoning models — the timer resets on every stream part, so a provider that thinks silently for longer before its first token would be cut off as "timed out". Not reproduced yet
+- [x] Check the 40-second idle timeout in `provider.ts` against reasoning models — the timer resets on every stream part, so a provider that thinks silently for longer before its first token would be cut off as "timed out". Not reproduced yet
 - [ ] Fix `apps/desktop/package.json`: `homepage` points at `naromil/delta-ai` but `repository` at `naromil/delta-explorer.git`; one is stale
 - [ ] Fix the root README: it calls the extension "The Firefox extension" (it builds for Chrome too) and its table omits `packages/ui`
 - [ ] First-run path — a new install with no API key should land on "add a connection" instead of an empty Home

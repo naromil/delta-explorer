@@ -11,7 +11,10 @@ export type { ProviderMessage }
 export { RoleUnassignedError }
 
 const FETCH_TIMEOUT_MS = 40_000
+/** Reasoning models can think silently for minutes after the endpoint has answered. */
+const FIRST_OUTPUT_TIMEOUT_MS = 180_000
 const TIMEOUT_MESSAGE = `Request timed out after ${FETCH_TIMEOUT_MS / 1000}s. Check your API endpoint and network connection.`
+const FIRST_OUTPUT_TIMEOUT_MESSAGE = `The model did not start answering within ${FIRST_OUTPUT_TIMEOUT_MS / 1000}s of the endpoint responding.`
 const CANCEL_MESSAGE = 'Generation stopped.'
 
 export class NoApiKeyError extends Error {}
@@ -99,6 +102,19 @@ function baseUrlFor(connection: Connection, route: ProviderRoute): string {
 
 /* ---- AI SDK transport ---- */
 
+/** Tells the stream when the endpoint has answered a request, which the SDK does not report. */
+interface ResponseWatch {
+  onResponse?: () => void
+}
+
+function watchedFetch(watch: ResponseWatch): typeof fetch {
+  return async (input, init) => {
+    const response = await fetch(input, init)
+    watch.onResponse?.()
+    return response
+  }
+}
+
 /** The SDK's OpenAI-compatible route turns `file` parts into `image_url` data URLs. */
 function toModelMessage(message: ProviderMessage): ModelMessage {
   const { role, content, images } = message
@@ -151,23 +167,27 @@ async function* streamModel(
   model: LanguageModel,
   messages: ProviderMessage[],
   externalSignal?: AbortSignal,
-  agent?: AgentTools
+  agent?: AgentTools,
+  watch?: ResponseWatch
 ): AsyncGenerator<string> {
   const prompt = splitPrompt(messages)
   const controller = new AbortController()
-  let timedOut = false
+  let timeoutMessage: string | null = null
   let timer: NodeJS.Timeout | undefined
 
   // The limit is an *idle* timeout: a long answer that keeps producing tokens
-  // must not be cut off at 40s, but a stalled connection must be.
-  const armTimeout = (): void => {
+  // must not be cut off at 40s, but a stalled connection must be. Once the endpoint
+  // has answered a step's request, the model may still think silently before its
+  // first part, so that wait gets the longer limit.
+  const armTimeout = (ms: number): void => {
     clearTimeout(timer)
     timer = setTimeout(() => {
-      timedOut = true
+      timeoutMessage = ms === FETCH_TIMEOUT_MS ? TIMEOUT_MESSAGE : FIRST_OUTPUT_TIMEOUT_MESSAGE
       controller.abort()
-    }, FETCH_TIMEOUT_MS)
+    }, ms)
   }
-  armTimeout()
+  armTimeout(FETCH_TIMEOUT_MS)
+  if (watch) watch.onResponse = () => armTimeout(FIRST_OUTPUT_TIMEOUT_MS)
 
   const onExternalAbort = (): void => controller.abort()
   if (externalSignal) {
@@ -194,7 +214,7 @@ async function* streamModel(
     let hasText = false
     let stepEnded = false
     for await (const part of result.fullStream) {
-      armTimeout()
+      if (part.type !== 'start') armTimeout(FETCH_TIMEOUT_MS)
       if (part.type === 'text-delta') {
         if (hasText && stepEnded) yield '\n\n'
         hasText = true
@@ -207,15 +227,16 @@ async function* streamModel(
           throw part.error
         }
       } else if (part.type === 'abort') {
-        throw new Error(TIMEOUT_MESSAGE)
+        throw new Error(timeoutMessage ?? TIMEOUT_MESSAGE)
       }
     }
   } catch (error) {
     if (externalSignal?.aborted) throw new Error(CANCEL_MESSAGE)
-    if (timedOut) throw new Error(TIMEOUT_MESSAGE)
+    if (timeoutMessage) throw new Error(timeoutMessage)
     throw translateError(error)
   } finally {
     clearTimeout(timer)
+    if (watch) watch.onResponse = undefined
     externalSignal?.removeEventListener('abort', onExternalAbort)
   }
 }
@@ -229,19 +250,20 @@ async function* streamModelWithTools(
   model: LanguageModel,
   messages: ProviderMessage[],
   agent: AgentTools,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  watch?: ResponseWatch
 ): AsyncGenerator<string> {
   let emitted = false
   try {
     const instructed = withInstructions(messages, agent.instructions)
-    for await (const chunk of streamModel(model, instructed, signal, agent)) {
+    for await (const chunk of streamModel(model, instructed, signal, agent, watch)) {
       emitted = true
       yield chunk
     }
   } catch (error) {
     if (emitted || agent.toolsRequired || !(error instanceof RequestRejectedError)) throw error
     console.warn('Retrying without tools after the endpoint rejected the request:', error.message)
-    yield* streamModel(model, messages, signal)
+    yield* streamModel(model, messages, signal, undefined, watch)
   }
 }
 
@@ -280,16 +302,18 @@ export async function* callProviderStream(
     throw new NoApiKeyError('No API key configured. Open Settings to add your provider API key.')
   }
 
+  const watch: ResponseWatch = {}
   const provider = createOpenAICompatible({
     name: route.name,
     baseURL: baseUrlFor(connection, route),
-    apiKey: connection.apiKey || undefined
+    apiKey: connection.apiKey || undefined,
+    fetch: watchedFetch(watch)
   })
 
   if (agent) {
-    yield* streamModelWithTools(provider(model), messages, agent, signal)
+    yield* streamModelWithTools(provider(model), messages, agent, signal, watch)
   } else {
-    yield* streamModel(provider(model), messages, signal)
+    yield* streamModel(provider(model), messages, signal, undefined, watch)
   }
 }
 

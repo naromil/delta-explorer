@@ -365,7 +365,7 @@ or the config layer where needed: 26 files / 299 tests. Coverage includes `share
 segment migration), `shared/conversation` (`serializeForChat` omit rules, migration boundary),
 `shared/context-budget` (estimate/budget/trim invariants), `shared/model-catalog`,
 `main/provider` (streaming, idle timeout after
-partial output, external abort), `main/models/config-schema` (empty `connectionId` →
+partial output, a longer wait for a model's first output, external abort), `main/models/config-schema` (empty `connectionId` →
 unassigned), `main/config-settings` (settings normalization), `main/conversations` (safe ids,
 sidecar backfill, serialized writes, search ranking/snippets),
 `main/conversation-export` (markdown rendering, save/cancel paths), `renderer/chat-requests`

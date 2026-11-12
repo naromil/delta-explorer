@@ -263,6 +263,73 @@ describe('callProviderStream', () => {
     }
   })
 
+  it('waits longer than the idle limit for a model that thinks before its first token', async () => {
+    resolveRole.mockReturnValue(openAiRole)
+    const encoder = new TextEncoder()
+    let push: ((text: string) => void) | undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input: unknown, init?: RequestInit): Promise<Response> => {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            push = (text) => {
+              for (const item of openAiFrames([text])) controller.enqueue(encoder.encode(item))
+              controller.close()
+            }
+            init?.signal?.addEventListener('abort', () => {
+              controller.error(new DOMException('Aborted', 'AbortError'))
+            })
+          }
+        })
+        return new Response(body, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' }
+        })
+      })
+    )
+
+    vi.useFakeTimers()
+    try {
+      const output = collect(callProviderStream(MESSAGES, 'chat'))
+      await vi.advanceTimersByTimeAsync(90_000)
+      push?.('thought it through')
+      expect(await output).toBe('thought it through')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('gives up on a model that never starts answering after the endpoint responds', async () => {
+    resolveRole.mockReturnValue(openAiRole)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input: unknown, init?: RequestInit): Promise<Response> => {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            init?.signal?.addEventListener('abort', () => {
+              controller.error(new DOMException('Aborted', 'AbortError'))
+            })
+          }
+        })
+        return new Response(body, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' }
+        })
+      })
+    )
+
+    vi.useFakeTimers()
+    try {
+      const rejected = expect(collect(callProviderStream(MESSAGES, 'chat'))).rejects.toThrow(
+        'The model did not start answering within 180s of the endpoint responding.'
+      )
+      await vi.advanceTimersByTimeAsync(180_000)
+      await rejected
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('reports cancellation instead of a timeout when the caller aborts', async () => {
     resolveRole.mockReturnValue(openAiRole)
     const controller = new AbortController()
