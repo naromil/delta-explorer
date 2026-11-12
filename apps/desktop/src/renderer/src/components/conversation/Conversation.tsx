@@ -10,7 +10,7 @@ import {
   useExpansionContextMenu,
   useImageAttachments
 } from '@delta/ui/conversation'
-import type { ExpandRequest } from '@delta/ui/conversation'
+import type { ExpandRequest, HighlightRequest } from '@delta/ui/conversation'
 import { useStickToBottom } from '@delta/ui/lib/stick-to-bottom'
 import { attachmentSrc } from '@delta/ui/lib/image-attachments'
 import Turn from './Turn'
@@ -39,6 +39,7 @@ interface ConversationProps {
   onRetryExpansion?: (expansionId: number) => void
   onEditExpansion?: (expansionId: number, prompt: string) => void
   onDismissExpansion?: (expansionId: number) => void
+  onHighlight?: HighlightRequest
   hideToolbar?: boolean
   transferKey?: number
   conversationId?: string | null
@@ -75,6 +76,7 @@ function Conversation({
   onRetryExpansion,
   onEditExpansion,
   onDismissExpansion,
+  onHighlight,
   hideToolbar = false,
   transferKey,
   conversationId,
@@ -124,6 +126,7 @@ function Conversation({
     onRetryExpansion,
     onEditExpansion,
     onDismissExpansion,
+    onHighlight,
     allowImages: true
   })
 

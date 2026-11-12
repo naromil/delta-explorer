@@ -4,7 +4,13 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { ExpansionNode } from '@delta/core/rich-text'
 import Markdown from '../src/conversation/Markdown'
 import ExpansionFrame from '../src/conversation/ExpansionFrame'
-import { anchoredRange, isAnchoredRange, isPlainMarkdown } from '../src/lib/markdown'
+import {
+  anchoredRange,
+  isAnchoredRange,
+  isPlainMarkdown,
+  prepareMarkdownTree
+} from '../src/lib/markdown'
+import type { MarkdownNode } from '../src/lib/markdown'
 
 const noop = (): void => {}
 
@@ -603,5 +609,49 @@ describe('frame actions and question', () => {
     ])
     expect(markup).not.toContain('>Why is this so?<')
     expect(markup).toContain('title="Why is this so?"')
+  })
+})
+
+describe('highlights in the prepared tree', () => {
+  function sourced(node: MarkdownNode, out: MarkdownNode[] = []): MarkdownNode[] {
+    if (node.type === 'sourcedText') out.push(node)
+    for (const child of node.children ?? []) sourced(child, out)
+    return out
+  }
+
+  it('cuts text at highlight edges, keeping each piece on its own source offset', () => {
+    const pieces = sourced(prepareMarkdownTree('Alpha beta gamma', [], [{ start: 6, end: 10 }]))
+    expect(pieces.map(({ value, src, highlighted }) => [value, src, highlighted ?? false])).toEqual(
+      [
+        ['Alpha ', 0, false],
+        ['beta', 6, true],
+        [' gamma', 10, false]
+      ]
+    )
+  })
+
+  it('marks across blocks and inside bold', () => {
+    const source = 'One **two**\n\nThree'
+    const pieces = sourced(prepareMarkdownTree(source, [], [{ start: 4, end: source.length }]))
+    expect(pieces.filter((piece) => piece.highlighted).map((piece) => piece.value)).toEqual([
+      'two',
+      'Three'
+    ])
+  })
+})
+
+describe('highlighted Markdown', () => {
+  it('renders a highlight as a marked span that is still a selection target', () => {
+    const html = renderToStaticMarkup(
+      createElement(Markdown, {
+        source: 'Alpha beta',
+        expansions: [],
+        highlights: [{ start: 6, end: 10 }],
+        onFold: noop,
+        onUnfold: noop,
+        renderExpansion: () => null
+      })
+    )
+    expect(html).toContain('<span data-src="6" class="md-highlight">beta</span>')
   })
 })

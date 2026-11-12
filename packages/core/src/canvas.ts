@@ -113,6 +113,8 @@ export interface CanvasLink {
   label?: string
   /** Sends the start's text to the end's branch. Without it the arrow is only a drawing. */
   context?: CanvasLinkContext
+  /** A passage selected in the start card: a `card` link sends only this, not the whole card. */
+  quote?: string
 }
 
 /**
@@ -1477,6 +1479,9 @@ function soundFrames(raw: unknown): CanvasFrame[] {
   })
 }
 
+/** A quoted passage is a selection, not a document. */
+export const QUOTE_TEXT_LIMIT = 4000
+
 function soundLinks(raw: unknown, ids: ReadonlySet<string>): CanvasLink[] {
   if (!Array.isArray(raw)) return []
   return raw.flatMap((value): CanvasLink[] => {
@@ -1490,7 +1495,10 @@ function soundLinks(raw: unknown, ids: ReadonlySet<string>): CanvasLink[] {
         from: link.from,
         to: link.to,
         ...(typeof link.label === 'string' && link.label !== '' ? { label: link.label } : {}),
-        ...(link.context === 'card' || link.context === 'branch' ? { context: link.context } : {})
+        ...(link.context === 'card' || link.context === 'branch' ? { context: link.context } : {}),
+        ...(typeof link.quote === 'string' && link.quote.trim() !== ''
+          ? { quote: link.quote.slice(0, QUOTE_TEXT_LIMIT) }
+          : {})
       }
     ]
   })

@@ -38,7 +38,7 @@ function payload(): unknown {
       }
     },
     // Unsupported by Delta Explorer: must not reach the renderer.
-    groq: { name: 'Groq', models: { 'llama-x': { name: 'Llama X', tool_call: true } } }
+    'unknown-host': { name: 'Unknown', models: { 'llama-x': { name: 'Llama X', tool_call: true } } }
   }
 }
 

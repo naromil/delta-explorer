@@ -6,7 +6,7 @@ import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
-import type { ExpansionNode, ExpansionRange } from '@delta/core/rich-text'
+import type { ExpansionNode, ExpansionRange, TextHighlight } from '@delta/core/rich-text'
 import { activeExpansion, isSameRange } from '@delta/core/rich-text'
 
 export const SOURCED_TEXT = 'sourcedText'
@@ -22,6 +22,8 @@ export interface MarkdownNode {
   value?: string
   id?: number
   src?: number
+  /** A sourced text fragment inside a highlight. */
+  highlighted?: boolean
   lang?: string | null
   position?: MarkdownPosition
   children?: MarkdownNode[]
@@ -319,14 +321,49 @@ function spliceInChildren(parent: MarkdownNode, expansion: ExpansionNode): boole
   return spliceInChildren(first, expansion)
 }
 
-function markSourceText(node: MarkdownNode): void {
-  if (node.type === 'text') {
-    const start = offsetAt(node.position, 'start')
-    node.type = SOURCED_TEXT
-    node.src = start ?? 0
-    return
+function sourcedText(value: string, src: number, highlighted: boolean): MarkdownNode {
+  return { type: SOURCED_TEXT, value, src, ...(highlighted ? { highlighted: true } : {}) }
+}
+
+/**
+ * Cuts a text node at highlight edges. Each piece keeps its own source offset, so the
+ * selection mapper reads pieces as it reads whole nodes. Text that is not its source
+ * slice (escapes) cannot be cut by offset and is marked only when wholly inside.
+ */
+function splitAtHighlights(
+  node: MarkdownNode,
+  source: string,
+  highlights: TextHighlight[]
+): MarkdownNode[] {
+  const value = node.value ?? ''
+  const start = offsetAt(node.position, 'start') ?? 0
+  const end = offsetAt(node.position, 'end') ?? start + value.length
+  const touching = highlights.filter((item) => item.end > start && item.start < end)
+  if (touching.length === 0) return [sourcedText(value, start, false)]
+  if (source.slice(start, end) !== value) {
+    const inside = touching.some((item) => item.start <= start && end <= item.end)
+    return [sourcedText(value, start, inside)]
   }
-  for (const child of node.children ?? []) markSourceText(child)
+  const cuts = new Set([start, end])
+  for (const item of touching) {
+    if (item.start > start) cuts.add(item.start)
+    if (item.end < end) cuts.add(item.end)
+  }
+  const points = [...cuts].sort((a, b) => a - b)
+  return points.slice(0, -1).map((from, index) => {
+    const to = points[index + 1]
+    const inside = touching.some((item) => item.start <= from && to <= item.end)
+    return sourcedText(value.slice(from - start, to - start), from, inside)
+  })
+}
+
+function markSourceText(node: MarkdownNode, source: string, highlights: TextHighlight[]): void {
+  if (!node.children) return
+  node.children = node.children.flatMap((child) => {
+    if (child.type === 'text') return splitAtHighlights(child, source, highlights)
+    markSourceText(child, source, highlights)
+    return [child]
+  })
 }
 
 /** Several expansions on one range share one place in the text: the active one. */
@@ -343,11 +380,16 @@ function visibleExpansions(expansions: ExpansionNode[]): ExpansionNode[] {
 /**
  * Parses `source` and splices every anchored expansion into the tree as an
  * `expansion` node between split text fragments. Each remaining text node is
- * converted to a `sourcedText` node carrying its absolute source offset.
+ * converted to `sourcedText` nodes carrying their absolute source offsets, cut where
+ * a highlight starts or ends.
  */
-export function prepareMarkdownTree(source: string, expansions: ExpansionNode[]): MarkdownNode {
+export function prepareMarkdownTree(
+  source: string,
+  expansions: ExpansionNode[],
+  highlights: TextHighlight[] = []
+): MarkdownNode {
   const tree = parseMarkdown(source)
   for (const expansion of visibleExpansions(expansions)) spliceInChildren(tree, expansion)
-  markSourceText(tree)
+  markSourceText(tree, source, highlights)
   return tree
 }

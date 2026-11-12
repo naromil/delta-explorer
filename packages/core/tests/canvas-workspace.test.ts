@@ -491,6 +491,42 @@ describe('tidying family by family', () => {
     expect(center(at.a).y).toBe(center(at.c).y)
   })
 
+  it('keeps each branch on the side of its parent it stood on', () => {
+    const at = tidied([
+      message('root', 1, rect(0, 0)),
+      message('right', 3, rect(700, 120), 'root'),
+      message('rightDown', 5, rect(650, 900), 'right'),
+      message('below', 7, rect(-90, 600), 'root'),
+      message('belowLeft', 9, rect(-900, 650), 'below'),
+      message('up', 11, rect(60, -800), 'root')
+    ])
+    const leftOf = (a: CanvasRect, b: CanvasRect): boolean => a.x + a.w <= b.x
+    const above = (a: CanvasRect, b: CanvasRect): boolean => a.y + a.h <= b.y
+    expect(leftOf(at.root, at.right)).toBe(true)
+    expect(above(at.right, at.rightDown)).toBe(true)
+    expect(above(at.root, at.below)).toBe(true)
+    expect(leftOf(at.belowLeft, at.below)).toBe(true)
+    expect(above(at.up, at.root)).toBe(true)
+    // A lone child lines up with its parent across the side it stands on.
+    expect(center(at.right).y).toBe(center(at.root).y)
+    expect(center(at.below).x).toBe(center(at.root).x)
+    expectNoOverlaps(at)
+  })
+
+  it('stacks children on one side in the order they stood, without crossing', () => {
+    const at = tidied([
+      message('p', 1, rect(0, 0)),
+      message('c1', 3, rect(600, -300), 'p'),
+      message('c2', 5, rect(500, 40), 'p'),
+      message('c3', 7, rect(700, 400), 'p')
+    ])
+    for (const id of ['c1', 'c2', 'c3']) expect(at[id].x).toBeGreaterThan(at.p.x + at.p.w)
+    expect(at.c1.y).toBeLessThan(at.c2.y)
+    expect(at.c2.y).toBeLessThan(at.c3.y)
+    expect(segmentsCross(at.p, at.c1, at.p, at.c3)).toBe(false)
+    expectNoOverlaps(at)
+  })
+
   it('straightens attached cards as they stood: the seam meets the parent edge, tops align', () => {
     const at = tidied([
       message('top', 1, rect(175, 0, 294, 200)),

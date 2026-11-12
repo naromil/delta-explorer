@@ -20,6 +20,8 @@ const TOTAL_TEXT_LIMIT = 24000
 export type CanvasContextLink = Pick<CanvasLink, 'from'> & {
   context: CanvasLinkContext
   label?: string
+  /** Sends this passage of the source instead of the source itself. */
+  quote?: string
 }
 
 export interface CanvasContextResult {
@@ -35,9 +37,23 @@ export function sessionContextLinks(
   id: string | undefined
 ): CanvasContextLink[] {
   const bySource = new Map<string, CanvasContextLink>()
+  const quotes = new Map<string, CanvasContextLink>()
   for (const cardId of sessionCardIds(cards, id)) {
     for (const link of links) {
       if (link.to !== cardId || !link.context) continue
+      // Each passage stands alone: the whole source may be linked as well.
+      if (link.quote) {
+        const key = `${link.from}\u0000${link.quote}`
+        if (!quotes.has(key)) {
+          quotes.set(key, {
+            from: link.from,
+            context: 'card',
+            quote: link.quote,
+            ...(link.label ? { label: link.label } : {})
+          })
+        }
+        continue
+      }
       const known = bySource.get(link.from)
       if (known?.context === 'branch' || (known && link.context === 'card')) continue
       bySource.set(link.from, {
@@ -47,7 +63,7 @@ export function sessionContextLinks(
       })
     }
   }
-  return [...bySource.values()]
+  return [...bySource.values(), ...quotes.values()]
 }
 
 function branchTranscript(turns: Turn[]): string {
@@ -84,6 +100,26 @@ export function contextExcerpts(
     const card = cards.find((item) => item.id === link.from)
     if (!card || skip.includes(card.id)) continue
     const { title, body } = cardText(card, turns)
+    if (link.quote) {
+      // The user pointed at this passage, so it is sent even when its card is in the history.
+      let text = link.quote.trim()
+      if (text === '' || room <= 0) {
+        clipped ||= text !== ''
+        continue
+      }
+      if (text.length > room) {
+        clipped = true
+        text = `${text.slice(0, room)}…`
+      }
+      room -= text.length
+      items.push({
+        kind: 'quote',
+        title: flattenMarkdown(title),
+        text,
+        ...(link.label ? { label: link.label } : {})
+      })
+      continue
+    }
     const asBranch = card.kind !== 'note' && link.context === 'branch'
     const own = ownTurnId(card)
     let text: string

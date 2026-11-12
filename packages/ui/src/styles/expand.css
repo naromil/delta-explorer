@@ -174,6 +174,35 @@
   font-weight: 600;
 }
 
+.expand-intent.is-active {
+  background: var(--surface-3);
+  color: var(--text-1);
+}
+
+.expand-more {
+  position: relative;
+  display: flex;
+}
+
+.expand-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: -3px;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-3);
+  animation: menuIn var(--dur-1) var(--ease-out);
+}
+
+.expand-more-menu .expand-intent {
+  text-align: left;
+}
+
 .expand-notice {
   position: fixed;
   left: 50%;

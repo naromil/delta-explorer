@@ -51,6 +51,8 @@ export interface UiHost {
   exportConversation: (id: string) => Promise<ExportResult>
   /** Shows a conversation from a history list in whatever view its type opens in. */
   openConversation: (target: ConversationTarget) => void
+  /** A model-written title from a conversation's first message; `null` keeps the cut one. */
+  generateTitle?: (firstMessage: string) => Promise<string | null>
   imageSupport: (role: 'chat' | 'lookup') => Promise<ImageSupport>
   send: (request: StreamRequest) => void
   expand: (request: StreamRequest) => void

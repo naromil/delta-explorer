@@ -1,11 +1,25 @@
 export type ProviderType =
-  'google-ai-studio' | 'openai-compatible' | 'openai' | 'ollama' | 'openrouter'
+  | 'google-ai-studio'
+  | 'openai-compatible'
+  | 'openai'
+  | 'ollama'
+  | 'openrouter'
+  | 'anthropic'
+  | 'mistral'
+  | 'groq'
+  | 'deepseek'
+  | 'xai'
+  | 'together'
+  | 'lmstudio'
+  | 'claude-code'
 
-export type AuthShape = 'apiKey' | 'none' | 'host'
+/** `cli` runs a local command instead of calling an HTTP endpoint (see `Connection.command`). */
+export type AuthShape = 'apiKey' | 'none' | 'host' | 'cli'
 
 export type PrivacyTier = 'local' | 'cloud-zdr' | 'cloud'
 
-export type RoleId = 'chat' | 'lookup' | 'kb-maintenance'
+/** `chat` answers in every window (chat, look-up popup, canvas, expansions). */
+export type RoleId = 'chat' | 'kb-maintenance'
 
 export type LookupContextMode = 'none' | 'clipboard' | 'fullscreen-ocr'
 
@@ -37,6 +51,8 @@ export interface Connection {
   hasApiKey?: boolean
   baseUrl?: string
   host?: string
+  /** `cli` providers: the executable to run; blank finds it on PATH. */
+  command?: string
 }
 
 export interface RoleAssignment {
@@ -51,10 +67,11 @@ export interface ModelConfig {
 }
 
 /**
+ * v4 merged the chat and lookup roles into one assistant role.
  * v3 dropped the per-role web-search flag: search is only reachable through
  * provider-specific tools, so a common flag could not be honoured uniformly.
  */
-export const MODEL_CONFIG_VERSION = 3
+export const MODEL_CONFIG_VERSION = 4
 
 export const providerRegistry: Record<ProviderType, ProviderTypeDef> = {
   'google-ai-studio': {
@@ -100,18 +117,72 @@ export const providerRegistry: Record<ProviderType, ProviderTypeDef> = {
       'openai/gpt-4o-mini',
       'openai/gpt-5-nano'
     ]
+  },
+  anthropic: {
+    label: 'Anthropic',
+    authShape: 'apiKey',
+    defaultBaseUrl: 'https://api.anthropic.com/v1',
+    implemented: true,
+    knownModels: ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5']
+  },
+  mistral: {
+    label: 'Mistral',
+    authShape: 'apiKey',
+    defaultBaseUrl: 'https://api.mistral.ai/v1',
+    implemented: true,
+    knownModels: ['mistral-small-latest', 'mistral-medium-latest', 'mistral-large-latest']
+  },
+  groq: {
+    label: 'Groq',
+    authShape: 'apiKey',
+    defaultBaseUrl: 'https://api.groq.com/openai/v1',
+    implemented: true,
+    knownModels: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile']
+  },
+  deepseek: {
+    label: 'DeepSeek',
+    authShape: 'apiKey',
+    defaultBaseUrl: 'https://api.deepseek.com/v1',
+    implemented: true,
+    knownModels: ['deepseek-chat', 'deepseek-reasoner']
+  },
+  xai: {
+    label: 'xAI',
+    authShape: 'apiKey',
+    defaultBaseUrl: 'https://api.x.ai/v1',
+    implemented: true,
+    knownModels: ['grok-4-fast', 'grok-4']
+  },
+  together: {
+    label: 'Together AI',
+    authShape: 'apiKey',
+    defaultBaseUrl: 'https://api.together.xyz/v1',
+    implemented: true,
+    knownModels: ['openai/gpt-oss-120b', 'meta-llama/Llama-3.3-70B-Instruct-Turbo']
+  },
+  lmstudio: {
+    label: 'LM Studio',
+    authShape: 'none',
+    defaultBaseUrl: 'http://localhost:1234/v1',
+    implemented: true
+  },
+  'claude-code': {
+    label: 'Claude Code (headless)',
+    authShape: 'cli',
+    implemented: true,
+    knownModels: ['sonnet', 'opus', 'haiku', 'fable']
   }
+}
+
+/** Providers reached by spawning a local CLI rather than over HTTP. */
+export function isCliProvider(providerType: ProviderType): boolean {
+  return providerRegistry[providerType]?.authShape === 'cli'
 }
 
 export const roleRegistry: Record<RoleId, RoleDef> = {
   chat: {
-    label: 'Chat',
-    description: 'Model used for the main chat conversation window',
-    locked: false
-  },
-  lookup: {
-    label: 'Lookup',
-    description: 'Model used for on-screen OCR lookups and expansions',
+    label: 'Assistant',
+    description: 'Answers in the chat, the look-up popup, the canvas and expansions',
     locked: false
   },
   'kb-maintenance': {
@@ -123,7 +194,6 @@ export const roleRegistry: Record<RoleId, RoleDef> = {
 
 export const DEFAULT_ROLES: Record<RoleId, RoleAssignment> = {
   chat: { connectionId: null, model: '' },
-  lookup: { connectionId: null, model: '' },
   'kb-maintenance': { connectionId: null, model: '' }
 }
 
@@ -133,7 +203,6 @@ export function createDefaultModelConfig(): ModelConfig {
     connections: {},
     roles: {
       chat: { ...DEFAULT_ROLES.chat },
-      lookup: { ...DEFAULT_ROLES.lookup },
       'kb-maintenance': { ...DEFAULT_ROLES['kb-maintenance'] }
     }
   }

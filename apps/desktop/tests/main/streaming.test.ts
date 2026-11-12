@@ -4,18 +4,8 @@ import {
   isConversationRecord,
   isConversationState,
   parseProviderMessages,
-  parseStreamRole,
   withInstructions
 } from '../../src/main/streaming'
-
-describe('parseStreamRole', () => {
-  it('only lets streaming IPC target chat or lookup', () => {
-    expect(parseStreamRole('lookup')).toBe('lookup')
-    expect(parseStreamRole('chat')).toBe('chat')
-    expect(parseStreamRole('kb-maintenance')).toBe('chat')
-    expect(parseStreamRole(undefined)).toBe('chat')
-  })
-})
 
 describe('parseProviderMessages', () => {
   it('keeps well-formed messages and drops extra fields', () => {

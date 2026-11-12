@@ -6,7 +6,7 @@ import type {
   CanvasRect,
   CanvasSide
 } from '@delta/core/canvas'
-import type { ExpansionNode } from '@delta/core/rich-text'
+import type { ExpansionNode, TextHighlight } from '@delta/core/rich-text'
 import { flattenMarkdown } from '@delta/core/rich-text'
 import Markdown from '../conversation/Markdown'
 import { OriginalText } from '../conversation/ExpansionFrame'
@@ -48,6 +48,7 @@ interface CanvasCardViewProps extends CanvasCardActions {
   question?: string
   answer: string
   expansions: ExpansionNode[]
+  highlights?: TextHighlight[]
   status: CanvasCardStatus
   /** Why the card has no answer, when `status` is `failed`. */
   failure?: string
@@ -156,7 +157,7 @@ function CardQuestionEditor({
 }
 
 function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
-  const { card, rect, caption, question, answer, expansions, status, failure } = props
+  const { card, rect, caption, question, answer, expansions, highlights, status, failure } = props
   const { dragging, handleRight, handleBottom, stackLevel, pulsing, dimmed, selected, onPath } =
     props
   const { continued, pulseTermId, onCardClick, onCardMenu, onToggleCollapse } = props
@@ -472,6 +473,7 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
                 <Markdown
                   source={answer}
                   expansions={expansions}
+                  highlights={highlights}
                   onFold={noop}
                   onUnfold={noop}
                   renderExpansion={renderExpansion}

@@ -7,13 +7,22 @@ export interface ExpandSelectionBarState {
   y: number
   /** Bottom edge, used when there is no room above the selection. */
   bottom: number
-  onExpand: (prompt?: string) => void
-  onAsk: () => void
+  /** Absent when the selection cannot become an expansion (it crosses blocks). */
+  onExpand?: (prompt?: string) => void
+  onAsk?: () => void
+  /** Toggles a highlight; `highlighted` says the selection is inside one already. */
+  onHighlight?: () => void
+  highlighted?: boolean
+  /** Links the selected text to another card (the canvas). */
+  onLink?: () => void
 }
 
 const BAR_GAP = 6
 
-/** Floats over a selection in an answer, so expanding takes one click and no right-click. */
+/**
+ * Floats over a selection in an answer, so expanding takes one click and no right-click.
+ * Expand and Ask… stay on the bar; the preset questions wait in a secondary menu.
+ */
 function ExpandSelectionBar({
   state
 }: {
@@ -21,6 +30,9 @@ function ExpandSelectionBar({
 }): React.JSX.Element | null {
   const barRef = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
+  // Open for one selection only: a new selection brings the bar back closed.
+  const [moreFor, setMoreFor] = useState<ExpandSelectionBarState | null>(null)
+  const moreOpen = state !== null && moreFor === state
 
   useLayoutEffect(() => {
     const bar = barRef.current
@@ -37,38 +49,87 @@ function ExpandSelectionBar({
   }, [state])
 
   if (!state) return null
+  const { onExpand, onAsk, onHighlight, onLink } = state
 
   return (
     <div
       ref={barRef}
       className="expand-selection-bar"
       role="toolbar"
-      aria-label="Expand selection"
+      aria-label="Selection actions"
       style={position ?? { left: state.x, top: state.y, visibility: 'hidden' }}
       // Clicking the bar must not clear the selection it acts on.
       onMouseDown={(e) => e.preventDefault()}
     >
-      <button
-        type="button"
-        className="expand-intent expand-intent--primary"
-        onClick={() => state.onExpand()}
-      >
-        Expand
-      </button>
-      {EXPAND_INTENTS.map((intent) => (
+      {onExpand ? (
         <button
-          key={intent.label}
+          type="button"
+          className="expand-intent expand-intent--primary"
+          onClick={() => onExpand()}
+        >
+          Expand
+        </button>
+      ) : null}
+      {onAsk ? (
+        <button type="button" className="expand-intent" onClick={onAsk}>
+          Ask…
+        </button>
+      ) : null}
+      {onHighlight ? (
+        <button
+          type="button"
+          className={`expand-intent${state.highlighted ? ' is-active' : ''}`}
+          title={
+            state.highlighted
+              ? 'Remove the highlight'
+              : 'Mark as important: knowledge maintenance pays attention to highlights'
+          }
+          aria-pressed={state.highlighted ?? false}
+          onClick={onHighlight}
+        >
+          {state.highlighted ? 'Unhighlight' : 'Highlight'}
+        </button>
+      ) : null}
+      {onLink ? (
+        <button
           type="button"
           className="expand-intent"
-          title={intent.prompt}
-          onClick={() => state.onExpand(intent.prompt)}
+          title="Send this passage as context to another card or the composer"
+          onClick={onLink}
         >
-          {intent.label}
+          Link…
         </button>
-      ))}
-      <button type="button" className="expand-intent" onClick={state.onAsk}>
-        Ask…
-      </button>
+      ) : null}
+      {onExpand ? (
+        <div className="expand-more">
+          <button
+            type="button"
+            className={`expand-intent${moreOpen ? ' is-active' : ''}`}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            title="More questions"
+            onClick={() => setMoreFor(moreOpen ? null : state)}
+          >
+            More ▾
+          </button>
+          {moreOpen ? (
+            <div className="expand-more-menu" role="menu">
+              {EXPAND_INTENTS.map((intent) => (
+                <button
+                  key={intent.label}
+                  type="button"
+                  role="menuitem"
+                  className="expand-intent"
+                  title={intent.prompt}
+                  onClick={() => onExpand(intent.prompt)}
+                >
+                  {intent.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

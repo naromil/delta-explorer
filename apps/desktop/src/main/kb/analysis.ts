@@ -2,6 +2,7 @@ import { KB_MEMORY_SYSTEM_PROMPT } from '@delta/core/prompts'
 import { normalizeCanvasLayout } from '@delta/core/canvas'
 import type { CanvasRecord, ConversationRecord, Turn } from '@delta/core/conversation'
 import type { ExpansionNode } from '@delta/core/rich-text'
+import { highlightedPassages } from '@delta/core/rich-text'
 import type { ProviderMessage } from '../provider'
 
 const ANSWER_LIMIT = 300
@@ -41,6 +42,32 @@ function collectExpansionContexts(
       answer: clipAnswer(node.answer)
     })
     collectExpansionContexts(node.answer, node.children, result)
+  }
+}
+
+/** A highlighted passage and the question whose answer holds it. */
+interface HighlightSummary {
+  passage: string
+  question?: string
+}
+
+const HIGHLIGHT_LIMIT = 600
+
+function collectHighlights(
+  question: string | undefined,
+  source: string,
+  highlights: Turn['highlights'],
+  nodes: ExpansionNode[],
+  result: HighlightSummary[]
+): void {
+  for (const passage of highlightedPassages(source, highlights)) {
+    const clipped =
+      passage.length > HIGHLIGHT_LIMIT ? passage.slice(0, HIGHLIGHT_LIMIT) + '...' : passage
+    result.push({ passage: clipped, ...(question ? { question } : {}) })
+  }
+  for (const node of nodes) {
+    const asked = node.prompt?.trim() || `About "${node.originalText.trim()}"`
+    collectHighlights(asked, node.answer, node.highlights, node.children, result)
   }
 }
 
@@ -152,6 +179,7 @@ export function buildSingleMaterial(record: ConversationRecord): string {
     context: string
     answer: string
   }> = []
+  const highlights: HighlightSummary[] = []
 
   for (const thread of threads) {
     if (threads.length > 1) questionLines.push(threadHeader(thread))
@@ -160,11 +188,25 @@ export function buildSingleMaterial(record: ConversationRecord): string {
       for (const turn of [exchange.question, exchange.answer]) {
         if (turn) collectExpansionContexts(turn.content, turn.expansions, expansionSummaries)
       }
+      const asked = exchange.question?.content.trim() || undefined
+      for (const turn of [exchange.question, exchange.answer]) {
+        if (turn)
+          collectHighlights(asked, turn.content, turn.highlights, turn.expansions, highlights)
+      }
     }
   }
 
   if (questionLines.length > 0) {
     parts.push('Questions:', ...questionLines, '')
+  }
+
+  if (highlights.length > 0) {
+    parts.push('Highlighted by the user (what they marked as important or useful):')
+    for (const item of highlights) {
+      parts.push('- "' + item.passage + '"')
+      if (item.question) parts.push('  In the answer to: ' + clipAnswer(item.question))
+    }
+    parts.push('')
   }
 
   if (expansionSummaries.length > 0) {

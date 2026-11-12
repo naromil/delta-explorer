@@ -108,6 +108,8 @@ declare global {
       exportConversation: (
         id: string
       ) => Promise<{ ok: true; path: string } | { ok: false; error: string }>
+      /** A model-written title from the first message; `null` when none could be made. */
+      generateConversationTitle: (firstMessage: string) => Promise<string | null>
 
       kbAnalyze: () => Promise<KbRunResult>
       kbReanalyze: (n: number) => Promise<KbRunResult>

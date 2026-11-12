@@ -51,6 +51,7 @@ function ConnectionCard({
       updates.hasApiKey = false
     }
     if (newDef.authShape !== 'host') updates.host = ''
+    if (newDef.authShape !== 'cli') updates.command = undefined
     updateConnection(updates)
   }
 
@@ -155,8 +156,26 @@ function ConnectionCard({
         </div>
       )}
 
-      {/* Base URL (host-based providers like Ollama use the host field) */}
-      {connection.providerType !== 'ollama' && (
+      {def.authShape === 'cli' && (
+        <div className="settings-field">
+          <label className="settings-label settings-label--sm">Command</label>
+          <input
+            type="text"
+            className="settings-input"
+            spellCheck="false"
+            value={connection.command ?? ''}
+            onChange={(e) => updateConnection({ command: e.target.value })}
+            placeholder="claude (found on PATH or in ~/.local/bin)"
+          />
+          <p className="settings-inline-hint">
+            Runs <code>claude -p</code> with your Claude Code login. Its own tools stay off; it
+            reaches only Delta&apos;s memory tools. It cannot read images.
+          </p>
+        </div>
+      )}
+
+      {/* Base URL (host-based providers like Ollama use the host field; a CLI has none) */}
+      {def.authShape !== 'host' && def.authShape !== 'cli' && (
         <div className="settings-field">
           <label className="settings-label settings-label--sm">Base URL</label>
           <input

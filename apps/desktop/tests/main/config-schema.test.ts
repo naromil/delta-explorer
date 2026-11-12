@@ -21,7 +21,7 @@ const v1Google = {
   }
 }
 
-function v2Config(): ModelConfig {
+function currentConfig(): ModelConfig {
   return {
     schemaVersion: MODEL_CONFIG_VERSION,
     connections: {
@@ -35,11 +35,44 @@ function v2Config(): ModelConfig {
     },
     roles: {
       chat: { connectionId: 'conn_a', model: 'gpt-5-mini' },
-      lookup: { connectionId: 'conn_a', model: 'gpt-5-nano' },
       'kb-maintenance': { connectionId: 'conn_b', model: 'qwen3:4b' }
     }
   }
 }
+
+describe('v3 -> v4 migration', () => {
+  function v3(chat: object, lookup: object): Record<string, unknown> {
+    return {
+      schemaVersion: 3,
+      connections: {
+        conn_a: { id: 'conn_a', label: 'OpenAI', providerType: 'openai' },
+        conn_b: { id: 'conn_b', label: 'Ollama', providerType: 'ollama' }
+      },
+      roles: { chat, lookup, 'kb-maintenance': { connectionId: null, model: '' } }
+    }
+  }
+
+  it('keeps the chat model for the merged assistant role and drops lookup', () => {
+    const { config, changed, notes } = migrateModelConfig(
+      v3({ connectionId: 'conn_a', model: 'gpt-5-mini' }, { connectionId: 'conn_b', model: 'm' })
+    )
+
+    expect(changed).toBe(true)
+    expect(config.schemaVersion).toBe(4)
+    expect(config.roles).toEqual({
+      chat: { connectionId: 'conn_a', model: 'gpt-5-mini' },
+      'kb-maintenance': { connectionId: null, model: '' }
+    })
+    expect(notes.join(' ')).toContain('look-ups now use the chat model')
+  })
+
+  it('takes the lookup model when chat had none', () => {
+    const { config } = migrateModelConfig(
+      v3({ connectionId: null, model: '' }, { connectionId: 'conn_b', model: 'qwen3:4b' })
+    )
+    expect(config.roles.chat).toEqual({ connectionId: 'conn_b', model: 'qwen3:4b' })
+  })
+})
 
 describe('v2 -> v3 migration', () => {
   it('drops the retired per-role web-search flag and keeps the assignments', () => {
@@ -57,7 +90,7 @@ describe('v2 -> v3 migration', () => {
 
     expect(ok).toBe(true)
     expect(changed).toBe(true)
-    expect(config.schemaVersion).toBe(3)
+    expect(config.schemaVersion).toBe(MODEL_CONFIG_VERSION)
     expect(config.roles.chat).toEqual({ connectionId: 'conn_a', model: 'gpt-5-mini' })
     expect(config.roles['kb-maintenance']).toEqual({ connectionId: null, model: '' })
     expect(JSON.stringify(config)).not.toContain('webSearch')
@@ -91,7 +124,7 @@ describe('v1 -> v2 migration', () => {
       connectionId: 'v1_google-ai-studio',
       model: 'gemini-3.6-flash'
     })
-    expect(config.roles.lookup).toEqual(config.roles.chat)
+    expect(Object.keys(config.roles).sort()).toEqual(['chat', 'kb-maintenance'])
     expect(config.roles['kb-maintenance']).toEqual({ connectionId: null, model: '' })
   })
 
@@ -114,17 +147,17 @@ describe('v1 -> v2 migration', () => {
 })
 
 describe('current schema', () => {
-  it('leaves a valid v2 config untouched', () => {
-    const { config, ok, changed, notes } = migrateModelConfig(v2Config())
+  it('leaves a valid current config untouched', () => {
+    const { config, ok, changed, notes } = migrateModelConfig(currentConfig())
 
     expect(ok).toBe(true)
     expect(changed).toBe(false)
     expect(notes).toEqual([])
-    expect(config).toEqual(v2Config())
+    expect(config).toEqual(currentConfig())
   })
 
   it('unassigns roles that point at a deleted connection', () => {
-    const broken = v2Config()
+    const broken = currentConfig()
     delete broken.connections.conn_b
 
     const { config, changed, notes } = migrateModelConfig(broken)
@@ -136,18 +169,18 @@ describe('current schema', () => {
   })
 
   it('drops connections with an unknown provider type but keeps the rest', () => {
-    const config = v2Config()
+    const config = currentConfig()
     config.connections.conn_c = {
       id: 'conn_c',
       label: 'Mystery',
       providerType: 'gone-provider' as ModelConfig['connections'][string]['providerType']
     }
-    config.roles.lookup = { connectionId: 'conn_c', model: 'x', webSearchEnabled: false }
+    config.roles.chat = { connectionId: 'conn_c', model: 'x' }
 
     const result = migrateModelConfig(config)
     expect(result.ok).toBe(true)
     expect(result.config.connections.conn_c).toBeUndefined()
-    expect(result.config.roles.lookup.connectionId).toBeNull()
+    expect(result.config.roles.chat.connectionId).toBeNull()
     expect(result.notes.join(' ')).toContain('unknown provider type')
   })
 
@@ -165,18 +198,18 @@ describe('current schema', () => {
   })
 
   it('treats an empty role connection id as unassigned without discarding the config', () => {
-    const config = v2Config()
-    config.roles.lookup = { connectionId: '' as unknown as null, model: 'leftover' }
+    const config = currentConfig()
+    config.roles['kb-maintenance'] = { connectionId: '' as unknown as null, model: 'leftover' }
 
     const result = migrateModelConfig(config)
 
     expect(result.ok).toBe(true)
-    expect(result.config.roles.lookup).toEqual({ connectionId: null, model: '' })
+    expect(result.config.roles['kb-maintenance']).toEqual({ connectionId: null, model: '' })
     expect(result.config.roles.chat.connectionId).toBe('conn_a')
   })
 
   it('keeps a config written by a newer version readable', () => {
-    const future = { ...v2Config(), schemaVersion: 99 }
+    const future = { ...currentConfig(), schemaVersion: 99 }
     const { config, ok, notes } = migrateModelConfig(future)
 
     expect(ok).toBe(true)

@@ -179,8 +179,8 @@ with `-w apps/desktop`.
 
 Delta Explorer requires **your own API keys** to function. Open Settings → Models to configure:
 
-1. **Add a connection** — pick a provider (Google AI Studio, OpenAI Compatible, OpenAI, Ollama, or OpenRouter) and enter your API key or host.
-2. **Assign roles** — map the Chat, Lookup and Knowledge Base Maintenance roles to a connection + model. A lightweight model is recommended for the Lookup role since no heavy reasoning is needed; leaving Knowledge Base Maintenance unassigned disables automatic learning.
+1. **Add a connection** — pick a provider (Google AI Studio, OpenAI, Anthropic, OpenRouter, Mistral, Groq, DeepSeek, xAI, Together AI, Ollama, LM Studio, any OpenAI-compatible endpoint, or Claude Code) and enter your API key or host. **Claude Code (headless)** runs your installed `claude` CLI with its own login. Its built-in tools stay off and it reaches only Delta's memory tools (served to it over a local MCP endpoint), so it can keep notes and run Knowledge Base Maintenance; it cannot read images.
+2. **Assign roles** — map the Assistant role (chat, look-ups, the canvas and expansions) and the Knowledge Base Maintenance role to a connection + model. Leaving Knowledge Base Maintenance unassigned disables automatic learning.
 
 Configuration files live in `{userData}/config/`:
 
@@ -211,7 +211,7 @@ On Wayland, Electron's `clipboard.readText()` reads from the XWayland clipboard 
 - **Bring your own key (BYOK)** — API keys are stored locally in `{userData}/config/providers.json`, encrypted with the OS keychain via Electron `safeStorage` (plaintext only where the platform offers no keychain). Keys stay in the main process and are never sent to the UI.
 - **All data stays local** except the AI API requests themselves.
 - **Image attachments** go to your chat model's provider with the conversation, on every later message in that chat. They are stored unencrypted in the conversation file, like the rest of your chat history.
-- **Memory personalization** sends your notes' index and any notes the model opens to your chat and lookup models. Curating the notes sends your chat history to the model you assign to the Knowledge Base Maintenance role; turn automatic learning off in Settings → General to stop it.
+- **Memory personalization** sends your notes' index and any notes the model opens to your Assistant model. Curating the notes sends your chat history to the model you assign to the Knowledge Base Maintenance role; turn automatic learning off in Settings → General to stop it.
 - **No telemetry, no analytics, no accounts.**
 
 ---

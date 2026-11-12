@@ -216,6 +216,7 @@ function Turn({
             <Markdown
               source={turn.content}
               expansions={turn.expansions}
+              highlights={turn.highlights}
               onFold={onFold}
               onUnfold={onUnfold}
               renderExpansion={renderExpansion}

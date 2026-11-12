@@ -191,6 +191,7 @@ function ExpansionFrame({ node, group, ...actions }: ExpansionFrameProps): React
           <Markdown
             source={node.answer}
             expansions={node.children}
+            highlights={node.highlights}
             inline
             onFold={onFold}
             onUnfold={onUnfold}

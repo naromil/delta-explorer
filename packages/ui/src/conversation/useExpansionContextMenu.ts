@@ -6,6 +6,7 @@ import {
   findExpansionInNodes,
   findExpansionInTurns,
   flattenMarkdown,
+  isHighlighted,
   isSameRange,
   validateExpansionTarget
 } from '@delta/core/rich-text'
@@ -20,6 +21,24 @@ import type { FramePopupAt } from './ExpansionFrame'
 import type { ExpandOutcome } from './expand-outcome'
 
 export type { ExpansionTarget }
+
+/** Toggles a highlight on `range` of a turn's content, or of an expansion's answer. */
+export type HighlightRequest = (
+  turnId: number,
+  range: ExpansionRange,
+  parentExpansionId?: number
+) => void
+
+/** What the selected text is, for linking it elsewhere (the canvas). */
+export interface SelectedPassage {
+  turnId: number
+  /** The expansion whose answer holds the passage; absent for a turn's own content. */
+  parentExpansionId?: number
+  text: string
+  /** Where the selection ends on screen. */
+  x: number
+  y: number
+}
 
 export type ExpandRequest = (
   turnId: number,
@@ -59,6 +78,10 @@ interface UseExpansionContextMenuOptions {
   allowImages?: boolean
   /** Which turns hold expandable text; answers by default, and a canvas adds its pages. */
   canExpandTurn?: (turn: Turn) => boolean
+  /** Offers Highlight on the selection bar. */
+  onHighlight?: HighlightRequest
+  /** Offers Link on the selection bar. */
+  onLinkSelection?: (passage: SelectedPassage) => void
 }
 
 const isAnswer = (turn: Turn): boolean => turn.role === 'assistant'
@@ -68,6 +91,8 @@ interface LiveSelection {
   turnId: number
   range: Range
   text: string
+  /** Source offsets of the selection as made, before any widening for an expansion. */
+  anchors: SourceSelection | null
   resolved: TargetResult
 }
 
@@ -278,7 +303,30 @@ function readLiveSelection(
   const resolved: TargetResult = anchors
     ? resolveTarget(turn, anchors, text)
     : { ok: false, reason: 'not-anchored' }
-  return { turnId, range, text, resolved }
+  return { turnId, range, text, anchors, resolved }
+}
+
+/** The highlight a selection would toggle, and whether it would remove one. */
+function highlightOf(
+  turns: Turn[],
+  live: LiveSelection
+): { range: ExpansionRange; parentExpansionId?: number; highlighted: boolean } | null {
+  const turn = turns.find((item) => item.id === live.turnId)
+  if (!turn || !live.anchors) return null
+  const scope = sourceFor(turn, live.anchors.frameId)
+  if (!scope) return null
+  const range = { start: live.anchors.start, end: live.anchors.end }
+  const highlights =
+    scope.parentExpansionId === undefined
+      ? turn.highlights
+      : findExpansionInNodes(turn.expansions, scope.parentExpansionId)?.node.highlights
+  return {
+    range,
+    ...(scope.parentExpansionId !== undefined
+      ? { parentExpansionId: scope.parentExpansionId }
+      : {}),
+    highlighted: isHighlighted(highlights, range)
+  }
 }
 
 /** Addresses the range of an existing expansion, to ask about it again. */
@@ -378,7 +426,7 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
   const [notice, setNotice] = useState<string | null>(null)
   const { turns, onExpand, onUnfold, onRetryExpansion, onEditExpansion, onDismissExpansion } =
     options
-  const { allowImages = false, canExpandTurn = isAnswer } = options
+  const { allowImages = false, canExpandTurn = isAnswer, onHighlight, onLinkSelection } = options
 
   // Submits happen after the menu opened; read the newest turns, not the
   // closure captured when the menu rendered.
@@ -647,9 +695,19 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
     [submit]
   )
 
+  const closeSelection = useCallback(() => {
+    window.getSelection()?.removeAllRanges()
+    barRangeRef.current = null
+    setSelectionBar(null)
+  }, [])
+
   const refreshSelectionBar = useCallback(() => {
     const live = readLiveSelection(turnsRef.current, canExpandTurnRef.current)
-    const position = live?.resolved.ok ? selectionBarPosition(live.range) : null
+    const highlight = live && onHighlight ? highlightOf(turnsRef.current, live) : null
+    const linkable = live !== null && live.anchors !== null && onLinkSelection !== undefined
+    // A selection across blocks cannot be expanded but can still be highlighted or linked.
+    const useful = live !== null && (live.resolved.ok || highlight !== null || linkable)
+    const position = live && useful ? selectionBarPosition(live.range) : null
     if (!live || !position) {
       barRangeRef.current = null
       setSelectionBar(null)
@@ -657,12 +715,41 @@ export function useExpansionContextMenu(options: UseExpansionContextMenuOptions)
     }
     const pending = pendingFromLive(live)
     barRangeRef.current = live.range
+    const { turnId, text } = live
+    const frameId = live.anchors?.frameId ?? null
     setSelectionBar({
       ...position,
-      onExpand: (prompt) => submitLive(pending, prompt),
-      onAsk: () => openPrompt(pending, { x: position.x, y: position.bottom + 6 })
+      ...(live.resolved.ok
+        ? {
+            onExpand: (prompt?: string) => submitLive(pending, prompt),
+            onAsk: () => openPrompt(pending, { x: position.x, y: position.bottom + 6 })
+          }
+        : {}),
+      ...(highlight && onHighlight
+        ? {
+            highlighted: highlight.highlighted,
+            onHighlight: () => {
+              onHighlight(turnId, highlight.range, highlight.parentExpansionId)
+              closeSelection()
+            }
+          }
+        : {}),
+      ...(linkable
+        ? {
+            onLink: () => {
+              onLinkSelection({
+                turnId,
+                ...(frameId !== null ? { parentExpansionId: frameId } : {}),
+                text,
+                x: position.x,
+                y: position.bottom
+              })
+              closeSelection()
+            }
+          }
+        : {})
     })
-  }, [pendingFromLive, submitLive, openPrompt])
+  }, [pendingFromLive, submitLive, openPrompt, onHighlight, onLinkSelection, closeSelection])
 
   useEffect(() => {
     const isOverlay = (target: EventTarget | null): boolean =>

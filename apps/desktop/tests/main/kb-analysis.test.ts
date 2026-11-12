@@ -107,6 +107,38 @@ describe('buildSingleMaterial', () => {
     expect(material).toContain('  Answer: child answer')
   })
 
+  it('lists highlighted passages with the question they answer, nested answers included', () => {
+    const answer: Turn = {
+      ...turn(2, 'assistant', 'ATP is made in the **mitochondria** by respiration.'),
+      highlights: [{ start: 12, end: 35 }],
+      expansions: [
+        {
+          id: 1,
+          start: 19,
+          end: 35,
+          originalText: '**mitochondria**',
+          answer: 'Organelles with their own DNA.',
+          prompt: 'Why?',
+          status: 'done',
+          folded: true,
+          children: [],
+          highlights: [{ start: 15, end: 29 }]
+        }
+      ]
+    }
+    const material = buildSingleMaterial(
+      chatRecord([turn(1, 'user', 'Where is ATP made?'), answer])
+    )
+
+    expect(material).toContain('Highlighted by the user')
+    expect(material).toContain('- "in the mitochondria"\n  In the answer to: Where is ATP made?')
+    expect(material).toContain('- "their own DNA"\n  In the answer to: Why?')
+  })
+
+  it('omits the highlight section when nothing is highlighted', () => {
+    expect(buildSingleMaterial(chatRecord(exchangeTurns(1)))).not.toContain('Highlighted')
+  })
+
   it('omits the expansion section when no turn has expansions', () => {
     const record = migrateConversationRecord(
       legacyRecord([

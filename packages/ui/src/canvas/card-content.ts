@@ -1,5 +1,5 @@
 import type { CanvasCard } from '@delta/core/canvas'
-import type { ExpansionNode } from '@delta/core/rich-text'
+import type { ExpansionNode, TextHighlight } from '@delta/core/rich-text'
 import { findExpansionInTurns, flattenMarkdown } from '@delta/core/rich-text'
 import type { useCanvas } from './useCanvas'
 import type { CanvasCardStatus } from './CanvasCardView'
@@ -11,6 +11,7 @@ export interface CanvasCardContent {
   question?: string
   answer: string
   expansions: ExpansionNode[]
+  highlights?: TextHighlight[]
   status: CanvasCardStatus
   failure?: string
 }
@@ -25,6 +26,7 @@ export function cardContent(card: CanvasCard, canvas: CanvasContentSource): Canv
       caption: card.title || card.url,
       answer: turn?.content ?? '',
       expansions: turn?.expansions ?? [],
+      highlights: turn?.highlights,
       status: 'done'
     }
   }
@@ -39,6 +41,7 @@ export function cardContent(card: CanvasCard, canvas: CanvasContentSource): Canv
       caption: user?.content ?? '',
       answer: content,
       expansions: turn?.expansions ?? [],
+      highlights: turn?.highlights,
       status: streaming ? 'streaming' : failed ? 'failed' : 'done',
       ...(failed ? { failure: blank ? 'Stopped before an answer.' : content } : {})
     }
@@ -49,6 +52,7 @@ export function cardContent(card: CanvasCard, canvas: CanvasContentSource): Canv
     ...(node?.prompt?.trim() ? { question: node.prompt.trim() } : {}),
     answer: node?.answer ?? '',
     expansions: node?.children ?? [],
+    highlights: node?.highlights,
     status: node?.status === 'loading' ? 'streaming' : node?.status === 'error' ? 'failed' : 'done',
     ...(node?.status === 'error' ? { failure: node.error ?? 'The answer failed.' } : {})
   }

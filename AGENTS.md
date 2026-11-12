@@ -83,37 +83,38 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 
 #### IPC channels
 
-| Channel                                   | Direction       | Purpose                                                                                         |
-| ----------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------- |
-| `chat-send`                               | Renderer → Main | Send a streaming chat message (role payload discriminates 'chat' vs 'lookup')                   |
-| `chat-chunk`                              | Main → Renderer | Batched `delta` for a chat-send request (keyed by `requestId`); final text is in response       |
-| `chat-response`                           | Main → Renderer | Final response for a chat-send (`cancelled: true` + partial text after stop)                    |
-| `chat-error`                              | Main → Renderer | Error for a chat-send                                                                           |
-| `chat-cancel`                             | Renderer → Main | Abort an in-flight `chat-send`/`chat-expand` by `requestId`                                     |
-| `chat-image-support`                      | Renderer → Main | Whether a role's model reads images (`yes` / `no` / `unknown`); the composer asks on attach     |
-| `chat-expand`                             | Renderer → Main | Request an inline word-expansion stream                                                         |
-| `chat-expand-chunk`                       | Main → Renderer | Expand chunks (`done`; `cancelled: true` + partial text after stop)                             |
-| `chat-replace-conversation`               | Main → Renderer | Hydrate transferred state + id/title/createdAt into the chat window                             |
-| `lookup-trigger-grow`                     | Lookup → Main   | On first ask, signal main to animate window growth                                              |
-| `lookup-transfer`                         | Lookup → Main   | Send `{state, conversationId?}` to chat; main transforms context, persists                      |
-| `ai-error`                                | Main → Lookup   | Capture or OCR error message (sent from lookup.ts & window.ts)                                  |
-| `lookup-context`                          | Main → Lookup   | OCR context state (`{status, text, hint}`)                                                      |
-| `lookup-grow`                             | Main → Lookup   | (`width, height`) signal grow animation on the renderer side                                    |
-| `lookup-paste-text`                       | Lookup → Main   | Pasted text replaces OCR context                                                                |
-| `lookup-paste-image`                      | Lookup → Main   | Pasted image → OCR → context                                                                    |
-| `lookup-ocr-image`                        | Lookup → Main   | Invoke OCR on an image (returns `{text, error?}`)                                               |
-| `lookup-input-changed`                    | Lookup → Main   | Whether Ask field has text (guards blur-to-close)                                               |
-| `lookup-close`                            | Lookup → Main   | Close the lookup window                                                                         |
-| `lookup-ready`                            | Lookup → Main   | Listener-ready handshake; main replays `pendingState` via `lookup-context`                      |
-| `load-model-config` / `save-model-config` | Renderer ↔ Main | Model config CRUD (migrated + validated in main)                                                |
-| `load-model-catalog`                      | Renderer ↔ Main | models.dev catalog (`force` arg refreshes; cached 24h, offline fallback)                        |
-| `load-settings` / `save-settings`         | Renderer ↔ Main | Settings; save takes a partial patch, registers hotkey first, `{ success, hotkeyMode, error? }` |
-| `conversation-save` / `-load` / `-delete` | Renderer → Main | Conversation CRUD to `{userData}/conversations/` (atomic writes)                                |
-| `conversation-list`                       | Renderer → Main | List conversations of every type (metadata sorted by updatedAt desc)                            |
-| `conversation-search`                     | Renderer → Main | Search every type's titles/content; results extend meta with `matchedIn`/`snippet`              |
-| `conversation-open`                       | Both            | Any window asks main to open `{id, source}`; main raises a live popup or tells the main window  |
-| `conversation-list-unfed` / `-kb-fed`     | Renderer → Main | KB model integration: list unfed; mark fed                                                      |
-| `conversation-export`                     | Renderer → Main | Save a conversation as markdown (`{ok,path}` or `{ok:false,error}`; cancel is `'Canceled.'`)    |
+| Channel                                   | Direction       | Purpose                                                                                            |
+| ----------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------- |
+| `chat-send`                               | Renderer → Main | Send a streaming chat message (role payload discriminates 'chat' vs 'lookup')                      |
+| `chat-chunk`                              | Main → Renderer | Batched `delta` for a chat-send request (keyed by `requestId`); final text is in response          |
+| `chat-response`                           | Main → Renderer | Final response for a chat-send (`cancelled: true` + partial text after stop)                       |
+| `chat-error`                              | Main → Renderer | Error for a chat-send                                                                              |
+| `chat-cancel`                             | Renderer → Main | Abort an in-flight `chat-send`/`chat-expand` by `requestId`                                        |
+| `chat-image-support`                      | Renderer → Main | Whether the assistant's model reads images (`yes` / `no` / `unknown`); the composer asks on attach |
+| `chat-expand`                             | Renderer → Main | Request an inline word-expansion stream                                                            |
+| `chat-expand-chunk`                       | Main → Renderer | Expand chunks (`done`; `cancelled: true` + partial text after stop)                                |
+| `chat-replace-conversation`               | Main → Renderer | Hydrate transferred state + id/title/createdAt into the chat window                                |
+| `lookup-trigger-grow`                     | Lookup → Main   | On first ask, signal main to animate window growth                                                 |
+| `lookup-transfer`                         | Lookup → Main   | Send `{state, conversationId?}` to chat; main transforms context, persists                         |
+| `ai-error`                                | Main → Lookup   | Capture or OCR error message (sent from lookup.ts & window.ts)                                     |
+| `lookup-context`                          | Main → Lookup   | OCR context state (`{status, text, hint}`)                                                         |
+| `lookup-grow`                             | Main → Lookup   | (`width, height`) signal grow animation on the renderer side                                       |
+| `lookup-paste-text`                       | Lookup → Main   | Pasted text replaces OCR context                                                                   |
+| `lookup-paste-image`                      | Lookup → Main   | Pasted image → OCR → context                                                                       |
+| `lookup-ocr-image`                        | Lookup → Main   | Invoke OCR on an image (returns `{text, error?}`)                                                  |
+| `lookup-input-changed`                    | Lookup → Main   | Whether Ask field has text (guards blur-to-close)                                                  |
+| `lookup-close`                            | Lookup → Main   | Close the lookup window                                                                            |
+| `lookup-ready`                            | Lookup → Main   | Listener-ready handshake; main replays `pendingState` via `lookup-context`                         |
+| `load-model-config` / `save-model-config` | Renderer ↔ Main | Model config CRUD (migrated + validated in main)                                                   |
+| `load-model-catalog`                      | Renderer ↔ Main | models.dev catalog (`force` arg refreshes; cached 24h, offline fallback)                           |
+| `load-settings` / `save-settings`         | Renderer ↔ Main | Settings; save takes a partial patch, registers hotkey first, `{ success, hotkeyMode, error? }`    |
+| `conversation-save` / `-load` / `-delete` | Renderer → Main | Conversation CRUD to `{userData}/conversations/` (atomic writes)                                   |
+| `conversation-list`                       | Renderer → Main | List conversations of every type (metadata sorted by updatedAt desc)                               |
+| `conversation-search`                     | Renderer → Main | Search every type's titles/content; results extend meta with `matchedIn`/`snippet`                 |
+| `conversation-open`                       | Both            | Any window asks main to open `{id, source}`; main raises a live popup or tells the main window     |
+| `conversation-list-unfed` / `-kb-fed`     | Renderer → Main | KB model integration: list unfed; mark fed                                                         |
+| `conversation-export`                     | Renderer → Main | Save a conversation as markdown (`{ok,path}` or `{ok:false,error}`; cancel is `'Canceled.'`)       |
+| `conversation-generate-title`             | Renderer → Main | A model-written title from the first message (`string` or `null`, never throws)                    |
 
 | `kb-analyze` / `kb-reanalyze` | Renderer → Main | Manual curator passes over unfed conversations / the last N |
 | `kb-get-status` / `kb-status` | Renderer ↔ Main | Automatic learning status: invoke a snapshot; main pushes every change |
@@ -123,25 +124,24 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 
 ##### Shared (`packages/core/src/`, imported as `@delta/core/<module>`)
 
-| Module                 | Role                                                                                                                                                                                                                                                                                      |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `messages.ts`          | `ImageInput`, `ProviderMessage`: the request shape every provider receives (re-exported by the desktop `models.ts`)                                                                                                                                                                       |
-| `conversation.ts`      | `ConversationRecord` (chat, lookup, canvas union), `ConversationState` / `Turn` (markdown `content` + offset-anchored `expansions`), `ConversationMeta`, `linearStateOf`, `linearRecordOf`, `persistableTurns`, `serializeForChat`, `buildConversationTitle`, `migrateConversationRecord` |
-| `context-budget.ts`    | Pure token budgeting: `estimateTokens` (4 chars/token), `budgetFor` (85% of the window minus the output reserve), `trimMessages` (drops oldest non-system messages, never the last)                                                                                                       |
-| `rich-text.ts`         | Pure rich-text model: `ExpansionNode`, `validateInsertion` / `insertExpansion(InTurns)` / `updateExpansion` / `setExpansionFolded` / `findExpansionIn*` / `maxExpansionId`, `flattenMarkdown`, legacy `migrateLegacySegments`                                                             |
-| `expand-prompt.ts`     | `buildExpandRequest(state, turn, parentId, range, role, prompt?, attachments?)` — a follow-up's messages at that turn, ancestor chain, instruction; `buildExpandMessages` assembles the branch                                                                                            |
-| `attachments.ts`       | `ImageAttachment`, per-message/size limits, `isImageInput` / `isImageAttachment` validation, `scaledImageSize`                                                                                                                                                                            |
-| `canvas.ts`            | Pure canvas model: card types (incl. the extension's `page`; `layout.webChat` binds the extension's web chat canvas), rectangles, snapping, `estimateWords`, `withCanvasFit`, `resolveMove`, session walks (`turnsThroughCard`), `linkPath`, viewport math, `normalizeCanvasLayout`       |
-| `canvas-selection.ts`  | What a selection covers: `marqueeHits`, `movingForSelection` (frames bring contents, cards bring what is joined), `sessionAncestorIds`, `cardAtPoint`, `selectionMarkdown`, `sourceExcerpts`                                                                                              |
-| `canvas-arrange.ts`    | Rigid blocks: `alignSelection`, `distributeSelection`, `duplicateSelection`; spaces out only what it moves                                                                                                                                                                                |
-| `canvas-history.ts`    | Undo as patches: `diffCanvas`, `applyCanvasPatch` (leaves what the patch did not touch, refuses a turn that moved on)                                                                                                                                                                     |
-| `canvas-tidy.ts`       | `tidySelection`: attached blocks stay rigid; parent-child families drawn in layers and packed in the order that crosses fewest lines                                                                                                                                                      |
-| `canvas-straighten.ts` | `straightenBlocks`: lines up edges inside attached cards without resizing or detaching them; a block with a frame is left alone                                                                                                                                                           |
-| `layered-layout.ts`    | Generic layered graph drawing (`layeredLayout`): cycle breaking, layers, crossing reduction, order-keeping settling; axis-free, no canvas knowledge                                                                                                                                       |
-| `canvas-outline.ts`    | The canvas as a list: `canvasOutline`, `searchCanvasOutline`                                                                                                                                                                                                                              |
-| `canvas-context.ts`    | What links send: `sessionContextLinks`, `contextExcerpts` (limits, shared history once), `requestContext`                                                                                                                                                                                 |
-| `canvas-request.ts`    | What a card sends: `messageCardRequest` (session, sources, links, fit) and `expansionCardRequest` (a page's terms get the page as context)                                                                                                                                                |
-| `prompts.ts`           | All LLM-facing prompt/instruction strings: system prompts, context template, lookup default, expand instructions                                                                                                                                                                          |
+| Module                 | Role                                                                                                                                                                                                                                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `messages.ts`          | `ImageInput`, `ProviderMessage`: the request shape every provider receives (re-exported by the desktop `models.ts`)                                                                                                                                                                                          |
+| `conversation.ts`      | `ConversationRecord` (chat, lookup, canvas union), `ConversationState` / `Turn` (markdown `content` + offset-anchored `expansions`), `ConversationMeta`, `linearStateOf`, `linearRecordOf`, `persistableTurns`, `serializeForChat`, `buildConversationTitle`, `migrateConversationRecord`                    |
+| `context-budget.ts`    | Pure token budgeting: `estimateTokens` (4 chars/token), `budgetFor` (85% of the window minus the output reserve), `trimMessages` (drops oldest non-system messages, never the last)                                                                                                                          |
+| `rich-text.ts`         | Pure rich-text model: `ExpansionNode`, `validateInsertion` / `insertExpansion(InTurns)` / `updateExpansion` / `setExpansionFolded` / `findExpansionIn*` / `maxExpansionId`, `flattenMarkdown`, highlights (`TextHighlight`, `toggleHighlightInTurns`, `highlightedPassages`), legacy `migrateLegacySegments` |
+| `expand-prompt.ts`     | `buildExpandRequest(state, turn, parentId, range, role, prompt?, attachments?)` — a follow-up's messages at that turn, ancestor chain, instruction; `buildExpandMessages` assembles the branch                                                                                                               |
+| `attachments.ts`       | `ImageAttachment`, per-message/size limits, `isImageInput` / `isImageAttachment` validation, `scaledImageSize`                                                                                                                                                                                               |
+| `canvas.ts`            | Pure canvas model: card types (incl. the extension's `page`; `layout.webChat` binds the extension's web chat canvas), rectangles, snapping, `estimateWords`, `withCanvasFit`, `resolveMove`, session walks (`turnsThroughCard`), `linkPath`, viewport math, `normalizeCanvasLayout`                          |
+| `canvas-selection.ts`  | What a selection covers: `marqueeHits`, `movingForSelection` (frames bring contents, cards bring what is joined), `sessionAncestorIds`, `cardAtPoint`, `selectionMarkdown`, `sourceExcerpts`                                                                                                                 |
+| `canvas-arrange.ts`    | Rigid blocks: `alignSelection`, `distributeSelection`, `duplicateSelection`; spaces out only what it moves                                                                                                                                                                                                   |
+| `canvas-history.ts`    | Undo as patches: `diffCanvas`, `applyCanvasPatch` (leaves what the patch did not touch, refuses a turn that moved on)                                                                                                                                                                                        |
+| `canvas-tidy.ts`       | `tidySelection`: attached blocks stay rigid; parent-child families drawn as trees that keep each child on its side, packed in the order that crosses fewest lines                                                                                                                                            |
+| `canvas-straighten.ts` | `straightenBlocks`: lines up edges inside attached cards without resizing or detaching them; a block with a frame is left alone                                                                                                                                                                              |
+| `canvas-outline.ts`    | The canvas as a list: `canvasOutline`, `searchCanvasOutline`                                                                                                                                                                                                                                                 |
+| `canvas-context.ts`    | What links send: `sessionContextLinks`, `contextExcerpts` (limits, shared history once, quoted passages), `requestContext`                                                                                                                                                                                   |
+| `canvas-request.ts`    | What a card sends: `messageCardRequest` (session, sources, links, fit) and `expansionCardRequest` (a page's terms get the page as context)                                                                                                                                                                   |
+| `prompts.ts`           | All LLM-facing prompt/instruction strings: system prompts, context template, lookup default, expand instructions                                                                                                                                                                                             |
 
 ##### Shared UI (`packages/ui/src/`, imported as `@delta/ui/…`)
 
@@ -171,6 +171,7 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | App lifecycle       | `index.ts`                    | Main window, tray, streaming IPC (chat-send/expand/cancel), lookup transfer, conversation IPC                                                                                         |
 | Conversation store  | `conversations.ts`            | CRUD on `{userData}/conversations/{id}.json` + `{id}.meta.json` sidecars; per-id write chain (`saveConversation`, `mutateConversation`); title+content search, KB-fed mark            |
 | Image support       | `image-support.ts`            | `modelImageSupport(role)` (catalog modalities, fail-open) + `fitImagesToSupport` (refuse current, drop history images)                                                                |
+| Conversation title  | `conversation-title.ts`       | `generateConversationTitle`: names a conversation from its first message with the assistant's model, no tools, `null` on any failure                                                  |
 | Conversation export | `conversation-export.ts`      | `renderConversationMarkdown` (expansions quoted inline) + `exportConversationToFile` (save dialog, atomic write)                                                                      |
 | Memory store        | `memory/store.ts`             | Shell-like ops confined to `{userData}/memories/` (`listMemories`, `readMemory`, `readAutoLoadedMemories`, `grepMemories`, `writeMemory`, `editMemory`, `moveMemory`, `removeMemory`) |
 | Memory tools        | `memory/tools.ts`             | `memory_*` AI SDK tools + `memoryAgentFor(role)` (assistant vs curator prompt, catalog gate, fail-open) + `memory-updated` broadcast                                                  |
@@ -184,6 +185,8 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | Config              | `config.ts`                   | Settings/config I/O (atomic), hotkey registry (register-first save, startup fallback), Wayland                                                                                        |
 | Atomic writes       | `services/atomic-file.ts`     | Temp-file + rename writes (`writeFileAtomic[Sync]`) for config, KB and conversation files                                                                                             |
 | Provider dispatch   | `provider.ts`                 | `callProvider` + `callProviderStream(…, signal?)` (resolves role → connection → backend)                                                                                              |
+| Claude Code         | `services/claude-code.ts`     | The `claude-code` provider: spawns `claude -p` (stream-json, no own tools/settings, temp cwd), transcript prompt, memory tools over MCP, `probeClaudeCode` for Test                   |
+| Memory over MCP     | `memory/mcp-server.ts`        | `startMemoryMcpServer(tools)`: per-request loopback JSON-RPC MCP endpoint (token-gated) serving a `ToolSet` to a CLI provider                                                         |
 | Model re-exports    | `models/registries.ts`        | Re-exports shared types/registries so main imports stay stable without crossing renderer boundary                                                                                     |
 | Config schema       | `models/config-schema.ts`     | Zod schema, v1→v3 migrations, repair of dangling roles/unknown providers                                                                                                              |
 | Model catalog       | `services/model-catalog.ts`   | models.dev fetch + 24h disk cache (`{userData}/cache/models-dev.json`) + `load-model-catalog` IPC                                                                                     |
@@ -225,7 +228,7 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | ExpansionFrame   | `ui/conversation/ExpansionFrame.tsx`                                    | Inline expandable frames, folded pills, nested children                                                                                                      |
 | ContextMenu      | `ui/conversation/ContextMenu.tsx`                                       | Right-click Expand / Expand on… / Copy / Select All; also the list of answers on one range (`items`)                                                         |
 | ExpandPrompt     | `ui/conversation/ExpandPrompt.tsx`                                      | Floating input for a custom question ("Expand on…", "Ask…"), plus the one-click intents                                                                      |
-| Selection bar    | `ui/conversation/ExpandSelectionBar.tsx`                                | Floats over a selection in an answer: Expand, intents, Ask…                                                                                                  |
+| Selection bar    | `ui/conversation/ExpandSelectionBar.tsx`                                | Floats over a selection in an answer: Expand, Ask…, Highlight, Link… (canvas), intents under More                                                            |
 | Search           | `components/conversation/ConversationSearch.tsx`                        | Ctrl/Cmd+K modal: search titles + messages, snippet, load/delete, errors                                                                                     |
 | Settings         | `views/settings/Settings.tsx`                                           | 3-tab settings orchestrator                                                                                                                                  |
 | Memory indicator | `components/MemoryIndicator.tsx`                                        | Transient "Memory updated" pill in both windows, driven by `memory-updated`                                                                                  |
@@ -236,7 +239,7 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | Task                                   | File(s)                                                                                                                        |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Share logic with the extension         | `packages/core/src/*` + a one-line re-export in `apps/extension/src/shared/` (pure code only)                                  |
-| Add an AI provider                     | `provider.ts` (`ROUTES` row: name + base URL, nothing else)                                                                    |
+| Add an AI provider                     | `shared/models.ts` (`providerRegistry`) + `provider.ts` (`ROUTES` row) + `CATALOG_PROVIDER_IDS` if models.dev lists it         |
 | Change the OCR/capture pipeline        | `lookup/capture.ts`                                                                                                            |
 | Change the hotkey response flow        | `lookup/lookup.ts` (`handleHotkeyPressed`)                                                                                     |
 | Change the look-up context source      | `lookup/lookup.ts` (`handleHotkeyPressed`) + `config.ts` + `shared/conversation.ts`                                            |
@@ -308,9 +311,15 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 - **Provider dispatch lives in `provider.ts`.** `callProviderStream(messages, roleId, signal?)`
   reads the config and selects the backend; everyone else (streaming IPC handlers, lookup) calls
   it via the roleId. Don't duplicate `resolveRole()` + provider branching elsewhere.
-- **Every provider is one OpenAI-compatible route.** A provider is a `ROUTES` entry (name +
-  default base URL); there is no per-provider transport, SDK or tool wiring, and adding one means
-  adding a row. Google uses `…/v1beta/openai`. Web-search grounding is deliberately absent: the AI
+- **Every HTTP provider is one OpenAI-compatible route.** A provider is a `providerRegistry` entry
+  plus a `ROUTES` row (name + default base URL); there is no per-provider transport, SDK or tool
+  wiring. The one exception is `claude-code` (`authShape: 'cli'`, `isCliProvider`): it spawns the
+  user's `claude -p` with `--tools ""`, `--setting-sources ""` and `--strict-mcp-config`, since requests
+  can carry untrusted screen text. The memory tools reach it over MCP: `memory/mcp-server.ts` serves the
+  same `ToolSet` as JSON-RPC on a loopback port with a random bearer token, one server per request,
+  and `--allowedTools` names exactly those tools (`mcp__delta-memory__*`, explained to the model by
+  `buildMcpToolNamesNote`), with `--max-turns` as the step limit. Only our tool code touches the disk,
+  so `store.ts`'s path rules hold. It reads no images (`modelImageSupport`). Google uses `…/v1beta/openai`. Web-search grounding is deliberately absent: the AI
   SDK only exposes search as provider-specific tools, which would reintroduce the special case.
 - **The lookup popup is a 420×320 always-on-top frameless `BrowserWindow`** created in
   `lookup/window.ts` via `createLookupSession`. It loads the **same renderer bundle** as the
@@ -405,9 +414,9 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   which drops the message when the sender is destroyed. All responses are scoped to the sending
   webContents — safe for both windows to use the same channel family. `activeStreams` stores
   `{controller, senderId}` per `requestId`; a destroyed sender aborts its stream, and only the
-  webContents that started a request may cancel it. The `role` payload field routes to the
-  correct roleId (`'chat'` or `'lookup'`; anything else falls back to chat) for
-  `callProviderStream`. Payloads are validated in `streaming.ts`. Chunks are batched deltas; the
+  webContents that started a request may cancel it. Every stream answers through the one
+  assistant role (`ASSISTANT_ROLE`, `'chat'`); the renderer's `role` payload field only shapes the
+  system prompt there and main ignores it. Payloads are validated in `streaming.ts`. Chunks are batched deltas; the
   terminal message carries the full text. A cancelled send ends with
   `chat-response { text: partial, cancelled: true }`, a cancelled expand with
   `chat-expand-chunk { text: partial, done: true, cancelled: true }`. The renderer leaves a
@@ -476,8 +485,10 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   by a shared side, or a frame and its contents. `straightenBlocks` moves cards inside a block only to line
   edges up, never resizing them or giving up a session seam, and drops a result no cleaner than what
   stands; a block with a frame is left alone. Parent-child relationships (`parentId`, `hostId`) between
-  blocks form a family, which `layeredLayout` draws along the axis it already runs (`flowAxis`, down on a
-  tie). Families are packed by bounding box with `FAMILY_GAP` around them. Drawn links and asked-about lines
+  blocks form a family, drawn as trees (`layOutFamily`): every child stays on the side of its parent it
+  stood on (`directionOf`, in half-size units, down on a tie), children on one side stack in the order
+  they stood, centred on the parent, and `placeSide` keeps them far enough out that a second tidy reads
+  the same sides and changes nothing. Families are packed by bounding box with `FAMILY_GAP` around them. Drawn links and asked-about lines
   never join anything: `orderBoxes` keeps their families adjacent and swaps positions while that lowers
   crossings, then lines over other cards, then total line length. Lines do not route around cards. When
   nothing would move it returns `{ ok: false }` and the view says so.
@@ -634,9 +645,28 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   follows its cards), then `splitIntoThreads` cuts them at forks, so shared history appears once and
   each branch says which thread it continues. A single line has no thread labels. Anything that gains
   branches, such as a future branching chat, only needs to report its exchanges there.
-- **Chat and lookup are one assistant.** Only the window differs: same memory tools, curation and
+- **Chat and lookup are one assistant, with one model.** Model config v4 merged the chat and lookup
+  roles: `RoleId` is `'chat'` (labelled Assistant: chat, look-ups, the canvas, expansions) and
+  `'kb-maintenance'`. Only the window differs: same memory tools, curation and
   context budget, one `DELTA_SYSTEM_PROMPT` (`LOOKUP_WINDOW_NOTE` adds only a length limit), plus a
   one-way transfer, which turns the look-up into a chat with its context folded into a turn. The curator gets a lookup's turns and expansions but not its raw `state.context`.
+- **A conversation names itself.** The first send keeps the title cut from the message
+  (`buildConversationTitle`) and asks `conversation-generate-title` in parallel (`CONVERSATION_TITLE_SYSTEM_PROMPT`,
+  cleaned by `cleanGeneratedTitle`). The answer replaces the title only if it is still the cut one, so a
+  rename wins; it saves with `touchContent: false`. The canvas does the same through the optional
+  `UiHost.generateTitle` (the extension leaves it out).
+- **Highlights mark what the user found important.** `Turn.highlights` and `ExpansionNode.highlights`
+  are offset ranges into `content`/`answer`, like expansion anchors but decorations: they may cross
+  blocks and expansions. `prepareMarkdownTree` cuts sourced text at their edges (each piece keeps its
+  own `data-src`) and `Markdown` renders `.md-highlight`. The selection bar's Highlight toggles one
+  (`toggleHighlightInTurns`), saves with `touchContent: true` so the curator sees it again, and
+  regenerating an expansion drops its answer's highlights. `buildSingleMaterial` lists them under
+  "Highlighted by the user", and `KB_MEMORY_SYSTEM_PROMPT` tells the curator to weigh them.
+  `migrateConversationRecord` repairs stored ones (`soundTurnHighlights`).
+- **A passage can be linked like a card.** On the canvas the selection bar's Link… makes a context
+  link with `quote`: it joins an open composer as a chip, otherwise the next click picks the card that
+  receives it. `contextExcerpts` sends only the passage, as a `<quote>`, even when its card is in the
+  history, and each passage counts once beside any whole-card link from the same source.
 - **Sends are context-budgeted.** `applyContextBudget(messages, role)` drops the oldest non-system messages until the estimate
   fits 85% of the model's context window minus its output reserve. It is fail-open: an unassigned
   role, unknown model, missing `contextWindow`, or any error returns the messages untouched.

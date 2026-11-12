@@ -449,3 +449,11 @@
 .md-math-display .katex-display {
   margin: 0;
 }
+
+/* A passage the user highlighted; the curator reads these as what they found important. */
+.md-highlight {
+  background: var(--highlight-bg);
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}

@@ -18,7 +18,7 @@ import type { Handlers } from 'mdast-util-to-hast'
 import { toJsxRuntime } from 'hast-util-to-jsx-runtime'
 import type { Element, Root as HastRoot } from 'hast'
 import type { Root as MdastRoot } from 'mdast'
-import type { ExpansionNode } from '@delta/core/rich-text'
+import type { ExpansionNode, TextHighlight } from '@delta/core/rich-text'
 import { isSameRange } from '@delta/core/rich-text'
 import { highlightCode } from '../lib/highlight'
 import { renderMath } from '../lib/math'
@@ -236,7 +236,8 @@ function createHandlers(source: string, anchored: boolean): Handlers {
       type: 'element',
       tagName: 'span',
       properties: {
-        ...(anchored ? { 'data-src': node.src ?? 0 } : {})
+        ...(anchored ? { 'data-src': node.src ?? 0 } : {}),
+        ...(node.highlighted ? { className: ['md-highlight'] } : {})
       },
       children: [{ type: 'text', value: node.value ?? '' }]
     }),
@@ -287,10 +288,11 @@ function createHandlers(source: string, anchored: boolean): Handlers {
 function renderMarkdown(
   source: string,
   expansions: ExpansionNode[],
+  highlights: TextHighlight[] | undefined,
   inline: boolean,
   anchored: boolean
 ): React.ReactNode {
-  const tree = prepareMarkdownTree(source, expansions)
+  const tree = prepareMarkdownTree(source, expansions, highlights)
   const hast = toHast(tree as unknown as MdastRoot, {
     handlers: createHandlers(source, anchored)
   }) as HastRoot
@@ -304,6 +306,8 @@ function renderMarkdown(
 export interface MarkdownProps extends MarkdownActions {
   source: string
   expansions: ExpansionNode[]
+  /** Passages the user marked; offsets into `source`. */
+  highlights?: TextHighlight[]
   inline?: boolean
   /**
    * `false` renders display-only text (a folded pill's original): offsets would be
@@ -327,6 +331,7 @@ function buildNodeEntries(
 function Markdown({
   source,
   expansions,
+  highlights,
   inline = false,
   anchored = true,
   onFold,
@@ -344,8 +349,8 @@ function Markdown({
   )
 
   const body = useMemo(
-    () => renderMarkdown(source, expansions, inline, anchored),
-    [source, expansions, inline, anchored]
+    () => renderMarkdown(source, expansions, highlights, inline, anchored),
+    [source, expansions, highlights, inline, anchored]
   )
 
   return (

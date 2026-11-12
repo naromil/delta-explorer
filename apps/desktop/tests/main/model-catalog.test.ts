@@ -28,7 +28,7 @@ const cachePath = (): string => join(testDirs.userDataDir, 'cache', 'models-dev.
 const payload = {
   openai: { models: { 'gpt-5-mini': { name: 'GPT-5 Mini', tool_call: true } } },
   google: { models: { 'gemini-4-flash': { name: 'Gemini 4 Flash', tool_call: true } } },
-  groq: { models: { 'llama-x': { name: 'Llama X' } } }
+  'unknown-host': { models: { 'llama-x': { name: 'Llama X' } } }
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -61,7 +61,7 @@ describe('fetchCatalog', () => {
 
   it('fails loudly when the payload holds no usable providers', async () => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse({ groq: payload.groq })
+      jsonResponse({ 'unknown-host': payload['unknown-host'] })
     ) as unknown as typeof fetch
     await expect(fetchCatalog(fetchImpl)).rejects.toThrow('no usable providers')
   })
