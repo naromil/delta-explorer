@@ -12,6 +12,7 @@ export const desktopHost: UiHost = {
   deleteConversation: (id) => window.api.deleteConversation(id),
   exportConversation: (id) => window.api.exportConversation(id),
   openConversation: (target) => window.api.openConversation(target),
+  generateTitle: (firstMessage) => window.api.generateConversationTitle(firstMessage),
   imageSupport: (role) => window.api.chatImageSupport(role),
   send: (request) => window.api.chatSend(request),
   expand: (request) => window.api.chatExpand(request),

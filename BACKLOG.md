@@ -2,17 +2,17 @@
 
 ## Routine (Claude may build these without asking)
 
-- [ ] Have AI-based conversation title generation at first message.
+- [x] Have AI-based conversation title generation at first message.
 - [x] Right-click Cut/Copy/Paste and spelling suggestions in text fields — Electron shows no context menu by default, so the composer, look-up Ask field and editors have none
 - [x] Ignore Enter during IME composition in the remaining single-line editors (chat title rename, canvas title, frame and link labels, canvas outline search, model picker) — CJK input commits or jumps mid-composition
 - [x] Up arrow in an empty chat composer edits the last user message — a standard chat-app shortcut that reuses the existing edit-and-resend path
-- [ ] Change the toolbar for text selection in canvas. Add a way to highlight the text selection. Add a way to link the text selection to another object (the same way as giving a new rectangle context from another branch). Leave the original direct "Expand" and custom prompt "Ask..." on the main toolbar, and the other prompt presets moved into a secondary menu.
-- [ ] Make canvas tidy-up feature respect the original up/down/left/right directional layout between chunks (cards attached to each other), instead of listing by strict hierarchy (which often ends up twining all the links visually).
-- [ ] Unify the chat and lookup model configuration into one configuration. Knowledge maintenance stays separate. Add more model provider presets beyond the 5 ones.
+- [x] Change the toolbar for text selection in canvas. Add a way to highlight the text selection. Add a way to link the text selection to another object (the same way as giving a new rectangle context from another branch). Leave the original direct "Expand" and custom prompt "Ask..." on the main toolbar, and the other prompt presets moved into a secondary menu.
+- [x] Make canvas tidy-up feature respect the original up/down/left/right directional layout between chunks (cards attached to each other), instead of listing by strict hierarchy (which often ends up twining all the links visually).
+- [x] Unify the chat and lookup model configuration into one configuration. Knowledge maintenance stays separate. Add more model provider presets beyond the 5 ones.
 - [x] Unit-test `renderMath` in `lib/math.ts` — nothing guards `trust: false`, the one safeguard on the renderer's only `dangerouslySetInnerHTML` (`\href{javascript:…}` must not produce a link)
-- [ ] Unit-test `formatRelativeTime` in `lib/format.ts` — the Home recents labels have untested 1m/1h/24h/7d boundaries
-- [ ] Add Claude Code headless mode as a provider choice in settings.
-- [ ] Add highlight feature where users can highlight a text in a response. The knowledge base maintenance will pay special attention to that as it is what the user thinks is important or useful.
+- [x] Unit-test `formatRelativeTime` in `lib/format.ts` — the Home recents labels have untested 1m/1h/24h/7d boundaries
+- [x] Add Claude Code headless mode as a provider choice in settings.
+- [x] Add highlight feature where users can highlight a text in a response. The knowledge base maintenance will pay special attention to that as it is what the user thinks is important or useful.
 
 ## Proposed (needs the owner's OK — move to Routine to approve)
 

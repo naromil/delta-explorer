@@ -31,6 +31,7 @@ import type { LookupSession } from './lookup/state'
 import { setMainWindow, getMainWindow, clearMainWindow } from './main-window'
 import { applyContextBudget } from './context-budget'
 import { exportConversationToFile } from './conversation-export'
+import { generateConversationTitle } from './conversation-title'
 import type { ChatRecord, ConversationState, ConversationTarget } from '@delta/core/conversation'
 import { buildConversationTitle } from '@delta/core/conversation'
 import { prepareTransferredState } from './transfer'
@@ -40,8 +41,7 @@ import {
   createChunkBatcher,
   isConversationRecord,
   isConversationState,
-  parseProviderMessages,
-  parseStreamRole
+  parseProviderMessages
 } from './streaming'
 import {
   saveConversation,
@@ -95,19 +95,19 @@ if (!hasSingleInstanceLock) {
     ipcMain.on('chat-send', (event, payload: unknown) => {
       const request = parseStreamPayload(payload)
       if (!request) return
-      const { requestId, role } = request
+      const { requestId } = request
       const sender = event.sender
-      const fitted = fitImagesToSupport(request.messages, modelImageSupport(role))
+      const fitted = fitImagesToSupport(request.messages, modelImageSupport(ASSISTANT_ROLE))
       if (!fitted) {
         safeSend(sender, 'chat-error', { requestId, error: IMAGES_UNSUPPORTED_ERROR })
         return
       }
-      const finalMessages = applyContextBudget(fitted, role)
+      const finalMessages = applyContextBudget(fitted, ASSISTANT_ROLE)
       void streamToSender(
         sender,
         requestId,
         finalMessages,
-        role,
+        ASSISTANT_ROLE,
         {
           chunk: (delta) => safeSend(sender, 'chat-chunk', { requestId, delta }),
           done: (text) => safeSend(sender, 'chat-response', { requestId, text }),
@@ -115,34 +115,35 @@ if (!hasSingleInstanceLock) {
             safeSend(sender, 'chat-response', { requestId, text, cancelled: true }),
           failed: (error) => safeSend(sender, 'chat-error', { requestId, error })
         },
-        memoryAgentFor(role)
+        memoryAgentFor(ASSISTANT_ROLE)
       )
     })
 
-    /* Whether the model behind a role reads images; the composer asks before attaching. */
-    ipcMain.handle('chat-image-support', (_event, role: unknown) =>
-      modelImageSupport(parseStreamRole(role))
-    )
+    /* Whether the assistant's model reads images; the composer asks before attaching. */
+    ipcMain.handle('chat-image-support', () => modelImageSupport(ASSISTANT_ROLE))
 
     /* Chat streaming: expand a word/excerpt */
     ipcMain.on('chat-expand', (event, payload: unknown) => {
       const request = parseStreamPayload(payload)
       if (!request) return
-      const { requestId, role } = request
+      const { requestId } = request
       const sender = event.sender
-      const fitted = fitImagesToSupport(request.messages, modelImageSupport(role))
+      const fitted = fitImagesToSupport(request.messages, modelImageSupport(ASSISTANT_ROLE))
       if (!fitted) {
         safeSend(sender, 'chat-expand-chunk', { requestId, error: IMAGES_UNSUPPORTED_ERROR })
         return
       }
       // A model that cannot use the tools still gets the auto-loaded notes.
-      const agent = memoryAgentFor(role)
-      const messages = applyContextBudget(agent ? fitted : withAutoLoadedMemories(fitted), role)
+      const agent = memoryAgentFor(ASSISTANT_ROLE)
+      const messages = applyContextBudget(
+        agent ? fitted : withAutoLoadedMemories(fitted),
+        ASSISTANT_ROLE
+      )
       void streamToSender(
         sender,
         requestId,
         messages,
-        role,
+        ASSISTANT_ROLE,
         {
           chunk: (delta) => safeSend(sender, 'chat-expand-chunk', { requestId, delta }),
           done: (text) => safeSend(sender, 'chat-expand-chunk', { requestId, text, done: true }),
@@ -256,6 +257,10 @@ if (!hasSingleInstanceLock) {
     ipcMain.handle('conversation-kb-fed', async (_event, id: string) => {
       await markConversationKbFed(id)
     })
+    /* A model-written title from the first message; `null` keeps the one cut from it. */
+    ipcMain.handle('conversation-generate-title', async (_event, firstMessage: unknown) =>
+      typeof firstMessage === 'string' ? await generateConversationTitle(firstMessage) : null
+    )
     ipcMain.handle('conversation-export', async (_event, id: unknown) => {
       if (typeof id !== 'string' || id.length === 0) {
         return { ok: false, error: 'Invalid conversation id.' }
@@ -333,10 +338,12 @@ function safeSend(sender: WebContents, channel: string, payload: unknown): void 
   sender.send(channel, payload)
 }
 
+/** Chat, the look-up popup, the canvas and expansions all answer through one role. */
+const ASSISTANT_ROLE: RoleId = 'chat'
+
 interface StreamPayload {
   requestId: string
   messages: ProviderMessage[]
-  role: 'chat' | 'lookup'
 }
 
 function parseStreamPayload(payload: unknown): StreamPayload | null {
@@ -344,7 +351,7 @@ function parseStreamPayload(payload: unknown): StreamPayload | null {
   const raw = payload as Record<string, unknown>
   const messages = parseProviderMessages(raw.messages)
   if (typeof raw.requestId !== 'string' || raw.requestId === '' || !messages) return null
-  return { requestId: raw.requestId, messages, role: parseStreamRole(raw.role) }
+  return { requestId: raw.requestId, messages }
 }
 
 interface StreamEvents {

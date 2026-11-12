@@ -22,6 +22,7 @@ import type {
 import {
   DEFAULT_PAGE_SIZE,
   DEFAULT_VIEWPORT,
+  QUOTE_TEXT_LIMIT,
   cascadeCardIds,
   fitCardHeight,
   raisedStack,
@@ -37,7 +38,7 @@ import type { CanvasContextLink } from '@delta/core/canvas-context'
 import type { ConversationMeta, ProviderMessage, Turn } from '@delta/core/conversation'
 import { CONVERSATION_TITLE_MAX_LENGTH, buildConversationTitle } from '@delta/core/conversation'
 import { expansionCardRequest, messageCardRequest } from '@delta/core/canvas-request'
-import type { ExpansionTarget } from '@delta/core/rich-text'
+import type { ExpansionRange, ExpansionTarget } from '@delta/core/rich-text'
 import {
   applyExpansionChunk,
   expansionMessageInput,
@@ -48,6 +49,7 @@ import {
   maxExpansionId,
   removeExpansionInTurns,
   restartExpansion,
+  toggleHighlightInTurns,
   updateExpansion
 } from '@delta/core/rich-text'
 import { isAnchoredRange } from '../lib/markdown'
@@ -249,7 +251,10 @@ export function useCanvas(asker?: CanvasAsker | null): {
   updateNote: (id: string, text: string) => void
   addFrame: (rect: CanvasRect, title: string) => string
   renameFrame: (id: string, title: string) => void
-  addLink: (from: string, to: string) => string | null
+  /** A `quote` makes it a context link that sends only that passage of `from`. */
+  addLink: (from: string, to: string, quote?: string) => string | null
+  /** Toggles a highlight on a passage of a turn, or of an expansion's answer. */
+  toggleHighlight: (turnId: number, range: ExpansionRange, parentExpansionId?: number) => void
   labelLink: (id: string, label: string) => void
   reverseLink: (id: string) => void
   /** What this link sends to the branch it points at; undefined makes it a plain arrow again. */
@@ -633,6 +638,37 @@ export function useCanvas(asker?: CanvasAsker | null): {
     [asksElsewhere, expansionMessages, requestSave, startExpand, updateDoc]
   )
 
+  /** A highlight is content for the curator; like an expansion it is not an undo step. */
+  const toggleHighlight = useCallback(
+    (turnId: number, range: ExpansionRange, parentExpansionId?: number): void => {
+      updateDoc((prev) => ({
+        ...prev,
+        turns: toggleHighlightInTurns(prev.turns, turnId, range, parentExpansionId)
+      }))
+      requestSave(true)
+    },
+    [requestSave, updateDoc]
+  )
+
+  /** Swaps the title cut from the first question for a model-written one, unless renamed since. */
+  const nameCanvas = useCallback(
+    (question: string): void => {
+      const fallback = buildConversationTitle(question)
+      updateMeta({ title: fallback })
+      if (!host.generateTitle || question.trim() === '') return
+      const id = metaRef.current.id
+      void host.generateTitle(question).then(
+        (generated) => {
+          if (!generated || metaRef.current.id !== id || metaRef.current.title !== fallback) return
+          updateMeta({ title: generated })
+          requestSave(false)
+        },
+        (err: unknown) => console.warn('Could not generate a canvas title:', err)
+      )
+    },
+    [host, requestSave, updateMeta]
+  )
+
   const ask = useCallback(
     (
       rect: CanvasRect,
@@ -652,9 +688,7 @@ export function useCanvas(asker?: CanvasAsker | null): {
         ...(parentId !== undefined ? { parentId } : {}),
         ...(sources.length > 0 ? { sources: [...sources] } : {})
       }
-      if (metaRef.current.title === UNTITLED) {
-        updateMeta({ title: buildConversationTitle(question) })
-      }
+      if (metaRef.current.title === UNTITLED) nameCanvas(question)
       updateDoc((prev) => ({
         turns: [
           ...prev.turns,
@@ -678,7 +712,7 @@ export function useCanvas(asker?: CanvasAsker | null): {
       requestSave(true)
       return card.id
     },
-    [requestSave, sendCard, updateDoc, updateMeta]
+    [nameCanvas, requestSave, sendCard, updateDoc]
   )
 
   const addPage = useCallback(
@@ -1011,16 +1045,22 @@ export function useCanvas(asker?: CanvasAsker | null): {
   )
 
   const addLink = useCallback(
-    (from: string, to: string): string | null => {
+    (from: string, to: string, quote?: string): string | null => {
       const { cards, links } = docRef.current.layout
       const known = (id: string): boolean => cards.some((card) => card.id === id)
       if (from === to || !known(from) || !known(to)) return null
-      const existing = links.find((link) => link.from === from && link.to === to)
+      const passage = quote?.trim().slice(0, QUOTE_TEXT_LIMIT)
+      const existing = links.find(
+        (link) => link.from === from && link.to === to && link.quote === (passage || undefined)
+      )
       if (existing) return existing.id
       const id = crypto.randomUUID()
-      editLayout('Connect', (layout) => ({
+      const link: CanvasLink = passage
+        ? { id, from, to, context: 'card', quote: passage }
+        : { id, from, to }
+      editLayout(passage ? 'Link passage' : 'Connect', (layout) => ({
         ...layout,
-        links: [...layout.links, { id, from, to }]
+        links: [...layout.links, link]
       }))
       return id
     },
@@ -1412,6 +1452,7 @@ export function useCanvas(asker?: CanvasAsker | null): {
     addFrame,
     renameFrame,
     addLink,
+    toggleHighlight,
     labelLink,
     reverseLink,
     setLinkContext,

@@ -219,28 +219,28 @@ record, and resets `expansionIdCounter` past the max imported id.
 
 ## 3. IPC surface
 
-| Channel                                                     | Direction    | Purpose                                                         |
-| ----------------------------------------------------------- | ------------ | --------------------------------------------------------------- |
-| `chat-send` → `chat-chunk` / `chat-response` / `chat-error` | R → M, M → R | Streaming chat, correlated by `requestId`                       |
-| `chat-cancel`                                               | R → M        | Abort a `chat-send`/`chat-expand` stream                        |
-| `chat-image-support`                                        | R → M        | Whether a role's model reads images (`yes` / `no` / `unknown`)  |
-| `chat-expand` → `chat-expand-chunk`                         | R → M, M → R | Expansions (`done` / `error` / `cancelled` marks)               |
-| `chat-replace-conversation`                                 | M → R        | Hydrate transferred state + id/title/createdAt                  |
-| `lookup-trigger-grow` / `lookup-grow`                       | L → M, M → L | First-ask window growth                                         |
-| `lookup-context` / `ai-error`                               | M → L        | Context status and capture/OCR errors                           |
-| `lookup-paste-text` / `lookup-paste-image`                  | L → M        | Paste replaces the context                                      |
-| `lookup-ocr-image`                                          | L ↔ M        | OCR a pasted image, returns `{ text, error? }`                  |
-| `lookup-input-changed` / `lookup-close` / `lookup-ready`    | L → M        | Blur guard, close, replay pending context                       |
-| `lookup-transfer`                                           | L → M        | Send the popup conversation to the chat window                  |
-| `conversation-save` / `-load` / `-delete` / `-list`         | R ↔ M        | Conversation CRUD (atomic writes)                               |
-| `conversation-search`                                       | R → M        | Search every type's titles/content; adds `matchedIn`/`snippet`  |
-| `conversation-list-unfed` / `-kb-fed`                       | R ↔ M        | KB integration                                                  |
-| `conversation-export`                                       | R → M        | Save one conversation as markdown; cancel returns `'Canceled.'` |
-| `load-settings` / `save-settings`                           | R ↔ M        | Save registers hotkey first (`{ success, hotkeyMode, error? }`) |
-| `load-model-config` / `save-model-config`                   | R ↔ M        | Connections and role assignments                                |
-| `load-model-catalog`                                        | R ↔ M        | models.dev model catalog (cached, force-refresh)                |
-| `kb-analyze` / `kb-reanalyze`                               | R ↔ M        | Manual Knowledge Base maintenance                               |
-| `kb-get-status` / `kb-status`                               | R ↔ M        | Automatic maintenance snapshot (invoke) + change push           |
+| Channel                                                     | Direction    | Purpose                                                               |
+| ----------------------------------------------------------- | ------------ | --------------------------------------------------------------------- |
+| `chat-send` → `chat-chunk` / `chat-response` / `chat-error` | R → M, M → R | Streaming chat, correlated by `requestId`                             |
+| `chat-cancel`                                               | R → M        | Abort a `chat-send`/`chat-expand` stream                              |
+| `chat-image-support`                                        | R → M        | Whether the assistant's model reads images (`yes` / `no` / `unknown`) |
+| `chat-expand` → `chat-expand-chunk`                         | R → M, M → R | Expansions (`done` / `error` / `cancelled` marks)                     |
+| `chat-replace-conversation`                                 | M → R        | Hydrate transferred state + id/title/createdAt                        |
+| `lookup-trigger-grow` / `lookup-grow`                       | L → M, M → L | First-ask window growth                                               |
+| `lookup-context` / `ai-error`                               | M → L        | Context status and capture/OCR errors                                 |
+| `lookup-paste-text` / `lookup-paste-image`                  | L → M        | Paste replaces the context                                            |
+| `lookup-ocr-image`                                          | L ↔ M        | OCR a pasted image, returns `{ text, error? }`                        |
+| `lookup-input-changed` / `lookup-close` / `lookup-ready`    | L → M        | Blur guard, close, replay pending context                             |
+| `lookup-transfer`                                           | L → M        | Send the popup conversation to the chat window                        |
+| `conversation-save` / `-load` / `-delete` / `-list`         | R ↔ M        | Conversation CRUD (atomic writes)                                     |
+| `conversation-search`                                       | R → M        | Search every type's titles/content; adds `matchedIn`/`snippet`        |
+| `conversation-list-unfed` / `-kb-fed`                       | R ↔ M        | KB integration                                                        |
+| `conversation-export`                                       | R → M        | Save one conversation as markdown; cancel returns `'Canceled.'`       |
+| `load-settings` / `save-settings`                           | R ↔ M        | Save registers hotkey first (`{ success, hotkeyMode, error? }`)       |
+| `load-model-config` / `save-model-config`                   | R ↔ M        | Connections and role assignments                                      |
+| `load-model-catalog`                                        | R ↔ M        | models.dev model catalog (cached, force-refresh)                      |
+| `kb-analyze` / `kb-reanalyze`                               | R ↔ M        | Manual Knowledge Base maintenance                                     |
+| `kb-get-status` / `kb-status`                               | R ↔ M        | Automatic maintenance snapshot (invoke) + change push                 |
 
 `save-settings` registers the requested accelerator before persisting. If registration throws or
 the desktop keeps the previous binding, it returns `{ success: false, error }` and does not
@@ -507,6 +507,6 @@ user's own text, holding no turn). The layout also holds frames and connections.
   far out (below 50%) each card shows just its title at a readable size.
 
 Geometry and session rules are pure and live in `src/shared/canvas.ts`, selection in `canvas-selection.ts`,
-alignment and duplication in `canvas-arrange.ts`, tidying in `canvas-tidy.ts` (with `canvas-straighten.ts` and `layered-layout.ts`), undo in `canvas-history.ts` and the outline in
+alignment and duplication in `canvas-arrange.ts`, tidying in `canvas-tidy.ts` (with `canvas-straighten.ts`), undo in `canvas-history.ts` and the outline in
 `canvas-outline.ts`. State and streams are in `hooks/useCanvas.ts`, pointer gestures in
 `views/canvas/CanvasView.tsx` and keys in `views/canvas/useCanvasKeyboard.ts`.

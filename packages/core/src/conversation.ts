@@ -3,9 +3,19 @@ import { attachmentImages } from './attachments'
 import type { CanvasLayout } from './canvas'
 import { normalizeCanvasLayout } from './canvas'
 import type { ProviderMessage } from './messages'
-import { getSystemPrompt, buildScreenContextMessage } from './prompts'
+import {
+  CONVERSATION_TITLE_SOURCE_LIMIT,
+  CONVERSATION_TITLE_SYSTEM_PROMPT,
+  getSystemPrompt,
+  buildScreenContextMessage
+} from './prompts'
 import type { ExpansionNode, LegacyTurn, RichTextTurn } from './rich-text'
-import { finalizeTurns, flattenMarkdown, migrateLegacyTurns } from './rich-text'
+import {
+  finalizeTurns,
+  flattenMarkdown,
+  migrateLegacyTurns,
+  soundTurnHighlights
+} from './rich-text'
 
 export type { ProviderMessage, ExpansionNode }
 
@@ -150,7 +160,7 @@ export function migrateConversationRecord(record: ConversationRecord): Conversat
   const stored = record as StoredRecord
   const { id, title, createdAt, updatedAt, kbFed } = stored
   const legacyTurns = stored.state.turns as unknown as LegacyTurn[]
-  const turns = finalizeTurns(migrateLegacyTurns(legacyTurns) as Turn[])
+  const turns = soundTurnHighlights(finalizeTurns(migrateLegacyTurns(legacyTurns) as Turn[]))
   const base = { id, title, createdAt, updatedAt, kbFed }
   if (stored.source === 'canvas') {
     const canvas = stored.canvas ?? stored.state.canvas ?? normalizeCanvasLayout(undefined, turns)
@@ -230,4 +240,35 @@ export function buildConversationTitle(text: string): string {
   if (flat === '') return 'New conversation'
   if (flat.length <= CONVERSATION_TITLE_MAX_LENGTH) return flat
   return flat.slice(0, CONVERSATION_TITLE_MAX_LENGTH).trimEnd()
+}
+
+/** The request that asks a model to name a conversation from its first message. */
+export function buildTitleRequestMessages(firstMessage: string): ProviderMessage[] {
+  const source = flattenMarkdown(firstMessage).trim().slice(0, CONVERSATION_TITLE_SOURCE_LIMIT)
+  return [
+    { role: 'system', content: CONVERSATION_TITLE_SYSTEM_PROMPT },
+    { role: 'user', content: source }
+  ]
+}
+
+/**
+ * A model's title reply made fit for the list: its first non-blank line without
+ * markdown, a "Title:" label, quotes or a closing period. `null` when nothing usable is left.
+ */
+export function cleanGeneratedTitle(reply: string): string | null {
+  const line = reply
+    .split('\n')
+    .map((part) => part.trim())
+    .find((part) => part !== '')
+  if (!line) return null
+  const title = flattenMarkdown(line)
+    .replace(/^#+\s*/, '')
+    .replace(/^title\s*:\s*/i, '')
+    .replace(/[.。!?！？:;,]+$/u, '')
+    .replace(/^["'“‘«`*_]+|["'”’»`*_]+$/g, '')
+    .replace(/[.。!?！？:;,]+$/u, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (title === '') return null
+  return title.slice(0, CONVERSATION_TITLE_MAX_LENGTH).trimEnd()
 }

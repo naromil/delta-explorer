@@ -12,7 +12,8 @@ const connectionFileSchema = z.object({
   providerType: z.string(),
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
-  host: z.string().optional()
+  host: z.string().optional(),
+  command: z.string().optional()
 })
 
 const roleAssignmentFileSchema = z.object({
@@ -62,12 +63,12 @@ function readString(value: unknown): string | undefined {
  */
 
 function migrateV1ToV2(raw: Record<string, unknown>, notes: string[]): Record<string, unknown> {
-  const config: ModelConfig = {
+  const config = {
     schemaVersion: 2,
-    connections: {},
+    connections: {} as Record<string, Connection>,
     roles: {
       chat: { ...DEFAULT_ROLES.chat },
-      lookup: { ...DEFAULT_ROLES.lookup },
+      lookup: { ...DEFAULT_ROLES.chat },
       'kb-maintenance': { ...DEFAULT_ROLES['kb-maintenance'] }
     }
   }
@@ -135,11 +136,37 @@ function migrateV2ToV3(raw: Record<string, unknown>, notes: string[]): Record<st
   return { ...raw, schemaVersion: 3, roles }
 }
 
+/**
+ * v3 -> v4: chat and lookup are one assistant, so they share one role. Chat's
+ * assignment wins; lookup's fills in only when chat had none.
+ */
+function migrateV3ToV4(raw: Record<string, unknown>, notes: string[]): Record<string, unknown> {
+  const roles = { ...(asRecord(raw.roles) ?? {}) }
+  const chat = asRecord(roles.chat)
+  const lookup = asRecord(roles.lookup)
+  const assigned = (role: Record<string, unknown> | null): boolean =>
+    !!role && typeof role.connectionId === 'string' && role.connectionId.trim() !== ''
+  if (!assigned(chat) && assigned(lookup)) {
+    roles.chat = lookup
+    notes.push('the assistant role took the lookup model, as chat had none')
+  } else if (
+    assigned(chat) &&
+    assigned(lookup) &&
+    (chat?.connectionId !== lookup?.connectionId || chat?.model !== lookup?.model)
+  ) {
+    notes.push('the lookup model was dropped; look-ups now use the chat model')
+  }
+  delete roles.lookup
+  notes.push('merged the chat and lookup roles (schema v4)')
+  return { ...raw, schemaVersion: 4, roles }
+}
+
 type MigrationStep = (raw: Record<string, unknown>, notes: string[]) => Record<string, unknown>
 
 const MIGRATIONS: Record<number, MigrationStep> = {
   1: migrateV1ToV2,
-  2: migrateV2ToV3
+  2: migrateV2ToV3,
+  3: migrateV3ToV4
 }
 
 function applyMigrations(
@@ -180,6 +207,7 @@ function normalizeConnections(
     if (entry.apiKey) connection.apiKey = entry.apiKey
     if (entry.baseUrl) connection.baseUrl = entry.baseUrl
     if (entry.host) connection.host = entry.host
+    if (entry.command) connection.command = entry.command
 
     connections[connection.id] = connection
   }
@@ -229,7 +257,6 @@ function defaultConfigResult(note: string): MigrationResult {
       connections: {},
       roles: {
         chat: { ...DEFAULT_ROLES.chat },
-        lookup: { ...DEFAULT_ROLES.lookup },
         'kb-maintenance': { ...DEFAULT_ROLES['kb-maintenance'] }
       }
     },

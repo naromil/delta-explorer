@@ -169,6 +169,8 @@ const api = {
     id: string
   ): Promise<{ ok: true; path: string } | { ok: false; error: string }> =>
     ipcRenderer.invoke('conversation-export', id),
+  generateConversationTitle: (firstMessage: string): Promise<string | null> =>
+    ipcRenderer.invoke('conversation-generate-title', firstMessage),
 
   kbAnalyze: (): Promise<KbRunResult> => ipcRenderer.invoke('kb-analyze'),
   kbReanalyze: (n: number): Promise<KbRunResult> => ipcRenderer.invoke('kb-reanalyze', n),

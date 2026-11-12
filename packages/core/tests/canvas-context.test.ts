@@ -156,6 +156,41 @@ describe('requestContext', () => {
   })
 })
 
+describe('quoted passages', () => {
+  const quote = (from: string, to: string, text: string, id: string): CanvasLink => ({
+    ...link(from, to, 'card'),
+    id,
+    quote: text
+  })
+
+  it('sends only the passage, beside a whole-card link from the same source', () => {
+    const links = [quote('left', 'right', 'left', 'q1'), link('left', 'right', 'card')]
+    expect(requestContext(cards, links, turns, 'right')).toEqual([
+      { kind: 'card', title: 'left q', text: 'left a' },
+      { kind: 'quote', title: 'left q', text: 'left' }
+    ])
+  })
+
+  it('sends a passage even when its card is in the history, once per passage', () => {
+    const links = [
+      quote('root', 'right', 'root a', 'q1'),
+      quote('root', 'rightEnd', 'root a', 'q2')
+    ]
+    expect(requestContext(cards, links, turns, 'rightEnd')).toEqual([
+      { kind: 'quote', title: 'root q', text: 'root a' }
+    ])
+  })
+
+  it('survives a reload, and a blank quote is dropped', () => {
+    const layout = normalizeCanvasLayout(
+      { cards, links: [quote('left', 'right', 'left a', 'q1'), quote('note', 'right', ' ', 'q2')] },
+      turns
+    )
+    expect(layout.links[0].quote).toBe('left a')
+    expect(layout.links[1]).not.toHaveProperty('quote')
+  })
+})
+
 describe('contextExcerpts limits', () => {
   const long = 'x'.repeat(50000)
 

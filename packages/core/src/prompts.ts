@@ -17,6 +17,23 @@ export function getSystemPrompt(role?: 'chat' | 'lookup'): string {
   return role === 'lookup' ? `${DELTA_SYSTEM_PROMPT} ${LOOKUP_WINDOW_NOTE}` : DELTA_SYSTEM_PROMPT
 }
 
+/** A client that serves the memory tools over MCP renames them; this maps the two. */
+export function buildMcpToolNamesNote(prefix: string): string {
+  return `Here the memory_* tools are named with the prefix ${prefix} (for example ${prefix}memory_cat for memory_cat).`
+}
+
+/* ---- Conversation titles ---- */
+
+export const CONVERSATION_TITLE_SYSTEM_PROMPT = [
+  'You name conversations for a history list.',
+  "Reply with only a title for the conversation that starts with the user's message: 2 to 6 words,",
+  "in the message's language, sentence case, no quotes, no trailing punctuation, no emoji.",
+  'Name the topic, not the request (for example "Krebs cycle energy yield", not "Question about biology").'
+].join(' ')
+
+/** The part of the first message a title is made from; a pasted document needs no more. */
+export const CONVERSATION_TITLE_SOURCE_LIMIT = 2000
+
 /* ---- Defaults ---- */
 
 export const LOOKUP_DEFAULT_QUERY = 'summarize' // the default for the lookup when user question is empty
@@ -77,6 +94,7 @@ export const KB_MEMORY_SYSTEM_PROMPT = [
   '2. Capture. Mine the conversation aggressively for what the notes missed that bears on how to help them: what they already know and at what level, what they are learning, what confused them or what they got wrong, the questions they keep asking, their goals and the projects they are working on, the tools and fields they work in, and how they like things explained. Background matters as far as it shapes this, for example their field of study or experience. Leave out personal details that would not change a future answer. Keep specifics such as names, versions, numbers and dates, and date facts that may change, using the date in the summary.',
   '3. Abstract. Step back and write what the specifics say about their learning, at a higher level of detail: their level in a field and how it is moving, a misconception or gap several questions point at, a prerequisite they seem to lack, an interest that keeps returning, what kind of explanation works for them, and what they are ready to learn next. Put each abstraction in the summary of the file or directory index it concerns, mark it as inferred, name the evidence behind it, and revise it as evidence accumulates rather than adding a near copy.',
   '4. Connect. Link related notes with relative markdown links in both directions: a concept to the ones it builds on, a question to the goal or project that raised it, a gap to the topic where it keeps showing up, a new interest to an older one it grows from. Gather recurring kinds of item in collection files (for example open-questions.md or known-gaps.md), and keep the meta-files and the root index.md accurate.',
+  'Pay special attention to passages the user highlighted: they marked them as what they found important or useful, so they show what the user is trying to learn and keep. Make sure each one is reflected in the notes on its subject, and let them weigh in what you abstract about their goals and interests.',
   'Infer as well as transcribe: the questions someone asks and the terms they had to look up reveal their level of knowledge. Mark inferences as inferred, so they can be told apart from what the user stated.',
   'Under "Questions", each "Assistant" line is the answer to the "User" line above it, cut short if long. When the questions are split into threads, each thread is a separate line of conversation that saw only its own history and, if it says "continues Thread N", the history of that thread. Do not read a thread as a reaction to any thread it does not continue, though the same interest showing up in several threads is worth noticing.',
   'Each entry under "Expanded terms" is a passage of an answer that the user selected and asked to have expanded, which is one of the strongest signals you get: it shows what they did not know or wanted to go deeper on. "User asked" is the question they typed about that passage, in their own words, and shows what they were trying to understand. Record what these reveal, and notice when several point at the same gap or interest. The Term and Answer were written by the assistant, so they are not statements by the user.',
@@ -182,8 +200,11 @@ export function buildCanvasSourcesNote(sources: CanvasSourceExcerpt[]): string {
 }
 
 export interface CanvasContextExcerpt {
-  /** A note is the user's own text, a card one question and answer, a branch a whole thread. */
-  kind: 'note' | 'card' | 'branch'
+  /**
+   * A note is the user's own text, a card one question and answer, a branch a whole thread,
+   * a quote a passage the user selected in a card.
+   */
+  kind: 'note' | 'card' | 'branch' | 'quote'
   title: string
   text: string
   /** What the user wrote on the link: how this material relates. */
@@ -200,7 +221,7 @@ export function buildCanvasContextNote(items: CanvasContextExcerpt[]): string {
     return `<${kind}>\n${[...lines, text.trim()].join('\n\n')}\n</${kind}>`
   })
   return [
-    'The user linked this material from elsewhere on their canvas into this conversation: a <note> is their own text, a <card> one question and answer, and a <branch> a separate conversation. It is not part of this conversation, so do not assume it was said here. Use it where it is relevant.',
+    'The user linked this material from elsewhere on their canvas into this conversation: a <note> is their own text, a <card> one question and answer, a <branch> a separate conversation, and a <quote> a passage they selected in a card (its title names the card). It is not part of this conversation, so do not assume it was said here. Use it where it is relevant.',
     ...blocks
   ].join('\n\n')
 }

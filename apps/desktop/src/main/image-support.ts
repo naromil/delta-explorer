@@ -1,4 +1,5 @@
 import { IMAGE_OMITTED_NOTE } from '@delta/core/prompts'
+import { isCliProvider } from '../shared/models'
 import type { RoleId } from '../shared/models'
 import { resolveRole } from './config'
 import type { ProviderMessage } from './provider'
@@ -12,6 +13,7 @@ export function modelImageSupport(role: RoleId): ImageSupport {
   try {
     const resolved = resolveRole(role)
     if (!resolved) return 'unknown'
+    if (isCliProvider(resolved.connection.providerType)) return 'no'
     const model = getCachedModel(resolved.connection.providerType, resolved.model)
     if (!model || model.inputModalities.length === 0) return 'unknown'
     return model.inputModalities.includes('image') ? 'yes' : 'no'

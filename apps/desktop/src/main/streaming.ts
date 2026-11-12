@@ -17,11 +17,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** Streaming IPC may only target the chat and lookup roles; anything else is chat. */
-export function parseStreamRole(raw: unknown): 'chat' | 'lookup' {
-  return raw === 'lookup' ? 'lookup' : 'chat'
-}
-
 export function parseProviderMessages(raw: unknown): ProviderMessage[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null
   const messages: ProviderMessage[] = []

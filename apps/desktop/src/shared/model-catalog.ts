@@ -8,7 +8,13 @@ import type { ProviderType } from './models'
 export const CATALOG_PROVIDER_IDS: Partial<Record<ProviderType, string>> = {
   'google-ai-studio': 'google',
   openai: 'openai',
-  openrouter: 'openrouter'
+  openrouter: 'openrouter',
+  anthropic: 'anthropic',
+  mistral: 'mistral',
+  groq: 'groq',
+  deepseek: 'deepseek',
+  xai: 'xai',
+  together: 'togetherai'
 }
 
 /** A single language model, flattened from the models.dev payload. */

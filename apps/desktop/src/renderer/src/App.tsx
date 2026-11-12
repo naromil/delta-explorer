@@ -127,6 +127,7 @@ function App(): React.JSX.Element {
     retryExpansion,
     editExpansion,
     dismissExpansion,
+    toggleHighlight,
     fold,
     unfold,
     renameConversation,
@@ -264,6 +265,7 @@ function App(): React.JSX.Element {
             onRetryExpansion={retryExpansion}
             onEditExpansion={editExpansion}
             onDismissExpansion={dismissExpansion}
+            onHighlight={toggleHighlight}
             transferKey={transferKey}
           />
         )}

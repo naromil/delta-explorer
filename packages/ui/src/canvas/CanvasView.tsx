@@ -53,7 +53,8 @@ import {
   unionRect,
   visibleWorldRect,
   wheelZoomFactor,
-  zoomAt
+  zoomAt,
+  QUOTE_TEXT_LIMIT
 } from '@delta/core/canvas'
 import type { CanvasArrangeResult } from '@delta/core/canvas-arrange'
 import {
@@ -86,6 +87,7 @@ import ExpandPrompt from '../conversation/ExpandPrompt'
 import ExpandSelectionBar from '../conversation/ExpandSelectionBar'
 import type { useCanvas } from './useCanvas'
 import { useExpansionContextMenu } from '../conversation/useExpansionContextMenu'
+import type { SelectedPassage } from '../conversation/useExpansionContextMenu'
 import { isEditableTarget } from '../lib/editable'
 import { formatRelativeTime } from '../lib/format'
 import type { ConversationMeta, Turn } from '@delta/core/conversation'
@@ -179,6 +181,11 @@ type Gesture =
     }
 
 /** A rectangle waiting for its question: the canvas's composer. */
+/** One chip per source, and one per passage quoted from it. */
+function draftLinkKey(link: CanvasContextLink): string {
+  return link.quote ? `${link.from}\u0000${link.quote}` : link.from
+}
+
 interface Draft {
   /** A fresh draft is a fresh composer, so typed text never carries over. */
   key: number
@@ -231,6 +238,9 @@ const REFUSE_ARRANGE = 'Other cards are in the way of that arrangement.'
 const ALREADY_TIDY = 'Already tidy.'
 const NO_CARD_TO_CONNECT = 'Start a connection on a card.'
 const CONNECT_ANOTHER = 'Drag to a different card to connect them.'
+const PASSAGE_PICK_TARGET = 'Click the card that should receive this passage. Esc cancels.'
+const PASSAGE_ANOTHER = 'Click a different card to send this passage to.'
+const PASSAGE_SOURCE_GONE = 'The card holding this passage is gone.'
 const NO_CONTINUE_FAILED = 'Retry this answer before continuing it.'
 const WAITING_PARENT = 'Waiting for the answer it continues…'
 const FAILED_PARENT = 'The answer it continues failed. Retry it first.'
@@ -301,7 +311,13 @@ function CanvasBoard({
   const [tool, setTool] = useState<CanvasTool>(cards.length === 0 ? 'answer' : 'select')
   const [gesture, setGesture] = useState<Gesture | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
+  const draftRef = useRef(draft)
+  useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
   const [placing, setPlacing] = useState<Placing | null>(null)
+  /** A passage chosen with Link…, waiting for a click on the card that receives it. */
+  const [linkingPassage, setLinkingPassage] = useState<{ from: string; quote: string } | null>(null)
   const [notice, setNotice] = useState<CanvasNotice | null>(null)
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set())
   const [noteDraft, setNoteDraft] = useState<{ key: number; rect: CanvasRect } | null>(null)
@@ -522,11 +538,54 @@ function CanvasBoard({
     (turn: Turn): boolean => turn.role === 'assistant' || pageTurnIds.has(turn.id),
     [pageTurnIds]
   )
+  /** The card showing a passage: its turn's card, or the expansion card holding the answer. */
+  const passageCardId = useCallback(
+    ({ turnId, parentExpansionId }: SelectedPassage): string | undefined =>
+      cardsRef.current.find((card) =>
+        parentExpansionId !== undefined
+          ? card.kind === 'expansion' && card.expansionId === parentExpansionId
+          : (card.kind === 'message' || card.kind === 'page') && card.turnId === turnId
+      )?.id,
+    []
+  )
+
+  /** With the composer open the passage joins what it sends; otherwise a click picks the card. */
+  const linkPassage = useCallback(
+    (passage: SelectedPassage): void => {
+      const from = passageCardId(passage)
+      const quote = passage.text.trim().slice(0, QUOTE_TEXT_LIMIT)
+      if (!from) {
+        showNotice(PASSAGE_SOURCE_GONE)
+        return
+      }
+      if (quote === '') return
+      if (draftRef.current) {
+        const link: CanvasContextLink = { from, context: 'card', quote }
+        setDraft(
+          (prev) =>
+            prev && {
+              ...prev,
+              context: [
+                ...(prev.context ?? []).filter((item) => draftLinkKey(item) !== draftLinkKey(link)),
+                link
+              ]
+            }
+        )
+        return
+      }
+      setLinkingPassage({ from, quote })
+      showNotice(PASSAGE_PICK_TARGET)
+    },
+    [passageCardId, showNotice]
+  )
+
   const selection = useExpansionContextMenu({
     turns,
     onExpand: beginPlacing,
     onUnfold: () => {},
-    canExpandTurn
+    canExpandTurn,
+    onHighlight: canvas.toggleHighlight,
+    onLinkSelection: linkPassage
   })
 
   /* ---- Drawing ---- */
@@ -672,7 +731,9 @@ function CanvasBoard({
     const history = sessionCardIds(cards, draft.parentId)
     if (ids.some((id) => history.includes(id))) showNotice(LINK_IN_HISTORY)
     const added = ids
-      .filter((id) => !history.includes(id) && context.every((link) => link.from !== id))
+      .filter(
+        (id) => !history.includes(id) && context.every((link) => link.from !== id || link.quote)
+      )
       .map((from): CanvasContextLink => {
         const isNote = cards.some((card) => card.id === from && card.kind === 'note')
         return { from, context: isNote ? 'card' : 'branch' }
@@ -692,7 +753,28 @@ function CanvasBoard({
     if (id) raiseCards([id])
   }
 
+  /** The click that ends Link…: the card under it receives the passage as context. */
+  const finishPassageLink = (e: React.PointerEvent): void => {
+    if (!linkingPassage) return
+    e.preventDefault()
+    e.stopPropagation()
+    setLinkingPassage(null)
+    if (e.button !== 0) return
+    const target = cardAtPoint(cards, pointerInWorld(e), stack)
+    if (!target || target.id === linkingPassage.from) {
+      showNotice(target ? PASSAGE_ANOTHER : PASSAGE_PICK_TARGET.replace(' Esc cancels.', ''))
+      if (target) setLinkingPassage(linkingPassage)
+      return
+    }
+    const id = canvas.addLink(linkingPassage.from, target.id, linkingPassage.quote)
+    if (id !== null) select([id])
+  }
+
   const handleSizingPress = (e: React.PointerEvent): void => {
+    if (linkingPassage) {
+      finishPassageLink(e)
+      return
+    }
     raisePressedCard(e)
     if (gesture?.type !== 'draw' || !gesture.unheld) return
     if (e.button !== 0) {
@@ -1868,7 +1950,11 @@ function CanvasBoard({
     viewportRef,
     clearGesture: gesture ? () => setGesture(null) : null,
     closeHelp: helpOpen ? () => setHelpOpen(false) : null,
-    cancelPlacing: placing ? () => setPlacing(null) : null,
+    cancelPlacing: placing
+      ? () => setPlacing(null)
+      : linkingPassage
+        ? () => setLinkingPassage(null)
+        : null,
     cancelDraft: draft ? () => setDraft(null) : null,
     clearSelection: () => select([]),
     resetTool: tool !== 'select' ? () => chooseTool('select') : null,
@@ -2283,14 +2369,17 @@ function CanvasBoard({
       (prev) =>
         prev && {
           ...prev,
-          context: prev.context?.map((link) => (link.from === id ? { ...link, context } : link))
+          context: prev.context?.map((link) =>
+            draftLinkKey(link) === id ? { ...link, context } : link
+          )
         }
     )
   }
 
   const removeDraftContext = (id: string): void => {
     setDraft(
-      (prev) => prev && { ...prev, context: prev.context?.filter((link) => link.from !== id) }
+      (prev) =>
+        prev && { ...prev, context: prev.context?.filter((link) => draftLinkKey(link) !== id) }
     )
   }
 
@@ -2338,7 +2427,7 @@ function CanvasBoard({
   const draftInherited = useMemo(
     () =>
       sessionContextLinks(cards, links, draftParent?.id).filter((link) =>
-        draftOwnContext.every((own) => own.from !== link.from)
+        draftOwnContext.every((own) => draftLinkKey(own) !== draftLinkKey(link))
       ),
     [cards, draftOwnContext, draftParent?.id, links]
   )
@@ -2361,9 +2450,14 @@ function CanvasBoard({
     const content = cardContent(card, canvas)
     return [
       {
-        id: link.from,
-        label: card.kind === 'note' ? card.text : (content.question ?? content.caption),
-        context: card.kind === 'note' ? undefined : link.context,
+        id: draftLinkKey(link),
+        label: link.quote
+          ? `“${link.quote}”`
+          : card.kind === 'note'
+            ? card.text
+            : (content.question ?? content.caption),
+        // A note and a quoted passage are always sent as they are.
+        context: card.kind === 'note' || link.quote ? undefined : link.context,
         inherited
       }
     ]
@@ -2382,7 +2476,7 @@ function CanvasBoard({
       : [
           ...draftOwnContext.flatMap((link) => {
             const from = displayed.find((card) => card.id === link.from)
-            return from ? [{ id: link.from, from: from.rect, to: draftRect }] : []
+            return from ? [{ id: draftLinkKey(link), from: from.rect, to: draftRect }] : []
           }),
           // Placed away from what it continues, nothing else shows that it does.
           ...(draftParent &&

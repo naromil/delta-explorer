@@ -32,6 +32,17 @@ export interface ExpansionNode {
   folded: boolean
   /** Offsets are relative to this node's `answer`. */
   children: ExpansionNode[]
+  /** Passages of `answer` the user marked as important. */
+  highlights?: TextHighlight[]
+}
+
+/**
+ * A passage the user marked in an answer, by offsets into the same source an expansion
+ * anchors to. Unlike an expansion it is a decoration: it may cross blocks and expansions.
+ */
+export interface TextHighlight {
+  start: number
+  end: number
 }
 
 export interface ExpansionRange {
@@ -65,6 +76,8 @@ export interface RichTextTurn {
   id: number
   content: string
   expansions: ExpansionNode[]
+  /** Passages of `content` the user marked as important. */
+  highlights?: TextHighlight[]
 }
 
 export interface ExpansionLocation {
@@ -376,7 +389,9 @@ export function restartExpansion<T extends RichTextTurn>(turns: T[], id: number)
     status: 'loading',
     error: undefined,
     folded: false,
-    children: []
+    children: [],
+    // Their offsets point into the old answer too.
+    highlights: undefined
   })
 }
 
@@ -513,6 +528,129 @@ export function finalizeTurns<T extends RichTextTurn>(turns: T[]): T[] {
     return { ...turn, expansions }
   })
   return changed ? next : turns
+}
+
+/* ---- Highlights ---- */
+
+/** Highlights that fit `length`, sorted, with overlapping or touching ones merged. */
+export function soundHighlights(raw: unknown, length: number): TextHighlight[] {
+  if (!Array.isArray(raw)) return []
+  const ranges = raw
+    .filter(
+      (item): item is TextHighlight =>
+        typeof item === 'object' &&
+        item !== null &&
+        Number.isInteger((item as TextHighlight).start) &&
+        Number.isInteger((item as TextHighlight).end)
+    )
+    .map(({ start, end }) => ({ start: Math.max(0, start), end: Math.min(length, end) }))
+    .filter(({ start, end }) => start < end)
+    .sort((a, b) => a.start - b.start)
+  const merged: TextHighlight[] = []
+  for (const range of ranges) {
+    const last = merged[merged.length - 1]
+    if (last && range.start <= last.end) last.end = Math.max(last.end, range.end)
+    else merged.push({ ...range })
+  }
+  return merged
+}
+
+/** Whether `range` lies wholly inside one highlight, so the action on it is to remove it. */
+export function isHighlighted(
+  highlights: TextHighlight[] | undefined,
+  range: ExpansionRange
+): boolean {
+  return (highlights ?? []).some((item) => item.start <= range.start && range.end <= item.end)
+}
+
+/**
+ * Highlights `range`, or, when it lies inside a highlight already, removes every highlight it
+ * touches. Overlapping highlights merge into one.
+ */
+export function toggleHighlight(
+  highlights: TextHighlight[] | undefined,
+  range: ExpansionRange,
+  length: number
+): TextHighlight[] {
+  const current = highlights ?? []
+  if (isHighlighted(current, range)) {
+    return current.filter((item) => item.end <= range.start || item.start >= range.end)
+  }
+  return soundHighlights([...current, range], length)
+}
+
+function toggleInNodes(
+  nodes: ExpansionNode[],
+  id: number,
+  range: ExpansionRange
+): ExpansionNode[] | null {
+  for (let index = 0; index < nodes.length; index++) {
+    const node = nodes[index]
+    let next: ExpansionNode | null = null
+    if (node.id === id) {
+      const highlights = toggleHighlight(node.highlights, range, node.answer.length)
+      next = { ...node, highlights }
+    } else {
+      const children = toggleInNodes(node.children, id, range)
+      if (children) next = { ...node, children }
+    }
+    if (next) return [...nodes.slice(0, index), next, ...nodes.slice(index + 1)]
+  }
+  return null
+}
+
+/**
+ * Toggles a highlight in a turn's content, or in the answer of `parentExpansionId` inside it.
+ * Returns `turns` unchanged when the turn or expansion is gone.
+ */
+export function toggleHighlightInTurns<T extends RichTextTurn>(
+  turns: T[],
+  turnId: number,
+  range: ExpansionRange,
+  parentExpansionId?: number
+): T[] {
+  const index = turns.findIndex((turn) => turn.id === turnId)
+  if (index < 0) return turns
+  const turn = turns[index]
+  let next: T
+  if (parentExpansionId === undefined) {
+    next = { ...turn, highlights: toggleHighlight(turn.highlights, range, turn.content.length) }
+  } else {
+    const expansions = toggleInNodes(turn.expansions, parentExpansionId, range)
+    if (!expansions) return turns
+    next = { ...turn, expansions }
+  }
+  return [...turns.slice(0, index), next, ...turns.slice(index + 1)]
+}
+
+/** The marked passages of `source`, as plain text, in order. */
+export function highlightedPassages(
+  source: string,
+  highlights: TextHighlight[] | undefined
+): string[] {
+  return soundHighlights(highlights, source.length)
+    .map(({ start, end }) => flattenMarkdown(source.slice(start, end)).replace(/\s+/g, ' ').trim())
+    .filter((text) => text !== '')
+}
+
+function soundNodeHighlights(nodes: ExpansionNode[]): ExpansionNode[] {
+  return nodes.map((node) => {
+    const children = soundNodeHighlights(node.children)
+    const highlights = soundHighlights(node.highlights, node.answer.length)
+    const rest: ExpansionNode = { ...node, children }
+    delete rest.highlights
+    return highlights.length > 0 ? { ...rest, highlights } : rest
+  })
+}
+
+/** Drops stored highlights that no longer fit their text, and empty lists. */
+export function soundTurnHighlights<T extends RichTextTurn>(turns: T[]): T[] {
+  return turns.map((turn) => {
+    const highlights = soundHighlights(turn.highlights, turn.content.length)
+    const rest: T = { ...turn, expansions: soundNodeHighlights(turn.expansions) }
+    delete rest.highlights
+    return highlights.length > 0 ? { ...rest, highlights } : rest
+  })
 }
 
 /* ---- Turn-scoped operations ---- */

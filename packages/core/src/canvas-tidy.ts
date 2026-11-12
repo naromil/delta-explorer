@@ -1,18 +1,17 @@
 /**
  * Tidying the canvas, family by family. Cards attached to each other form a block, which stays
- * attached and is only straightened (`canvas-straighten.ts`). A family is the blocks that parent-child relationships connect: they are drawn
- * in layers along the way they already run, so their lines cross as little as possible. Families
- * are then packed apart, in the order that crosses the fewest of the lines left between them. A
- * drawn link never joins anything; it only affects that order. Everything is pure.
+ * attached and is only straightened (`canvas-straighten.ts`). A family is the blocks that
+ * parent-child relationships connect: each is drawn as a tree that keeps every child on the side
+ * of its parent it stood on (right, below, left or above), so branches never wind around each
+ * other. Families are then packed apart, in the order that crosses the fewest of the lines left
+ * between them. A drawn link never joins anything; it only affects that order. Everything is pure.
  */
-import type { CanvasAxis, CanvasArrangeResult, CanvasBlock, PlacedBlock } from './canvas-arrange'
+import type { CanvasArrangeResult, CanvasBlock, PlacedBlock } from './canvas-arrange'
 import { blocksFor, placedRect, settleBlocks } from './canvas-arrange'
 import type { CanvasCard, CanvasLayout, CanvasPoint, CanvasRect } from './canvas'
 import { askedAboutRelations, cardRects, rectClearOf, sharesSide } from './canvas'
 import { boundsOf, movingBounds } from './canvas-selection'
 import { straightenBlocks } from './canvas-straighten'
-import type { LayoutEdge } from './layered-layout'
-import { layeredLayout } from './layered-layout'
 
 export type TidyItems = Pick<CanvasLayout, 'cards' | 'frames' | 'links'>
 
@@ -38,15 +37,12 @@ type CardLine = readonly [string, string]
 
 /** Space kept from what stays put. */
 const CLEARANCE = 48
-/** Between blocks in one layer of a family. */
+/** Between children on the same side of their parent. */
 const SIBLING_GAP = 48
-/** Between the layers of a family. */
+/** Between a parent and its children. */
 const LAYER_GAP = 72
 /** Wider than anything inside a family, so families read as families. */
 const FAMILY_GAP = 120
-/** How strongly a line holds its two ends in line: a session reads straight through. */
-const CONTINUATION_WEIGHT = 8
-const EXPANSION_WEIGHT = 1
 /** The shape a tidied canvas aims for, roughly a window's. */
 const TIDY_ASPECT = 1.6
 const ORDER_PASSES = 4
@@ -113,46 +109,188 @@ function spansOverlap(aStart: number, aLength: number, bStart: number, bLength: 
   return aStart < bStart + bLength && bStart < aStart + aLength
 }
 
-/**
- * The way a family already runs. A pair clearly beside each other counts for `x`, clearly above
- * and below for `y`, and a diagonal for neither. Down wins a tie, as that is where Enter continues.
- */
-function flowAxis(blocks: CanvasBlock[], edges: LayoutEdge[]): CanvasAxis {
-  let beside = 0
-  let stacked = 0
-  for (const { from, to, weight } of edges) {
-    const a = blocks[from].rect
-    const b = blocks[to].rect
-    const sharesX = spansOverlap(a.x, a.w, b.x, b.w)
-    const sharesY = spansOverlap(a.y, a.h, b.y, b.h)
-    if (sharesY && !sharesX) beside += weight
-    if (sharesX && !sharesY) stacked += weight
-  }
-  return beside > stacked ? 'x' : 'y'
+/* ---- Trees that keep their directions ---- */
+
+type TidyDirection = 'right' | 'below' | 'left' | 'above'
+
+/** The order groups are placed in: a later group moves out of an earlier one's way. */
+const DIRECTIONS: readonly TidyDirection[] = ['right', 'below', 'left', 'above']
+
+/** One block and everything under it, relative to the corner of what they cover. */
+interface TreeBox {
+  placed: PlacedBlock[]
+  w: number
+  h: number
+  /** Where the tree's own block stands in the box. */
+  root: CanvasRect
 }
 
-/** The family's blocks in layers, relative to the corner of what they cover. */
-function layOutFamily(family: TidyFamily, blockOf: ReadonlyMap<string, CanvasBlock>): TidyBox {
-  const { blocks } = family
-  const index = new Map(blocks.map((block, i) => [block, i]))
-  const edges = family.edges.map(({ parent, child }): LayoutEdge => ({
-    from: index.get(blockOf.get(parent.id) as CanvasBlock) as number,
-    to: index.get(blockOf.get(child.id) as CanvasBlock) as number,
-    weight: child.kind === 'expansion' ? EXPANSION_WEIGHT : CONTINUATION_WEIGHT
-  }))
-  const axis = flowAxis(blocks, edges)
-  const nodes = blocks.map(({ rect }) =>
-    axis === 'y'
-      ? { mainLength: rect.h, crossLength: rect.w, crossAt: rect.x + rect.w / 2 }
-      : { mainLength: rect.w, crossLength: rect.h, crossAt: rect.y + rect.h / 2 }
-  )
-  const positions = layeredLayout(nodes, edges, { layer: LAYER_GAP, sibling: SIBLING_GAP })
-  const placed = blocks.map((block, i): PlacedBlock => {
-    const { main, cross } = positions[i]
-    return axis === 'y' ? { block, x: cross, y: main } : { block, x: main, y: cross }
+/**
+ * Which side of its parent a child stands on, measured in units of the two cards' half sizes so a
+ * wide card beside a tall one is still read as beside it. Down wins a tie, as that is where Enter
+ * continues. Tidying keeps every child on this side, so a second tidy reads the same sides.
+ */
+function directionOf(parent: CanvasRect, child: CanvasRect): TidyDirection {
+  const from = centerOf(parent)
+  const to = centerOf(child)
+  const across = (to.x - from.x) / ((parent.w + child.w) / 2)
+  const down = (to.y - from.y) / ((parent.h + child.h) / 2)
+  if (Math.abs(across) > Math.abs(down)) return across > 0 ? 'right' : 'left'
+  return down >= 0 ? 'below' : 'above'
+}
+
+function boxesOverlap(a: CanvasRect, b: CanvasRect): boolean {
+  return spansOverlap(a.x, a.w, b.x, b.w) && spansOverlap(a.y, a.h, b.y, b.h)
+}
+
+/**
+ * The children on one side of `root`, stacked across that side in the order they stood and
+ * centred on it, then moved out until they stand clear of `taken`. The gap from the parent is
+ * wide enough that each child still reads as being on this side.
+ */
+function placeSide(
+  root: CanvasRect,
+  side: TidyDirection,
+  trees: TreeBox[],
+  taken: CanvasRect[]
+): Array<{ tree: TreeBox; x: number; y: number }> {
+  const sideways = side === 'right' || side === 'left'
+  // Across the side: stack the trees, then centre their own blocks on the parent.
+  let along = 0
+  const offsets = trees.map((tree) => {
+    const at = along
+    along += (sideways ? tree.h : tree.w) + SIBLING_GAP
+    return at
   })
-  const { w, h } = boundsOf(placed.map(placedRect)) as CanvasRect
-  return { placed, w, h }
+  const rootMid = (tree: TreeBox, i: number): number =>
+    offsets[i] + (sideways ? tree.root.y + tree.root.h / 2 : tree.root.x + tree.root.w / 2)
+  const parentMid = sideways ? root.y + root.h / 2 : root.x + root.w / 2
+  const shift =
+    parentMid - (rootMid(trees[0], 0) + rootMid(trees[trees.length - 1], trees.length - 1)) / 2
+  const cross = offsets.map((offset) => offset + shift)
+
+  // Out from the side: far enough that every child is read on this side again.
+  let gap = LAYER_GAP
+  trees.forEach((tree, i) => {
+    const { root: own } = tree
+    const offCentre = Math.abs(rootMid(tree, i) + shift - parentMid)
+    const [mainHalf, crossHalf] = sideways
+      ? [(root.w + own.w) / 2, (root.h + own.h) / 2]
+      : [(root.h + own.h) / 2, (root.w + own.w) / 2]
+    const lead =
+      side === 'right'
+        ? own.x
+        : side === 'left'
+          ? tree.w - own.x - own.w
+          : side === 'below'
+            ? own.y
+            : tree.h - own.y - own.h
+    const ownHalf = sideways ? own.w / 2 : own.h / 2
+    const parentHalf = sideways ? root.w / 2 : root.h / 2
+    const needed = (offCentre * mainHalf) / crossHalf + 1 - parentHalf - lead - ownHalf
+    gap = Math.max(gap, Math.ceil(needed))
+  })
+
+  const at = (distance: number): Array<{ tree: TreeBox; x: number; y: number }> =>
+    trees.map((tree, i) => {
+      if (side === 'right') return { tree, x: root.x + root.w + distance, y: cross[i] }
+      if (side === 'left') return { tree, x: root.x - distance - tree.w, y: cross[i] }
+      if (side === 'below') return { tree, x: cross[i], y: root.y + root.h + distance }
+      return { tree, x: cross[i], y: root.y - distance - tree.h }
+    })
+  // Moving further out only makes the side clearer, so this always ends.
+  let distance = gap
+  for (;;) {
+    const spots = at(distance)
+    const boxes = spots.map(({ tree, x, y }) => ({ x, y, w: tree.w, h: tree.h }))
+    const hits = taken.filter((other) => boxes.some((box) => boxesOverlap(box, other)))
+    if (hits.length === 0) return spots
+    const reach = Math.max(
+      ...hits.map((other) =>
+        side === 'right'
+          ? other.x + other.w - root.x - root.w
+          : side === 'left'
+            ? root.x - other.x
+            : side === 'below'
+              ? other.y + other.h - root.y - root.h
+              : root.y - other.y
+      )
+    )
+    distance = Math.max(distance + 1, reach + SIBLING_GAP)
+  }
+}
+
+/** A block with its children around it on the sides they stood, each child with its own. */
+function layOutTree(
+  block: CanvasBlock,
+  childrenOf: ReadonlyMap<CanvasBlock, CanvasBlock[]>
+): TreeBox {
+  const root: CanvasRect = { x: 0, y: 0, w: block.rect.w, h: block.rect.h }
+  const placed: PlacedBlock[] = [{ block, x: 0, y: 0 }]
+  const taken: CanvasRect[] = [root]
+  const children = childrenOf.get(block) ?? []
+  for (const side of DIRECTIONS) {
+    const sideways = side === 'right' || side === 'left'
+    const group = children
+      .filter((child) => directionOf(block.rect, child.rect) === side)
+      .sort((a, b) =>
+        sideways ? centerOf(a.rect).y - centerOf(b.rect).y : centerOf(a.rect).x - centerOf(b.rect).x
+      )
+    if (group.length === 0) continue
+    const trees = group.map((child) => layOutTree(child, childrenOf))
+    for (const { tree, x, y } of placeSide(root, side, trees, taken)) {
+      taken.push({ x, y, w: tree.w, h: tree.h })
+      for (const item of tree.placed) placed.push({ ...item, x: item.x + x, y: item.y + y })
+    }
+  }
+  const bounds = boundsOf(placed.map(placedRect)) as CanvasRect
+  return {
+    placed: placed.map((item) => ({ ...item, x: item.x - bounds.x, y: item.y - bounds.y })),
+    w: bounds.w,
+    h: bounds.h,
+    root: { ...root, x: -bounds.x, y: -bounds.y }
+  }
+}
+
+/**
+ * A family as trees: every child stays on the side of its parent it stood on, so what the user
+ * laid out right, left, up or down still reads that way and branches do not wind around each
+ * other. A block reached from two parents hangs from the first; one with none starts a tree.
+ */
+function layOutFamily(family: TidyFamily, blockOf: ReadonlyMap<string, CanvasBlock>): TidyBox[] {
+  const reading = [...family.blocks].sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x)
+  const parentsOf = new Map<CanvasBlock, CanvasBlock[]>()
+  for (const { parent, child } of family.edges) {
+    const from = blockOf.get(parent.id) as CanvasBlock
+    const to = blockOf.get(child.id) as CanvasBlock
+    parentsOf.set(to, [...(parentsOf.get(to) ?? []), from])
+  }
+  const childrenOf = new Map<CanvasBlock, CanvasBlock[]>()
+  const reached = new Set<CanvasBlock>()
+  const roots: CanvasBlock[] = []
+  const grow = (start: CanvasBlock): void => {
+    roots.push(start)
+    reached.add(start)
+    const queue = [start]
+    while (queue.length > 0) {
+      const block = queue.shift() as CanvasBlock
+      for (const { parent, child } of family.edges) {
+        if (blockOf.get(parent.id) !== block) continue
+        const next = blockOf.get(child.id) as CanvasBlock
+        if (reached.has(next)) continue
+        reached.add(next)
+        childrenOf.set(block, [...(childrenOf.get(block) ?? []), next])
+        queue.push(next)
+      }
+    }
+  }
+  for (const block of reading) if (!parentsOf.has(block) && !reached.has(block)) grow(block)
+  // Stored parent links are not trusted: a cycle still gets drawn from somewhere.
+  for (const block of reading) if (!reached.has(block)) grow(block)
+  return roots.map((root) => {
+    const { placed, w, h } = layOutTree(root, childrenOf)
+    return { placed, w, h }
+  })
 }
 
 /* ---- Packing the families ---- */
@@ -375,10 +513,12 @@ export function tidySelection(
   const families = familiesOf(blocks, parentEdges(tidied, blockOf), blockOf)
   // Size first keeps a second tidy from reshuffling; reading order only separates equals.
   const boxes = families
-    .map((family) => ({
-      box: layOutFamily(family, blockOf),
-      at: boundsOf(family.blocks.map((block) => block.rect)) as CanvasRect
-    }))
+    .flatMap((family) =>
+      layOutFamily(family, blockOf).map((box) => ({
+        box,
+        at: boundsOf(box.placed.map(({ block }) => block.rect)) as CanvasRect
+      }))
+    )
     .sort((a, b) => b.box.h - a.box.h || b.box.w - a.box.w || a.at.y - b.at.y || a.at.x - b.at.x)
     .map(({ box }) => box)
 

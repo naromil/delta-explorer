@@ -16,12 +16,13 @@ import {
   insertExpansionInTurns,
   maxExpansionId,
   removeExpansionInTurns,
+  toggleHighlightInTurns,
   restartExpansion,
   setExpansionFolded,
   updateExpansion
 } from '@delta/core/rich-text'
 import { isAnchoredRange } from '@delta/ui/lib/markdown'
-import type { ExpandOutcome } from '@delta/ui/conversation'
+import type { ExpandOutcome, HighlightRequest } from '@delta/ui/conversation'
 import { buildExpandRequest } from '@delta/core/expand-prompt'
 import {
   clearRequests,
@@ -70,6 +71,7 @@ export function useChatStreaming(options?: UseChatStreamingOptions): {
   retryExpansion: (expansionId: number) => void
   editExpansion: (expansionId: number, prompt: string) => void
   dismissExpansion: (expansionId: number) => void
+  toggleHighlight: HighlightRequest
   fold: (id: number) => void
   unfold: (id: number) => void
   renameConversation: (title: string) => void
@@ -268,6 +270,23 @@ export function useChatStreaming(options?: UseChatStreamingOptions): {
     [loading, truncateAndResend]
   )
 
+  /** Swaps the title cut from the first message for a model-written one, unless renamed since. */
+  const nameConversation = useCallback(
+    (id: string, fallback: string, firstMessage: string): void => {
+      void window.api.generateConversationTitle(firstMessage).then(
+        (generated) => {
+          const meta = conversationMetaRef.current
+          if (!generated || meta?.id !== id || meta.title !== fallback) return
+          meta.title = generated
+          setConversationTitle(generated)
+          requestSave(false)
+        },
+        (err: unknown) => console.warn('Could not generate a conversation title:', err)
+      )
+    },
+    [requestSave]
+  )
+
   const send = useCallback(
     (content: string, attachments?: ImageAttachment[]) => {
       const trimmed = content.trim()
@@ -289,6 +308,7 @@ export function useChatStreaming(options?: UseChatStreamingOptions): {
         }
         setConversationId(id)
         setConversationTitle(title)
+        if (trimmed) nameConversation(id, title, trimmed)
       }
 
       const userTurnId = nextTurnId++
@@ -321,7 +341,7 @@ export function useChatStreaming(options?: UseChatStreamingOptions): {
       }
       hasSentRef.current = true
     },
-    [loading, role, contextReady, requestCompletion]
+    [loading, role, contextReady, requestCompletion, nameConversation]
   )
 
   const startExpansion = useCallback(
@@ -464,6 +484,18 @@ export function useChatStreaming(options?: UseChatStreamingOptions): {
     [cancelExpansionStreams, requestSave]
   )
 
+  /** A highlight is content for the curator: it marks the conversation for another pass. */
+  const toggleHighlight = useCallback<HighlightRequest>(
+    (turnId, range, parentExpansionId) => {
+      setState((prev) => ({
+        ...prev,
+        turns: toggleHighlightInTurns(prev.turns, turnId, range, parentExpansionId)
+      }))
+      requestSave(true)
+    },
+    [requestSave]
+  )
+
   const fold = useCallback(
     (expansionId: number) => {
       setState((prev) => ({ ...prev, turns: setExpansionFolded(prev.turns, expansionId, true) }))
@@ -570,6 +602,7 @@ export function useChatStreaming(options?: UseChatStreamingOptions): {
     retryExpansion,
     editExpansion,
     dismissExpansion,
+    toggleHighlight,
     fold,
     unfold,
     renameConversation,

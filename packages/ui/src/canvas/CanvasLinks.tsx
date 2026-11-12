@@ -52,6 +52,13 @@ const SIDE_ANGLE: Readonly<Record<CanvasSide, number>> = {
   top: 270
 }
 
+const QUOTE_PREVIEW_LENGTH = 80
+
+function quotePreview(quote: string): string {
+  const flat = quote.replace(/\s+/g, ' ').trim()
+  return flat.length > QUOTE_PREVIEW_LENGTH ? `${flat.slice(0, QUOTE_PREVIEW_LENGTH)}…` : flat
+}
+
 function isLinked(card: CanvasCard): card is CanvasExpansionCard {
   return card.kind === 'expansion'
 }
@@ -293,11 +300,13 @@ function CanvasLinks({
               onContextMenu={(e) => onLinkMenu(e, link.id)}
             >
               <title>
-                {link.context === 'branch'
-                  ? 'Sends the whole branch as context. Double-click to label'
-                  : link.context === 'card'
-                    ? 'Sends this card as context. Double-click to label'
-                    : 'Double-click to label'}
+                {link.quote
+                  ? `Sends the passage “${quotePreview(link.quote)}” as context. Double-click to label`
+                  : link.context === 'branch'
+                    ? 'Sends the whole branch as context. Double-click to label'
+                    : link.context === 'card'
+                      ? 'Sends this card as context. Double-click to label'
+                      : 'Double-click to label'}
               </title>
             </path>
           </g>

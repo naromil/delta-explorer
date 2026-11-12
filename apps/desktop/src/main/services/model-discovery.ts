@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { providerRegistry } from '../models/registries'
 import type { Connection } from '../models/registries'
+import { probeClaudeCode } from './claude-code'
 
 export interface DiscoveredModels {
   models: string[]
@@ -99,6 +100,9 @@ function authHeaders(connection: Connection): Record<string, string> {
     return { 'x-goog-api-key': connection.apiKey }
   }
   if (connection.providerType === 'ollama') return {}
+  if (connection.providerType === 'anthropic') {
+    return { 'x-api-key': connection.apiKey, 'anthropic-version': '2023-06-01' }
+  }
   return { Authorization: `Bearer ${connection.apiKey}` }
 }
 
@@ -126,6 +130,9 @@ export async function discoverConnectionModels(
   connection: Connection,
   fetchImpl: typeof fetch = fetch
 ): Promise<DiscoveredModels> {
+  if (connection.providerType === 'claude-code') {
+    return { models: [...(providerRegistry['claude-code'].knownModels ?? [])] }
+  }
   try {
     const baseUrl = resolveBaseUrl(connection)
     if (!baseUrl) return { models: [], error: missingBaseUrlError(connection) }
@@ -211,6 +218,7 @@ export async function testConnection(
   probeModel?: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<ConnectionTestResult> {
+  if (connection.providerType === 'claude-code') return probeClaudeCode(connection.command)
   try {
     const discovery = await discoverConnectionModels(connection, fetchImpl)
     if (discovery.models.length > 0) {

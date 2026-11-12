@@ -146,25 +146,25 @@ describe('memoryAgentFor', () => {
   })
 
   it('lets every role write, but only the curator is told to do the routine upkeep', () => {
-    for (const role of ['chat', 'lookup', 'kb-maintenance'] as const) {
+    for (const role of ['chat', 'kb-maintenance'] as const) {
       expect(Object.keys(agentFor(role).tools)).toEqual(expect.arrayContaining(WRITE_TOOLS))
     }
     expect(agentFor('chat').instructions).toMatch(/background curator/)
-    expect(agentFor('lookup').instructions).toMatch(/background curator/)
+    expect(agentFor('chat').instructions).toMatch(/background curator/)
     expect(agentFor('kb-maintenance').instructions).not.toMatch(/background curator/)
     expect(agentFor('kb-maintenance').maxSteps).toBeGreaterThan(agentFor('chat').maxSteps)
   })
 
   it('loads learning preferences into every prompt and has the curator maintain them', () => {
     writeFileSync(join(memoriesDir(), 'index-learning.md'), 'Prefers worked examples.')
-    for (const role of ['chat', 'lookup', 'kb-maintenance'] as const) {
+    for (const role of ['chat', 'kb-maintenance'] as const) {
       expect(agentFor(role).instructions).toContain('Prefers worked examples.')
     }
     expect(KB_MEMORY_SYSTEM_PROMPT).toContain('index-learning.md')
   })
 
   it('has the assistant take notes in session and the curator review them later', () => {
-    for (const role of ['chat', 'lookup'] as const) {
+    for (const role of ['chat'] as const) {
       const instructions = agentFor(role).instructions
       expect(instructions).toMatch(/without being asked/)
       expect(instructions).toContain(MEMORY_INBOX_FILE)
@@ -175,7 +175,7 @@ describe('memoryAgentFor', () => {
   })
 
   it('tells every stage the base exists to help the user improve', () => {
-    for (const role of ['chat', 'lookup'] as const) {
+    for (const role of ['chat'] as const) {
       expect(agentFor(role).instructions).toMatch(/help this user improve/)
     }
     expect(KB_MEMORY_SYSTEM_PROMPT).toMatch(/help this user improve/)
@@ -215,7 +215,7 @@ describe('auto-loaded files', () => {
   it('is included in every prompt without a tool call', () => {
     mkdirSync(memories(), { recursive: true })
     writeFileSync(join(memories(), 'index.md'), 'User is a chemist. See work/.')
-    for (const role of ['chat', 'lookup', 'kb-maintenance'] as const) {
+    for (const role of ['chat', 'kb-maintenance'] as const) {
       expect(agentFor(role).instructions).toContain('User is a chemist. See work/.')
     }
   })
@@ -235,7 +235,7 @@ describe('auto-loaded files', () => {
   })
 
   it('states the auto-loading rule to every writer', () => {
-    for (const role of ['chat', 'lookup', 'kb-maintenance'] as const) {
+    for (const role of ['chat', 'kb-maintenance'] as const) {
       expect(agentFor(role).instructions).toMatch(
         /Auto-loading rule: .*root directory.*starts with "index"/
       )

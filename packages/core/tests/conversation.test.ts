@@ -4,12 +4,20 @@ import {
   linearRecordOf,
   linearStateOf,
   buildConversationTitle,
+  buildTitleRequestMessages,
+  cleanGeneratedTitle,
   lastUserTurnId,
   migrateConversationRecord,
   persistableTurns,
   serializeForChat
 } from '../src/conversation'
-import { DELTA_SYSTEM_PROMPT, getSystemPrompt, LOOKUP_WINDOW_NOTE } from '../src/prompts'
+import {
+  CONVERSATION_TITLE_SOURCE_LIMIT,
+  CONVERSATION_TITLE_SYSTEM_PROMPT,
+  DELTA_SYSTEM_PROMPT,
+  getSystemPrompt,
+  LOOKUP_WINDOW_NOTE
+} from '../src/prompts'
 
 function turn(overrides: Partial<Turn> & Pick<Turn, 'id' | 'role' | 'content'>): Turn {
   return { expansions: [], ...overrides }
@@ -25,6 +33,30 @@ const expansion = (id: number, overrides: Partial<ExpansionNode> = {}): Expansio
   folded: false,
   children: [],
   ...overrides
+})
+
+describe('generated titles', () => {
+  it('asks for a title from the flattened, capped first message', () => {
+    const messages = buildTitleRequestMessages(`**Why** ${'x'.repeat(5000)}`)
+    expect(messages[0]).toEqual({ role: 'system', content: CONVERSATION_TITLE_SYSTEM_PROMPT })
+    expect(messages[1].content.startsWith('Why x')).toBe(true)
+    expect(messages[1].content.length).toBe(CONVERSATION_TITLE_SOURCE_LIMIT)
+  })
+
+  it.each([
+    ['Krebs cycle energy yield', 'Krebs cycle energy yield'],
+    ['"Krebs cycle energy yield."', 'Krebs cycle energy yield'],
+    ['Title: **Mitosis vs meiosis**\n\nExtra words', 'Mitosis vs meiosis'],
+    ['\n  # Photosynthesis basics  \n', 'Photosynthesis basics'],
+    ['“光合作用”。', '光合作用']
+  ])('cleans %j to %j', (reply, title) => {
+    expect(cleanGeneratedTitle(reply)).toBe(title)
+  })
+
+  it('refuses an empty reply and caps a long one', () => {
+    expect(cleanGeneratedTitle('  \n "" ')).toBeNull()
+    expect(cleanGeneratedTitle('a'.repeat(200))).toHaveLength(60)
+  })
 })
 
 describe('buildConversationTitle', () => {

@@ -27,8 +27,7 @@ import {
 export class RoleUnassignedError extends Error {
   constructor(roleId: RoleId) {
     const label: Record<RoleId, string> = {
-      chat: 'Chat',
-      lookup: 'Lookup',
+      chat: 'Assistant',
       'kb-maintenance': 'Knowledge Base Maintenance'
     }
     super(

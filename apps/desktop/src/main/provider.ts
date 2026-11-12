@@ -5,6 +5,8 @@ import { resolveRole, RoleUnassignedError } from './config'
 import type { Connection } from './models/registries'
 import type { ProviderMessage, ProviderType, RoleId } from './models/registries'
 import { withInstructions } from './streaming'
+import { buildMcpToolNamesNote } from '@delta/core/prompts'
+import { claudeCodeToolName, streamClaudeCode } from './services/claude-code'
 export type { ProviderMessage }
 export { RoleUnassignedError }
 
@@ -32,9 +34,10 @@ const REJECTED_REQUEST_STATUSES = new Set([400, 404, 422])
 /* ---- Routes ---- */
 
 /**
- * Every provider speaks the OpenAI-compatible wire format, so a provider is a name
+ * Every HTTP provider speaks the OpenAI-compatible wire format, so a provider is a name
  * plus a default base URL. Nothing downstream branches on the provider type; adding
- * one means adding a row here. Google uses its OpenAI-compatible endpoint rather
+ * one means adding a row here. The only exception is Claude Code, a local CLI
+ * (`services/claude-code.ts`). Google uses its OpenAI-compatible endpoint rather
  * than a dedicated SDK, so it gets no special treatment.
  */
 interface ProviderRoute {
@@ -44,7 +47,7 @@ interface ProviderRoute {
   requiresApiKey: boolean
 }
 
-const ROUTES: Record<ProviderType, ProviderRoute> = {
+const ROUTES: Partial<Record<ProviderType, ProviderRoute>> = {
   'google-ai-studio': {
     name: 'google',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
@@ -68,7 +71,14 @@ const ROUTES: Record<ProviderType, ProviderRoute> = {
     name: 'ollama',
     baseUrl: 'http://localhost:11434/v1',
     requiresApiKey: false
-  }
+  },
+  anthropic: { name: 'anthropic', baseUrl: 'https://api.anthropic.com/v1', requiresApiKey: true },
+  mistral: { name: 'mistral', baseUrl: 'https://api.mistral.ai/v1', requiresApiKey: true },
+  groq: { name: 'groq', baseUrl: 'https://api.groq.com/openai/v1', requiresApiKey: true },
+  deepseek: { name: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', requiresApiKey: true },
+  xai: { name: 'xai', baseUrl: 'https://api.x.ai/v1', requiresApiKey: true },
+  together: { name: 'together', baseUrl: 'https://api.together.xyz/v1', requiresApiKey: true },
+  lmstudio: { name: 'lmstudio', baseUrl: 'http://localhost:1234/v1', requiresApiKey: false }
 }
 
 function stripTrailingSlashes(value: string): string {
@@ -248,6 +258,18 @@ export async function* callProviderStream(
     throw new RoleUnassignedError(roleId)
   }
   const { connection, model } = resolved
+  // The one provider that is not an HTTP route: a local CLI, which reaches our tools over MCP.
+  if (connection.providerType === 'claude-code') {
+    const instructed = agent
+      ? withInstructions(
+          messages,
+          `${agent.instructions}\n\n${buildMcpToolNamesNote(claudeCodeToolName(''))}`
+        )
+      : messages
+    const tools = agent && { tools: agent.tools, maxSteps: agent.maxSteps }
+    yield* streamClaudeCode(connection.command, model, instructed, signal, tools || undefined)
+    return
+  }
   const route = ROUTES[connection.providerType]
   if (!route) {
     throw new UnsupportedProviderError(

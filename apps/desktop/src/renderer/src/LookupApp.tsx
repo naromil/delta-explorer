@@ -51,6 +51,7 @@ function LookupApp(): React.JSX.Element {
     retryExpansion,
     editExpansion,
     dismissExpansion,
+    toggleHighlight,
     fold,
     unfold,
     setState,
@@ -84,7 +85,8 @@ function LookupApp(): React.JSX.Element {
     onUnfold: unfold,
     onRetryExpansion: retryExpansion,
     onEditExpansion: editExpansion,
-    onDismissExpansion: dismissExpansion
+    onDismissExpansion: dismissExpansion,
+    onHighlight: toggleHighlight
   })
 
   /* ---- Flash hint helper ---- */
