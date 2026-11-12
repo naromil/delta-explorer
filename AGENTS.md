@@ -558,7 +558,7 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   the card typography in `canvas.css`; change them together. It counts paragraphs, whose last lines
   and gaps use up more of a wide card, and `bodyCharWidth` (`ui/lib/char-width.ts`) measures the font. `withCanvasFit` appends the size to the newest
   user message at request time only, so turns never store it, and the note overrides the system
-  prompt's concision and expand's four-sentence limit.
+  prompt's default length and expand's four-sentence limit.
 - **A drag moves what was chosen; touching cards are joined when resizing or with Shift.** A plain drag
   or nudge moves only the selection. Shift+drag moves everything
   joined by a shared side (`movingCardIds`), and align, tidy and duplicate still treat joined cards as one
@@ -648,7 +648,7 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 - **Chat and lookup are one assistant, with one model.** Model config v4 merged the chat and lookup
   roles: `RoleId` is `'chat'` (labelled Assistant: chat, look-ups, the canvas, expansions) and
   `'kb-maintenance'`. Only the window differs: same memory tools, curation and
-  context budget, one `DELTA_SYSTEM_PROMPT` (`LOOKUP_WINDOW_NOTE` adds only a length limit), plus a
+  context budget, one `DELTA_SYSTEM_PROMPT` (it leaves depth and length to the learning preferences; `LOOKUP_WINDOW_NOTE` adds the only hard length limit), plus a
   one-way transfer, which turns the look-up into a chat with its context folded into a turn. The curator gets a lookup's turns and expansions but not its raw `state.context`.
 - **A conversation names itself.** The first send keeps the title cut from the message
   (`buildConversationTitle`) and asks `conversation-generate-title` in parallel (`CONVERSATION_TITLE_SYSTEM_PROMPT`,

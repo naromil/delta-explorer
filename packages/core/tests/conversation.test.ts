@@ -96,6 +96,12 @@ describe('serializeForChat', () => {
     expect(getSystemPrompt('chat')).toBe(DELTA_SYSTEM_PROMPT)
   })
 
+  it('leaves depth to the learner in chat and keeps the hard length limit to the lookup window', () => {
+    expect(DELTA_SYSTEM_PROMPT).not.toMatch(/concise|a few sentences/)
+    expect(DELTA_SYSTEM_PROMPT).toContain('learning preferences')
+    expect(LOOKUP_WINDOW_NOTE).toContain('fewer than 3 paragraphs')
+  })
+
   it('omits the preamble for a lookup with no captured context', () => {
     const messages = serializeForChat({ turns }, 'lookup')
     expect(messages).toEqual([
