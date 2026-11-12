@@ -11,6 +11,8 @@
 - [ ] Unify the chat and lookup model configuration into one configuration. Knowledge maintenance stays separate. Add more model provider presets beyond the 5 ones.
 - [x] Unit-test `renderMath` in `lib/math.ts` — nothing guards `trust: false`, the one safeguard on the renderer's only `dangerouslySetInnerHTML` (`\href{javascript:…}` must not produce a link)
 - [ ] Unit-test `formatRelativeTime` in `lib/format.ts` — the Home recents labels have untested 1m/1h/24h/7d boundaries
+- [ ] Add Claude Code headless mode as a provider choice in settings.
+- [ ] Add highlight feature where users can highlight a text in a response. The knowledge base maintenance will pay special attention to that as it is what the user thinks is important or useful.
 
 ## Proposed (needs the owner's OK — move to Routine to approve)
 
