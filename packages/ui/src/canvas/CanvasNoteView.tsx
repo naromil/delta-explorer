@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import type { CanvasNoteCard, CanvasRect } from '@delta/core/canvas'
+import { flattenMarkdown } from '@delta/core/rich-text'
 import Markdown from '../conversation/Markdown'
 
 const noop = (): void => undefined
@@ -180,7 +181,7 @@ function CanvasNoteView(props: CanvasNoteViewProps): React.JSX.Element {
           </div>
         )}
         <div className="canvas-card-lod" onPointerDown={(e) => onDragStart(e, card.id)}>
-          {card.text}
+          {flattenMarkdown(card.text)}
         </div>
         {editing ? null : (
           <span

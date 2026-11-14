@@ -98,7 +98,7 @@ function ArrangeMenu(props: CanvasSelectionBarProps & { onClose: () => void }): 
             role="menuitem"
             className="canvas-bar-btn"
             aria-label={`Align ${label.toLowerCase()}`}
-            title={`Align ${label.toLowerCase()}`}
+            data-tip={`Align ${label.toLowerCase()}`}
             onClick={() => choose(() => onAlign(edge))}
           >
             <svg
@@ -196,6 +196,7 @@ function CanvasSelectionBar(props: CanvasSelectionBarProps): React.JSX.Element {
                 className={`canvas-swatch${color === item ? ' is-active' : ''}`}
                 data-color={item}
                 aria-label={item}
+                data-tip={item[0].toUpperCase() + item.slice(1)}
                 aria-pressed={color === item}
                 onClick={() => onColor(item)}
               />

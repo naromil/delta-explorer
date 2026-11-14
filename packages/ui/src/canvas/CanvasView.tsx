@@ -229,6 +229,8 @@ const SNAP_SCREEN_PX = 10
 const VIEWPORT_TRANSITION_MS = 360
 const PULSE_MS = 900
 const NOTICE_MS = 4000
+/** Below this width the centred selection bar would reach the zoom controls (`canvas.css`). */
+const NARROW_VIEW_PX = 1000
 const EXPORT_SAVED_MS = 2000
 /** Chats and look-ups in the history menu; search reaches the rest. */
 const HISTORY_OTHERS_LIMIT = 8
@@ -2587,6 +2589,7 @@ function CanvasBoard({
   ]
     .filter(Boolean)
     .join(' ')
+  const showEmpty = cards.length === 0 && frames.length === 0 && !draft && !noteDraft && !drawing
   const message: CanvasNotice | null =
     notice ?? (selection.notice ? { text: selection.notice } : null)
   const toolHint =
@@ -2594,7 +2597,7 @@ function CanvasBoard({
       ? EXTEND_HINT
       : gesture?.type === 'draw' && gesture.unheld
         ? SIZE_HINT
-        : placing || gesture
+        : placing || gesture || showEmpty
           ? undefined
           : TOOL_HINTS[tool]
 
@@ -2613,7 +2616,9 @@ function CanvasBoard({
     !editingNoteId
 
   return (
-    <div className="canvas-view">
+    <div
+      className={`canvas-view${surfaceBox.width > 0 && surfaceBox.width < NARROW_VIEW_PX ? ' is-narrow' : ''}`}
+    >
       <div
         ref={surfaceRef}
         className={surfaceClasses}
@@ -2811,7 +2816,7 @@ function CanvasBoard({
             />
           ) : null}
         </div>
-        {cards.length === 0 && frames.length === 0 && !draft && !noteDraft && !drawing ? (
+        {showEmpty ? (
           <div className="canvas-empty">
             <h2>Draw a rectangle</h2>
             <p>
@@ -2862,16 +2867,26 @@ function CanvasBoard({
           className="canvas-title"
           aria-label="Canvas name"
           defaultValue={canvas.title}
+          title={canvas.title}
           onBlur={(e) => canvas.rename(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.currentTarget.blur()
+            if (e.nativeEvent.isComposing) return
+            if (e.key === 'Enter') e.currentTarget.blur()
+            else if (e.key === 'Escape') {
+              // Put the name back before blur commits it, and keep the key from the board.
+              e.preventDefault()
+              e.stopPropagation()
+              e.currentTarget.value = canvas.title
+              e.currentTarget.blur()
+            }
           }}
         />
         <button
           type="button"
           className="canvas-tool"
           aria-haspopup="menu"
-          title="History: canvases, chats and look-ups"
+          aria-label="History"
+          data-tip="History: canvases, chats and look-ups"
           onClick={openCanvasMenu}
         >
           ▾
@@ -2879,7 +2894,7 @@ function CanvasBoard({
         <button
           type="button"
           className="canvas-tool"
-          title="Start a new, empty canvas"
+          data-tip="Start a new, empty canvas"
           disabled={cards.length === 0 && frames.length === 0}
           onClick={canvas.newCanvas}
         >
@@ -2888,7 +2903,7 @@ function CanvasBoard({
         <button
           type="button"
           className="canvas-tool"
-          title="Save this canvas as markdown"
+          data-tip="Save this canvas as markdown"
           disabled={cards.length === 0 || exportState === 'exporting'}
           onClick={() => void handleExport()}
         >
@@ -2917,8 +2932,8 @@ function CanvasBoard({
         <button
           type="button"
           className="canvas-tool"
-          aria-label="Zoom out (−)"
-          title="Zoom out (−)"
+          aria-label="Zoom out"
+          data-tip="Zoom out  (−)"
           onClick={() => zoomBy(1 / ZOOM_STEP)}
         >
           −
@@ -2926,7 +2941,8 @@ function CanvasBoard({
         <button
           type="button"
           className="canvas-tool canvas-zoom-value"
-          title="Reset to 100%"
+          aria-label="Reset zoom to 100%"
+          data-tip="Reset to 100%  (1)"
           onClick={() => zoomBy(1 / viewportRef.current.zoom)}
         >
           <span ref={zoomValueRef} />
@@ -2934,8 +2950,8 @@ function CanvasBoard({
         <button
           type="button"
           className="canvas-tool"
-          aria-label="Zoom in (+)"
-          title="Zoom in (+)"
+          aria-label="Zoom in"
+          data-tip="Zoom in  (+)"
           onClick={() => zoomBy(ZOOM_STEP)}
         >
           +
@@ -2943,7 +2959,7 @@ function CanvasBoard({
         <button
           type="button"
           className="canvas-tool"
-          title="Show everything (0)"
+          data-tip="Show everything  (0)"
           onClick={showEverything}
         >
           Fit
@@ -2951,9 +2967,9 @@ function CanvasBoard({
         <button
           type="button"
           className={`canvas-tool canvas-tool--icon${minimapOpen ? ' is-toggled' : ''}`}
-          aria-label="Map (M)"
+          aria-label="Map"
           aria-pressed={minimapOpen}
-          title="Show or hide the map (M)"
+          data-tip="Show or hide the map  (M)"
           onClick={toggleMinimap}
         >
           <CanvasIcon name="map" />
@@ -2961,9 +2977,9 @@ function CanvasBoard({
         <button
           type="button"
           className={`canvas-tool${helpOpen ? ' is-active' : ''}`}
-          aria-label="Keyboard shortcuts (?)"
+          aria-label="Keyboard shortcuts"
           aria-expanded={helpOpen}
-          title="Keyboard shortcuts (?)"
+          data-tip="Keyboard and mouse shortcuts  (?)"
           onClick={() => setHelpOpen((open) => !open)}
         >
           ?

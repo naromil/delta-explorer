@@ -455,6 +455,8 @@
   line-height: 1.3;
   color: var(--text-1);
   background: var(--card-header, var(--surface-2));
+  /* The card's own 1px border is thinner than a pixel out here. */
+  box-shadow: inset 0 0 0 calc(1px / var(--canvas-zoom)) var(--border-strong);
   cursor: grab;
   user-select: none;
 }
@@ -945,6 +947,11 @@
   fill-opacity: 0.28;
 }
 
+/* It sits on the term's own letters, so it must not hide them. */
+.canvas-links--over .canvas-link-dot {
+  fill-opacity: 0.28;
+}
+
 /* Above a dragged block, whose own boundaries travel with it. */
 .canvas-links--seams {
   z-index: 100003;
@@ -1216,6 +1223,7 @@
 }
 
 .canvas-tool {
+  position: relative;
   height: 28px;
   min-width: 28px;
   padding: 0 10px;
@@ -1231,9 +1239,15 @@
     color var(--dur-1) var(--ease-out);
 }
 
-.canvas-tool:hover {
+.canvas-tool:hover:not(:disabled) {
   color: var(--text-1);
   background: var(--surface-3);
+}
+
+.canvas-tool:disabled {
+  color: var(--text-3);
+  opacity: 0.45;
+  cursor: default;
 }
 
 .canvas-tool.is-active {
@@ -1357,6 +1371,21 @@
   box-shadow: var(--focus-ring);
 }
 
+/*
+ * Centred, the selection bar reaches the zoom controls once the view is narrow (`NARROW_VIEW_PX`),
+ * so there the stack starts from the left and stops short of them.
+ */
+.canvas-view.is-narrow .canvas-bottom {
+  left: 12px;
+  align-items: flex-start;
+  max-width: calc(100% - 252px);
+  transform: none;
+}
+
+.canvas-view.is-narrow .canvas-bar {
+  justify-content: flex-start;
+}
+
 /* ---- Tool rail ---- */
 
 .canvas-glyph {
@@ -1463,6 +1492,22 @@
   bottom: calc(100% + 10px);
   left: 50%;
   transform: translateX(-50%);
+}
+
+.canvas-toolbar--title [data-tip]::after {
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Against the right edge of the view, so they open leftwards instead of being cut off. */
+.canvas-toolbar--zoom [data-tip]::after {
+  right: 0;
+  bottom: calc(100% + 10px);
+}
+
+.canvas-tool[data-tip]:disabled::after {
+  display: none;
 }
 
 /* ---- Selection bar ---- */
@@ -1908,7 +1953,7 @@
 
 .canvas-shortcut {
   display: grid;
-  grid-template-columns: 112px 1fr;
+  grid-template-columns: 96px 1fr;
   gap: 10px;
   align-items: baseline;
 }

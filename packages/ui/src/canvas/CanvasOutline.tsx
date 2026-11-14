@@ -35,7 +35,13 @@ function CanvasOutline({
   onClose
 }: CanvasOutlineProps): React.JSX.Element {
   const [query, setQuery] = useState('')
-  const [activeIndex, setActiveIndex] = useState(0)
+  // Opens on the selected card rather than the top of the list, so the list shows where you are.
+  const [activeIndex, setActiveIndex] = useState(() =>
+    Math.max(
+      rows.findIndex((row) => selectedIds.has(row.id)),
+      0
+    )
+  )
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const searching = query.trim() !== ''
@@ -58,7 +64,7 @@ function CanvasOutline({
     listRef.current
       ?.querySelector('.canvas-outline-row.is-active')
       ?.scrollIntoView({ block: 'nearest' })
-  }, [activeIndex])
+  }, [activeIndex, searching])
 
   const step = (direction: 1 | -1): void => {
     if (shown.length === 0) return

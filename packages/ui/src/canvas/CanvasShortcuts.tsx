@@ -24,15 +24,15 @@ const SHORTCUTS: readonly ShortcutGroup[] = [
       { keys: ['N'], what: 'Ask a question in a new session' },
       { keys: ['E'], what: 'Edit the focused question and resend, or a note' },
       { keys: ['Double-click'], what: 'On empty space: ask here. On a title: zoom to it' },
-      { keys: ['Alt', '↑↓←→'], what: 'While asking: resize the card, and so the answer' }
+      { keys: ['Alt', '↑ ↓ ← →'], what: 'While asking: resize the card, and so the answer' }
     ]
   },
   {
     title: 'Selection',
     items: [
       { keys: ['Ctrl', 'A'], what: 'Select everything' },
-      { keys: ['Shift', '↑↓←→'], what: 'Add the nearest card that way' },
-      { keys: ['Ctrl', '↑↓←→'], what: 'Nudge the selection; Shift for further' },
+      { keys: ['Shift', '↑ ↓ ← →'], what: 'Add the nearest card that way' },
+      { keys: ['Ctrl', '↑ ↓ ← →'], what: 'Nudge the selection; Shift for further' },
       { keys: ['Ctrl', 'D'], what: 'Duplicate' },
       { keys: ['Ctrl', 'C'], what: 'Copy as markdown' },
       { keys: ['Ctrl', 'V'], what: 'Paste text as a note' },

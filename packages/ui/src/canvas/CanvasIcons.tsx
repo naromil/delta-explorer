@@ -79,17 +79,18 @@ const PATHS = {
       <rect x="8" y="14" width="7" height="4" rx="1" />
     </>
   ),
+  // The plus sets it apart from the two plain squares that mean Copy on a card.
   duplicate: (
     <>
       <rect x="9" y="9" width="12" height="12" rx="2" />
       <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+      <path d="M15 12.5v5M12.5 15h5" />
     </>
   ),
   copy: (
     <>
-      <rect x="8" y="3" width="8" height="4" rx="1" />
-      <path d="M16 5h2a1 1 0 011 1v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6a1 1 0 011-1h2" />
-      <path d="M9 12h6M9 16h4" />
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
     </>
   ),
   zoomTo: (

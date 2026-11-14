@@ -104,10 +104,12 @@ function ActionIcon({ children }: { children: React.ReactNode }): React.JSX.Elem
 
 function CardQuestionEditor({
   question,
+  placeholder,
   onSubmit,
   onCancel
 }: {
   question: string
+  placeholder: string
   onSubmit: (question: string) => void
   onCancel: () => void
 }): React.JSX.Element {
@@ -131,6 +133,7 @@ function CardQuestionEditor({
         ref={inputRef}
         className="canvas-draft-input"
         aria-label="Edit question"
+        placeholder={placeholder}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
@@ -365,7 +368,7 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
                 </ActionIcon>
               </a>
             ) : null}
-            {answer !== '' ? (
+            {answer !== '' && status !== 'failed' ? (
               <button
                 type="button"
                 className="canvas-icon-btn"
@@ -460,6 +463,11 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
           {editing ? (
             <CardQuestionEditor
               question={card.kind === 'expansion' ? (question ?? '') : caption}
+              placeholder={
+                card.kind === 'expansion'
+                  ? `Ask something about “${caption.length > 40 ? `${caption.slice(0, 39)}…` : caption}”`
+                  : 'Your question'
+              }
               onCancel={finishEditing}
               onSubmit={(question) => {
                 if (onEdit(card.id, question)) finishEditing()
