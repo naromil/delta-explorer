@@ -22,7 +22,7 @@ function catalogErrorState(err: unknown): ModelCatalogState {
 
 /* ---- Component ---- */
 
-type SettingsTab = 'general' | 'models' | 'about'
+export type SettingsTab = 'general' | 'models' | 'about'
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 const SETTINGS_TABS: Array<{ id: SettingsTab; label: string }> = [
@@ -55,8 +55,8 @@ function settingsSnapshot(
   })
 }
 
-function Settings(): React.JSX.Element {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+function Settings({ initialTab = 'general' }: { initialTab?: SettingsTab }): React.JSX.Element {
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab)
   const [modelConfig, setModelConfig] = useState<ModelConfig>(createDefaultModelConfig)
   const [catalog, setCatalog] = useState<ModelCatalogState>({
     catalog: null,

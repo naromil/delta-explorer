@@ -6,11 +6,11 @@
 - [ ] Show something while memory tools run — `provider.ts` forwards only text deltas, so tool steps are silent, and `MEMORY_ASSISTANT_WRITE_RULES` tells the model to finish its notes before answering, which delays the first token. Either show a "checking notes…" state, or leave writing to the curator and keep only reads in session
 - [ ] Expansion: map of what you've explored — a view of every expanded term across conversations, showing repeats and how they connect, with a jump back to the source. First step: tell the user "you expanded this term before" and offer the earlier answer
 - [ ] Split `CanvasView.tsx` (2,991 lines) and `useCanvas.ts` (1,432 lines), and move the canvas conventions out of the root `AGENTS.md` (876 lines, loaded into every agent session) into `packages/ui/AGENTS.md`
-- [ ] First-run path — a new install with no API key should land on "add a connection" instead of an empty Home
+- [x] First-run path — a new install with no API key should land on "add a connection" instead of an empty Home
 - [ ] Update check — show a "new version available" notice (no auto-install) before other people install the packages
-- [ ] List the Up-arrow "edit last message" shortcut in the Look-up Guide's Keyboard Shortcuts — it shipped last week but the in-app list still omits it
-- [ ] Unit-test `generateConversationTitle` in `main/conversation-title.ts` — its "`null` on any failure, never throws" contract guards every first send and has no test
-- [ ] Test that `safeHref` (`ui/lib/safe-url.ts`) agrees with `isSafeExternalUrl` (`window-guards.ts`) — AGENTS.md requires the two allowlists to match and nothing enforces it
+- [x] List the Up-arrow "edit last message" shortcut in the Look-up Guide's Keyboard Shortcuts — it shipped last week but the in-app list still omits it
+- [x] Unit-test `generateConversationTitle` in `main/conversation-title.ts` — its "`null` on any failure, never throws" contract guards every first send and has no test
+- [x] Test that `safeHref` (`ui/lib/safe-url.ts`) agrees with `isSafeExternalUrl` (`window-guards.ts`) — AGENTS.md requires the two allowlists to match and nothing enforces it
 - [ ] Unit-test `straightenBlocks` in `canvas-straighten.ts` — the only canvas layout module with no tests, and tidy relies on it never resizing or detaching cards
 - [ ] Display what tool calls are in process when the agent calls tools instead of responding directly, so the user knows what is going on.
 

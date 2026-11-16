@@ -728,7 +728,9 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 - **App-level chat chrome.** `App.tsx` owns the Ctrl/Cmd+N (new chat, switches to Chat),
   Ctrl/Cmd+K (search) and Ctrl/Cmd+, (Settings) listeners, the `ConversationSearch` modal and the composer draft, so they
   work from every view and the draft survives `Conversation` unmounting. The Home view lists the
-  five most recent conversations (`conversation-list`). Deleting the open conversation goes through
+  five most recent conversations (`conversation-list`). On startup, a config with no connection
+  (`hasNoConnections` in `shared/models.ts`) opens Settings on the Models tab instead of Home, unless
+  the user has already left Home. Deleting the open conversation goes through
   its own toolbar (`deleteConversation` in the hook detaches the meta first so no autosave follows).
 - **Rename is metadata-only.** `renameConversation(title)` trims to the title limit, updates the
   in-memory meta and saves with `touchContent: false`: the body's `title` changes but

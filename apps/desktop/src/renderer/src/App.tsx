@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import Settings from './views/settings/Settings'
+import Settings, { type SettingsTab } from './views/settings/Settings'
 import Conversation from './components/conversation/Conversation'
 import ConversationSearch from './components/conversation/ConversationSearch'
 import HomeView from './views/home/HomeView'
@@ -10,6 +10,7 @@ import { useChatStreaming } from './hooks/useChatStreaming'
 import MemoryIndicator from './components/MemoryIndicator'
 import type { ImageAttachment } from '@delta/core/attachments'
 import type { ConversationTarget } from '@delta/core/conversation'
+import { hasNoConnections } from '../../shared/models'
 
 type View = 'home' | 'chat' | 'canvas' | 'knowledge' | 'lookup-guide' | 'settings'
 
@@ -110,6 +111,7 @@ const ICONS: Record<string, React.JSX.Element> = {
 
 function App(): React.JSX.Element {
   const [view, setView] = useState<View>('home')
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('general')
   const [transferKey, setTransferKey] = useState(0)
   const [showSearch, setShowSearch] = useState(false)
   // Lives here, not in Conversation, so a view switch cannot drop the draft.
@@ -151,6 +153,22 @@ function App(): React.JSX.Element {
     newChat()
     setView('chat')
   }, [newChat])
+
+  // First run: with no connection yet, land on adding one, unless the user already moved on.
+  useEffect(() => {
+    let cancelled = false
+    window.api
+      .loadModelConfig()
+      .then((config) => {
+        if (cancelled || !hasNoConnections(config)) return
+        setSettingsTab('models')
+        setView((current) => (current === 'home' ? 'settings' : current))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Every history reaches this through main, which may raise a look-up's popup instead.
   useEffect(() => {
@@ -272,7 +290,7 @@ function App(): React.JSX.Element {
         {view === 'canvas' && <CanvasView canvas={canvas} onOpenSearch={openSearch} />}
         {view === 'knowledge' && <KnowledgeView />}
         {view === 'lookup-guide' && <LookupGuideView />}
-        {view === 'settings' && <Settings />}
+        {view === 'settings' && <Settings initialTab={settingsTab} />}
       </div>
       {showSearch && (
         <ConversationSearch

@@ -60,6 +60,7 @@ const SHORTCUTS: ReadonlyArray<{ keys: string[]; action: string }> = [
     keys: ['Ctrl/Cmd', 'Shift', 'E'],
     action: 'Expand on\u2026 \u2014 ask a question about the selection'
   },
+  { keys: ['\u2191'], action: 'Edit your last message (in an empty chat composer)' },
   { keys: ['Esc'], action: 'Stop a response while it is generating' }
 ]
 
