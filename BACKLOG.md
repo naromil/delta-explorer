@@ -10,7 +10,7 @@
 - [ ] Update check — show a "new version available" notice (no auto-install) before other people install the packages
 - [x] List the Up-arrow "edit last message" shortcut in the Look-up Guide's Keyboard Shortcuts — it shipped last week but the in-app list still omits it
 - [x] Unit-test `generateConversationTitle` in `main/conversation-title.ts` — its "`null` on any failure, never throws" contract guards every first send and has no test
-- [ ] Test that `safeHref` (`ui/lib/safe-url.ts`) agrees with `isSafeExternalUrl` (`window-guards.ts`) — AGENTS.md requires the two allowlists to match and nothing enforces it
+- [x] Test that `safeHref` (`ui/lib/safe-url.ts`) agrees with `isSafeExternalUrl` (`window-guards.ts`) — AGENTS.md requires the two allowlists to match and nothing enforces it
 - [ ] Unit-test `straightenBlocks` in `canvas-straighten.ts` — the only canvas layout module with no tests, and tidy relies on it never resizing or detaching cards
 
 ## Proposed (needs the owner's OK — move to Routine to approve)
