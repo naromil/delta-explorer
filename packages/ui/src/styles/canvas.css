@@ -35,13 +35,31 @@
   cursor: grab;
 }
 
+/* Choosing the card a passage goes to. */
+.canvas-surface.is-picking {
+  cursor: crosshair;
+}
+
+/*
+ * A press the surface has captured shows the surface's cursor, whatever is under the pointer,
+ * so a drag or a resize names its own here.
+ */
 .canvas-surface.is-grabbing {
   cursor: grabbing;
 }
 
+.canvas-surface.is-resizing {
+  cursor: nwse-resize;
+}
+
+.canvas-surface.is-resizing-across {
+  cursor: nesw-resize;
+}
+
 /* In these modes the plane takes the pointer, so nothing inside can be clicked. */
 .canvas-surface.is-drawing .canvas-world,
-.canvas-surface.is-panning .canvas-world {
+.canvas-surface.is-panning .canvas-world,
+.canvas-surface.is-picking .canvas-world {
   pointer-events: none;
 }
 
@@ -64,29 +82,32 @@
   will-change: transform;
 }
 
-/* ---- Colour labels ---- */
+/*
+ * ---- Colour labels ----
+ * Scoped to the view so they win over the default `--tint` a note, a frame or the map sets.
+ */
 
-[data-color='red'] {
+.canvas-view [data-color='red'] {
   --tint: var(--canvas-red);
 }
 
-[data-color='amber'] {
+.canvas-view [data-color='amber'] {
   --tint: var(--canvas-amber);
 }
 
-[data-color='green'] {
+.canvas-view [data-color='green'] {
   --tint: var(--canvas-green);
 }
 
-[data-color='teal'] {
+.canvas-view [data-color='teal'] {
   --tint: var(--canvas-teal);
 }
 
-[data-color='blue'] {
+.canvas-view [data-color='blue'] {
   --tint: var(--canvas-blue);
 }
 
-[data-color='violet'] {
+.canvas-view [data-color='violet'] {
   --tint: var(--canvas-violet);
 }
 
@@ -197,7 +218,7 @@
 .canvas-card.is-continued .canvas-card-surface {
   border-color: var(--accent);
   box-shadow:
-    0 0 0 3px var(--accent-ring),
+    0 0 0 calc(3px / var(--canvas-zoom)) var(--accent-ring),
     var(--shadow-2);
 }
 
@@ -641,7 +662,7 @@
 }
 
 .canvas-frame.is-dimmed {
-  opacity: 0.35;
+  opacity: 0.4;
 }
 
 .canvas-frame.is-selected {
@@ -709,6 +730,7 @@
   box-shadow: var(--focus-ring-inset);
 }
 
+/* A frame takes no hover of its own, so its corner always shows where it resizes. */
 .canvas-frame-resize {
   position: absolute;
   right: 0;
@@ -718,10 +740,27 @@
   cursor: nwse-resize;
   pointer-events: auto;
   touch-action: none;
+  opacity: 0.7;
+  /* Follows the inside of the frame's rounded corner. */
+  border-bottom-right-radius: 8px;
+  background: linear-gradient(
+    135deg,
+    transparent 55%,
+    var(--tint) 55% 62%,
+    transparent 62% 74%,
+    var(--tint) 74% 81%,
+    transparent 81%
+  );
+}
+
+.canvas-frame.is-selected .canvas-frame-resize {
+  opacity: 1;
 }
 
 .canvas-surface.is-drawing .canvas-frame-title,
 .canvas-surface.is-drawing .canvas-frame-resize,
+.canvas-surface.is-picking .canvas-frame-title,
+.canvas-surface.is-picking .canvas-frame-resize,
 .canvas-surface.is-panning .canvas-frame-title,
 .canvas-surface.is-panning .canvas-frame-resize {
   pointer-events: none;
@@ -729,7 +768,8 @@
 
 /* ---- A rectangle waiting for its question ---- */
 
-.canvas-card--draft {
+/* A note being written for the first time is a draft too, and may be drawn over other cards. */
+.canvas-card[data-canvas-draft] {
   z-index: 100001;
 }
 
@@ -881,7 +921,7 @@
   transform: scaleY(-1);
 }
 
-.canvas-card--draft.is-resizing {
+.canvas-card--draft.is-held {
   transition: none;
 }
 
@@ -967,12 +1007,19 @@
   transition: d var(--canvas-settle) var(--canvas-ease);
 }
 
+/* One size on screen, like the line it starts. */
 .canvas-link-dot {
+  r: calc(3.5px / var(--canvas-zoom));
   fill: var(--accent);
   animation: canvas-dot-in 300ms var(--canvas-ease-out) both;
   transition:
     cx var(--canvas-settle) var(--canvas-ease),
     cy var(--canvas-settle) var(--canvas-ease);
+}
+
+/* Far out the term it marks is not shown, only its card's title. */
+.canvas-surface[data-far] .canvas-link-dot {
+  display: none;
 }
 
 /* The way a session travels, arriving at the card that continues it. */
@@ -1072,7 +1119,9 @@
   box-shadow: var(--shadow-1);
   cursor: pointer;
   user-select: none;
-  transition: transform var(--canvas-settle) var(--canvas-ease);
+  transition:
+    transform var(--canvas-settle) var(--canvas-ease),
+    opacity var(--dur-2) var(--ease-out);
 }
 
 .canvas-connector-label.is-selected {
@@ -1095,6 +1144,17 @@
   outline: none;
 }
 
+.canvas-links > g {
+  transition: opacity var(--dur-2) var(--ease-out);
+}
+
+/* A line to or from a faded card fades with it. */
+.canvas-links .is-dimmed,
+.canvas-connector-label.is-dimmed {
+  opacity: 0.4;
+}
+
+.canvas-connector-label.is-dragging,
 .canvas-links.is-dragging .canvas-link-line,
 .canvas-links.is-dragging .canvas-link-dot,
 .canvas-links.is-dragging .canvas-link-arrow,
@@ -1117,6 +1177,7 @@
 }
 
 .canvas-surface.is-drawing .canvas-link-hit,
+.canvas-surface.is-picking .canvas-link-hit,
 .canvas-surface.is-panning .canvas-link-hit,
 .canvas-links.is-dragging .canvas-link-hit {
   pointer-events: none;
@@ -1166,7 +1227,7 @@
 }
 
 .canvas-draw-rect.is-invalid .canvas-draw-badge {
-  color: var(--text-1);
+  color: var(--accent-contrast);
   background: var(--error);
 }
 
@@ -1386,6 +1447,22 @@
   justify-content: flex-start;
 }
 
+/* The open outline covers the left of the board, so what is centred keeps to the rest of it. */
+.canvas-view.has-outline .canvas-toolbar--title {
+  left: calc(50% + 172px);
+  max-width: calc(100% - 368px);
+}
+
+.canvas-view.has-outline .canvas-bottom {
+  left: calc(50% + 172px);
+  max-width: calc(100% - 484px);
+}
+
+.canvas-view.has-outline.is-narrow .canvas-bottom {
+  left: 356px;
+  max-width: calc(100% - 596px);
+}
+
 /* ---- Tool rail ---- */
 
 .canvas-glyph {
@@ -1437,6 +1514,12 @@
 .canvas-rail-btn.is-active:hover {
   color: var(--accent-contrast);
   background: var(--accent);
+}
+
+/* A panel that is open, which is not a tool being held. */
+.canvas-rail-btn.is-toggled {
+  color: var(--text-1);
+  background: var(--surface-3);
 }
 
 .canvas-rail-btn:disabled {
@@ -1904,7 +1987,7 @@
 .canvas-shortcuts {
   position: absolute;
   right: 12px;
-  bottom: 60px;
+  bottom: 56px;
   z-index: 11;
   width: 340px;
   max-width: calc(100% - 24px);
@@ -2087,7 +2170,7 @@
   }
   35% {
     box-shadow:
-      0 0 0 3px var(--accent-ring),
+      0 0 0 calc(3px / var(--canvas-zoom)) var(--accent-ring),
       var(--shadow-3);
     transform: scale(1.02);
   }

@@ -14,8 +14,9 @@ import {
   clampPointInside,
   connectorGeometry,
   containsPoint,
-  linkPath,
-  sourceCardId
+  isCoveredAt,
+  sourceCardId,
+  termLinkGeometry
 } from '@delta/core/canvas'
 import { termPoint } from './board-helpers'
 
@@ -27,6 +28,8 @@ interface CanvasLinksProps {
   /** Links of cards being dragged follow the pointer instead of easing after it. */
   dragging: boolean
   selectedIds: ReadonlySet<string>
+  /** Cards shown faded, while a search or a term being placed singles out the others. */
+  dimmedIds: ReadonlySet<string>
   /** A connection whose label is open for typing. */
   editingLinkId: string | null
   /** A connection being drawn: from a card to the pointer, or to the card under it. */
@@ -75,7 +78,8 @@ function measureTermOffsets(cards: CanvasCard[], surface: HTMLElement): TermOffs
     const host = cards.find((other) => other.id === card.hostId)
     const hostEl = surface.querySelector(`[data-canvas-card="${card.hostId}"] .canvas-card-surface`)
     const term = hostEl?.querySelector(`[data-canvas-terms~="${card.expansionId}"]`)
-    if (!host || !hostEl || !term) continue
+    // A term that is not laid out, in a collapsed card, has no place of its own.
+    if (!host || !hostEl || !term || term.getClientRects().length === 0) continue
     const hostBox = hostEl.getBoundingClientRect()
     const point = termPoint(term)
     const scale = hostBox.width / host.rect.w
@@ -117,6 +121,9 @@ function LinkLine({
     />
   )
 }
+
+/** How much of a line is drawn: all of it, only the part under the cards, or nothing. */
+type LineReach = 'all' | 'under' | 'none'
 
 const ARROW = 'M -8 -4.5 L 0 0 L -8 4.5 Z'
 const CHEVRON = 'M -1.75 -3.5 L 1.75 0 L -1.75 3.5'
@@ -180,6 +187,7 @@ function CanvasLinks({
   surfaceRef,
   dragging,
   selectedIds,
+  dimmedIds,
   editingLinkId,
   pending,
   draftLinks,
@@ -217,36 +225,110 @@ function CanvasLinks({
   }, [cards, surfaceRef])
 
   const rectOf = new Map(cards.map((card) => [card.id, card.rect]))
+  const cardOf = new Map(cards.map((card) => [card.id, card]))
   const continuations = canvasContinuations(cards)
-  const sessionLinks = continuations.filter((item) => item.kind === 'link')
   const allSeams = continuations.filter((item) => item.kind === 'seam')
   // Seams are drawn above every card, so one under a third card has to be left out.
   const rankOf = (id: string | undefined): number => (id ? (stackRanks.get(id) ?? -1) : -1)
   const seams = allSeams.filter(({ id, start, end }) => {
-    const card = cards.find((item) => item.id === id)
+    const card = cardOf.get(id)
     const level = Math.max(rankOf(id), rankOf(card && sourceCardId(card)))
     const middle = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
     return !cards.some((other) => rankOf(other.id) > level && containsPoint(other.rect, middle))
   })
+  /*
+   * The faint copy over the cards leads the eye to an end of the line, so it is left out
+   * when a card lying on top hides that end. When the card hiding it is the line's own
+   * other card, one lies on the other and no line between them means anything.
+   */
+  const reachOf = (from: string, start: CanvasPoint, to: string, end: CanvasPoint): LineReach => {
+    const fromCard = cardOf.get(from)
+    const toCard = cardOf.get(to)
+    if (!fromCard || !toCard) return 'none'
+    if (
+      isCoveredAt([toCard], stackRanks, from, start) ||
+      isCoveredAt([fromCard], stackRanks, to, end)
+    ) {
+      return 'none'
+    }
+    const hidden =
+      isCoveredAt(cards, stackRanks, from, start) || isCoveredAt(cards, stackRanks, to, end)
+    return hidden ? 'under' : 'all'
+  }
+  const dimClass = (from: string, to: string): string =>
+    dimmedIds.has(from) || dimmedIds.has(to) ? ' is-dimmed' : ''
+  const sessionLinks = continuations.flatMap((item) => {
+    const card = cardOf.get(item.id)
+    const parent = card && sourceCardId(card)
+    if (item.kind !== 'link' || parent === undefined) return []
+    const reach = reachOf(parent, item.start, item.id, item.end)
+    return reach === 'none' ? [] : [{ ...item, reach, dim: dimClass(parent, item.id) }]
+  })
   const termLinks = cards.filter(isLinked).flatMap((card) => {
     if (allSeams.some((seam) => seam.id === card.id)) return []
-    const host = cards.find((other) => other.id === card.hostId)
+    const host = cardOf.get(card.hostId)
     if (!host) return []
     const raw = offsets[card.id] ?? { x: host.rect.w / 2, y: host.rect.h / 2 }
     // A term scrolled out of its card hands its link to the card's edge.
     const from = clampPointInside({ x: host.rect.x + raw.x, y: host.rect.y + raw.y }, host.rect)
-    return [{ id: card.id, from, d: linkPath(from, card.rect) }]
+    const { d, end } = termLinkGeometry(from, card.rect)
+    const reach = reachOf(host.id, from, card.id, end)
+    return reach === 'none'
+      ? []
+      : [{ id: card.id, from, d, reach, dim: dimClass(host.id, card.id) }]
   })
   const connectors = links.flatMap((link) => {
     const from = rectOf.get(link.from)
     const to = rectOf.get(link.to)
-    return from && to ? [{ link, ...connectorGeometry(from, to) }] : []
+    if (!from || !to) return []
+    const geometry = connectorGeometry(from, to)
+    const reach = reachOf(link.from, geometry.start, link.to, geometry.end)
+    if (reach === 'none') return []
+    const classes = [
+      'canvas-connector',
+      link.context ? 'canvas-connector--context' : '',
+      selectedIds.has(link.id) ? 'is-selected' : ''
+    ]
+    return [
+      {
+        link,
+        reach,
+        d: geometry.d,
+        mid: geometry.mid,
+        dim: dimClass(link.from, link.to),
+        className: classes.filter(Boolean).join(' ')
+      }
+    ]
   })
   const relations = askedAboutRelations(cards).flatMap((relation) => {
     const from = rectOf.get(relation.from)
     const to = rectOf.get(relation.to)
-    return from && to ? [{ ...relation, d: connectorGeometry(from, to).d }] : []
+    return from && to
+      ? [
+          {
+            ...relation,
+            d: connectorGeometry(from, to).d,
+            dim: dimClass(relation.from, relation.to)
+          }
+        ]
+      : []
   })
+  const pendingLines = [
+    ...draftLinks.map(({ id, from, to }) => ({
+      id,
+      className: 'canvas-link-line canvas-link-line--pending canvas-link-line--context',
+      d: connectorGeometry(from, to).d
+    })),
+    ...(pending
+      ? [
+          {
+            id: 'pending',
+            className: 'canvas-link-line canvas-link-line--pending',
+            d: connectorGeometry(pending.from, pending.to).d
+          }
+        ]
+      : [])
+  ]
   const dragClass = dragging ? ' is-dragging' : ''
 
   // Drawn twice: strong under the cards for open space, and faint over them so a
@@ -268,30 +350,24 @@ function CanvasLinks({
             <path d="M1 1.5L9 5l-8 3.5z" fill="context-stroke" />
           </marker>
         </defs>
-        {relations.map(({ from, to, d }) => (
-          <g key={`${from} ${to}`} className="canvas-relation">
+        {relations.map(({ from, to, d, dim }) => (
+          <g key={`${from} ${to}`} className={`canvas-relation${dim}`}>
             <path className="canvas-relation-line" d={d} markerEnd="url(#canvas-arrow)" />
             <path className="canvas-link-hit" d={d} onClick={(e) => onFollowRelation(e, from, to)}>
               <title>Follow this link</title>
             </path>
           </g>
         ))}
-        {termLinks.map(({ id, d, from }) => (
-          <g key={id}>
+        {termLinks.map(({ id, d, from, dim }) => (
+          <g key={id} className={dim || undefined}>
             <LinkLine d={d} />
             <path className="canvas-link-hit" d={d} onClick={(e) => onFollow(e, id, from)}>
               <title>Follow this link</title>
             </path>
           </g>
         ))}
-        {connectors.map(({ link, d }) => (
-          <g
-            key={link.id}
-            className={`canvas-connector${link.context ? ' canvas-connector--context' : ''}${
-              selectedIds.has(link.id) ? ' is-selected' : ''
-            }`}
-            data-canvas-link={link.id}
-          >
+        {connectors.map(({ link, d, dim, className }) => (
+          <g key={link.id} className={`${className}${dim}`} data-canvas-link={link.id}>
             <LinkLine d={d} arrow dashed={Boolean(link.context)} />
             <path
               className="canvas-link-hit"
@@ -311,8 +387,8 @@ function CanvasLinks({
             </path>
           </g>
         ))}
-        {sessionLinks.map(({ id, d, start, end, side }) => (
-          <g key={id} data-canvas-session-link={id}>
+        {sessionLinks.map(({ id, d, start, end, side, dim }) => (
+          <g key={id} className={dim || undefined} data-canvas-session-link={id}>
             <LinkLine d={d} />
             <path className="canvas-link-arrow" d={ARROW} style={pointerStyle(end, side)} />
             <path className="canvas-link-hit" d={d} onClick={(e) => onFollow(e, id, start)}>
@@ -320,44 +396,45 @@ function CanvasLinks({
             </path>
           </g>
         ))}
-        {draftLinks.map(({ id, from, to }) => (
-          <path
-            key={id}
-            className="canvas-link-line canvas-link-line--pending canvas-link-line--context"
-            d={connectorGeometry(from, to).d}
-            markerEnd="url(#canvas-arrow)"
-          />
+        {pendingLines.map(({ id, className, d }) => (
+          <path key={id} className={className} d={d} markerEnd="url(#canvas-arrow)" />
         ))}
-        {pending ? (
-          <path
-            className="canvas-link-line canvas-link-line--pending"
-            d={connectorGeometry(pending.from, pending.to).d}
-            markerEnd="url(#canvas-arrow)"
-          />
-        ) : null}
       </svg>
       <svg className={`canvas-links canvas-links--over${dragClass}`} aria-hidden="true">
-        {termLinks.map(({ id, d, from }) => (
-          <g key={id}>
-            <LinkLine d={d} />
-            <circle className="canvas-link-dot" cx={from.x} cy={from.y} r={3.5} />
-          </g>
-        ))}
-        {connectors.map(({ link, d }) => (
-          <g key={link.id} className={link.context ? 'canvas-connector--context' : undefined}>
-            <LinkLine d={d} dashed={Boolean(link.context)} />
-          </g>
-        ))}
-        {sessionLinks.map(({ id, d, end, side }) => (
-          <g key={id}>
-            <LinkLine d={d} />
-            <path className="canvas-link-arrow" d={ARROW} style={pointerStyle(end, side)} />
-          </g>
+        {termLinks.map(({ id, d, from, reach, dim }) =>
+          reach === 'all' ? (
+            <g key={id} className={dim || undefined}>
+              <LinkLine d={d} />
+              <circle className="canvas-link-dot" cx={from.x} cy={from.y} r={3.5} />
+            </g>
+          ) : null
+        )}
+        {connectors.map(({ link, d, reach, dim, className }) =>
+          reach === 'all' ? (
+            <g key={link.id} className={`${className}${dim}`}>
+              <LinkLine d={d} dashed={Boolean(link.context)} />
+            </g>
+          ) : null
+        )}
+        {sessionLinks.map(({ id, d, end, side, reach, dim }) =>
+          reach === 'all' ? (
+            <g key={id} className={dim || undefined}>
+              <LinkLine d={d} />
+              <path className="canvas-link-arrow" d={ARROW} style={pointerStyle(end, side)} />
+            </g>
+          ) : null
+        )}
+        {pendingLines.map(({ id, className, d }) => (
+          <path key={id} className={className} d={d} />
         ))}
       </svg>
       <svg className={`canvas-links canvas-links--seams${dragClass}`} aria-hidden="true">
         {seams.map(({ id, start, end, side }) => (
-          <g key={id} className="canvas-seam" data-canvas-seam={id}>
+          <g
+            key={id}
+            className={`canvas-seam${dimClass(id, sourceCardId(cardOf.get(id) as CanvasCard) ?? id)}`}
+            data-canvas-seam={id}
+          >
             <path
               className="canvas-seam-line"
               style={{ d: `path("M ${start.x} ${start.y} L ${end.x} ${end.y}")` }}
@@ -372,13 +449,13 @@ function CanvasLinks({
           </g>
         ))}
       </svg>
-      {connectors.map(({ link, mid }) => {
+      {connectors.map(({ link, mid, dim }) => {
         const editing = editingLinkId === link.id
         if (!editing && !link.label) return null
         return (
           <div
             key={link.id}
-            className={`canvas-connector-label${selectedIds.has(link.id) ? ' is-selected' : ''}`}
+            className={`canvas-connector-label${selectedIds.has(link.id) ? ' is-selected' : ''}${dim}${dragClass}`}
             style={{ transform: `translate(${mid.x}px, ${mid.y}px) translate(-50%, -50%)` }}
             onClick={(e) => onSelectLink(e, link.id)}
             onContextMenu={(e) => onLinkMenu(e, link.id)}
