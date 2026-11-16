@@ -3,6 +3,7 @@ import type { CanvasCard, CanvasExpansionCard, CanvasMessageCard, CanvasRect } f
 import {
   adjacentSlot,
   cardStackRanks,
+  connectorGeometry,
   continueHandleBlocked,
   canvasContinuations,
   cascadeCardIds,
@@ -14,6 +15,7 @@ import {
   fitCardHeight,
   fitViewport,
   fitsOnScreen,
+  isCoveredAt,
   linkPath,
   longestLine,
   movingCardIds,
@@ -37,6 +39,7 @@ import {
   snapEdges,
   snapMove,
   sourceCardId,
+  termLinkGeometry,
   turnsThroughCard,
   unionRect,
   visibleWorldRect,
@@ -1003,5 +1006,48 @@ describe('longestLine', () => {
     const first = { width: 90, height: 17 }
     expect(longestLine([{ width: 0, height: 17 }, first, { width: 90, height: 17 }])).toBe(first)
     expect(longestLine([{ width: 40, height: 0 }])).toBeUndefined()
+  })
+})
+
+describe('what the pile hides', () => {
+  const parent = message('a', 1, rect(0, 0, 400, 400))
+  const child = message('b', 3, rect(100, 100, 100, 100), 'a')
+  const cards = [parent, child]
+
+  it('knows a point on a card that a higher card lies over', () => {
+    const parentOnTop = cardStackRanks(cards, ['b', 'a'])
+    expect(isCoveredAt(cards, parentOnTop, 'b', { x: 100, y: 150 })).toBe(true)
+    expect(isCoveredAt(cards, parentOnTop, 'a', { x: 150, y: 150 })).toBe(false)
+    const childOnTop = cardStackRanks(cards, [])
+    expect(isCoveredAt(cards, childOnTop, 'b', { x: 100, y: 150 })).toBe(false)
+    expect(isCoveredAt(cards, childOnTop, 'a', { x: 150, y: 150 })).toBe(true)
+  })
+
+  it('does not count a card that only touches the point with its edge', () => {
+    const beside = message('c', 5, rect(400, 0, 200, 400))
+    const ranks = cardStackRanks([parent, beside], [])
+    expect(isCoveredAt([parent, beside], ranks, 'a', { x: 400, y: 200 })).toBe(false)
+  })
+
+  it('lets a + show over a card lying under its own card', () => {
+    const under = message('b', 3, rect(300, 150, 95, 100))
+    const pile = [parent, under]
+    expect(continueHandleBlocked(parent, 'right', pile)).toBe(true)
+    expect(continueHandleBlocked(parent, 'right', pile, cardStackRanks(pile, ['b', 'a']))).toBe(
+      false
+    )
+    expect(continueHandleBlocked(parent, 'right', pile, cardStackRanks(pile, []))).toBe(true)
+    const poking = message('b', 3, rect(300, 150, 200, 100))
+    const poked = [parent, poking]
+    expect(continueHandleBlocked(parent, 'right', poked, cardStackRanks(poked, ['b', 'a']))).toBe(
+      true
+    )
+  })
+
+  it('says where a link reaches its card', () => {
+    expect(termLinkGeometry({ x: 0, y: 50 }, rect(200, 0)).end).toEqual({ x: 200, y: 50 })
+    const across = connectorGeometry(rect(0, 0), rect(500, 0))
+    expect(across.start).toEqual({ x: 100, y: 50 })
+    expect(across.end).toEqual({ x: 500, y: 50 })
   })
 })

@@ -74,7 +74,7 @@ function CanvasToolRail({
       <span className="canvas-rail-sep" role="separator" />
       <button
         type="button"
-        className={`canvas-rail-btn${outlineOpen ? ' is-active' : ''}`}
+        className={`canvas-rail-btn${outlineOpen ? ' is-toggled' : ''}`}
         aria-label="Outline and search"
         aria-expanded={outlineOpen}
         data-tip="Outline and search  (O, Ctrl+F)"

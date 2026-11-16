@@ -501,21 +501,34 @@ export function rectAgainst(
 /** The size of a card's `+`, which sits centred on its side; mirrors `.canvas-continue`. */
 const CONTINUE_HANDLE_SIZE = 26
 
-/** Whether a card's `+` on this side would sit on something rather than in open space. */
+/**
+ * Whether a card's `+` on this side would sit on something rather than in open space. Half of
+ * it lies on the card itself, where only a card above this one in the pile (`ranks`) is in the
+ * way: one lying under the card there cannot be seen.
+ */
 export function continueHandleBlocked(
   card: CanvasCard,
   side: CanvasSide,
-  cards: CanvasCard[]
+  cards: CanvasCard[],
+  ranks?: ReadonlyMap<string, number>
 ): boolean {
-  const half = CONTINUE_HANDLE_SIZE / 2
+  const size = CONTINUE_HANDLE_SIZE
+  const half = size / 2
   const { x, y, w, h } = card.rect
   const handle = {
     x: (side === 'right' ? x + w : x + w / 2) - half,
     y: (side === 'right' ? y + h / 2 : y + h) - half,
-    w: CONTINUE_HANDLE_SIZE,
-    h: CONTINUE_HANDLE_SIZE
+    w: size,
+    h: size
   }
-  return cardRects(cards, new Set([card.id])).some((rect) => rectsOverlap(handle, rect))
+  const outside =
+    side === 'right' ? { ...handle, x: x + w, w: half } : { ...handle, y: y + h, h: half }
+  const level = ranks?.get(card.id)
+  return cards.some((other) => {
+    if (other.id === card.id) return false
+    const above = level === undefined || (ranks?.get(other.id) ?? -1) > level
+    return rectsOverlap(above ? handle : outside, other.rect)
+  })
 }
 
 /** A spot against one side of a card (its own size by default), or null when something is in the way. */
@@ -926,6 +939,28 @@ export function cardStackRanks(cards: CanvasCard[], stack: readonly string[]): M
 }
 
 /**
+ * Whether a card higher in the pile than `id` lies over `point`, a point on that card.
+ * A card that only touches the point with its edge does not cover it.
+ */
+export function isCoveredAt(
+  cards: CanvasCard[],
+  ranks: ReadonlyMap<string, number>,
+  id: string,
+  point: CanvasPoint
+): boolean {
+  const level = ranks.get(id) ?? -1
+  return cards.some(
+    (other) =>
+      other.id !== id &&
+      (ranks.get(other.id) ?? -1) > level &&
+      point.x - other.rect.x > SIDE_EPSILON &&
+      other.rect.x + other.rect.w - point.x > SIDE_EPSILON &&
+      point.y - other.rect.y > SIDE_EPSILON &&
+      other.rect.y + other.rect.h - point.y > SIDE_EPSILON
+  )
+}
+
+/**
  * The stack with `ids` on top, keeping their order among themselves.
  * The same array comes back when nothing covers them, so a click changes nothing to save.
  */
@@ -1099,8 +1134,11 @@ function squareCurve(
   return `M ${from.x} ${from.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${to.x} ${to.y}`
 }
 
-/** A curve from a term to the facing side of its expansion, leaving and arriving squarely. */
-export function linkPath(from: CanvasPoint, to: CanvasRect): string {
+/** A curve from a term to the facing side of its expansion, and the point where it arrives. */
+export function termLinkGeometry(
+  from: CanvasPoint,
+  to: CanvasRect
+): { d: string; end: CanvasPoint } {
   const centerX = to.x + to.w / 2
   const centerY = to.y + to.h / 2
   const horizontal = Math.abs(from.x - centerX) / to.w >= Math.abs(from.y - centerY) / to.h
@@ -1109,7 +1147,12 @@ export function linkPath(from: CanvasPoint, to: CanvasRect): string {
     : { x: centerX, y: from.y < centerY ? to.y : to.y + to.h }
   const direction = Math.sign(horizontal ? end.x - from.x : end.y - from.y)
   const reach = Math.max(Math.hypot(end.x - from.x, end.y - from.y) * 0.4, 24)
-  return squareCurve(from, end, horizontal, direction, reach)
+  return { d: squareCurve(from, end, horizontal, direction, reach), end }
+}
+
+/** A curve from a term to the facing side of its expansion, leaving and arriving squarely. */
+export function linkPath(from: CanvasPoint, to: CanvasRect): string {
+  return termLinkGeometry(from, to).d
 }
 
 /**
@@ -1212,6 +1255,9 @@ export function askedAboutRelations(cards: CanvasCard[]): Array<{ from: string; 
 
 export interface ConnectorGeometry {
   d: string
+  /** Where it leaves the first rectangle and reaches the second. */
+  start: CanvasPoint
+  end: CanvasPoint
   /** The curve's middle, where its label sits. */
   mid: CanvasPoint
 }
@@ -1238,6 +1284,8 @@ export function connectorGeometry(from: CanvasRect, to: CanvasRect): ConnectorGe
     : { x: end.x, y: end.y - Math.sign(dy || 1) * reach }
   return {
     d: `M ${start.x} ${start.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${end.x} ${end.y}`,
+    start,
+    end,
     mid: {
       x: (start.x + 3 * c1.x + 3 * c2.x + end.x) / 8,
       y: (start.y + 3 * c1.y + 3 * c2.y + end.y) / 8

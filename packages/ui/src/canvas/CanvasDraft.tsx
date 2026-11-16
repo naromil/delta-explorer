@@ -23,7 +23,8 @@ interface CanvasDraftProps {
   rect: CanvasRect
   /** The parent it is kept against, which decides the corner that resizes it. */
   side: CanvasSide | undefined
-  resizing: boolean
+  /** It, or the card it is kept against, is following the pointer, so it must not ease after it. */
+  held: boolean
   /** Cards this rectangle could continue, newest first; empty means a new session. */
   sessions: CanvasDraftSession[]
   parentId: string | undefined
@@ -109,7 +110,7 @@ function ContextChip({
 function CanvasDraft({
   rect,
   side,
-  resizing,
+  held,
   sessions,
   parentId,
   sourceCount,
@@ -163,7 +164,7 @@ function CanvasDraft({
 
   return (
     <article
-      className={`canvas-card canvas-card--draft${resizing ? ' is-resizing' : ''}${
+      className={`canvas-card canvas-card--draft${held ? ' is-held' : ''}${
         linkTarget ? ' is-link-target' : ''
       }`}
       data-canvas-draft=""

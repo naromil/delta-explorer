@@ -499,6 +499,8 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   height, stays single on duplicate, and shows read-only (no edit or regenerate) with a link to its page.
   Its text expands like an answer (`canExpandTurn`), asked with the page as context, and a blank question
   continuing it asks for a summary.
+- **Colour labels are scoped to `.canvas-view`.** `[data-color]` sets `--tint`, and a note, a frame, the map and the outline each
+  give `--tint` a default in a rule of their own, so the colour rules carry the extra class to win over those defaults.
 - **A note is a card, a frame and a connection are not.** A note (`kind: 'note'`) stands on the plane
   like any card, so it snaps, joins and may overlap, but holds no turn, so it continues no session
   (`continuationCandidates`) and curator passes never see it: note edits save with `touchContent: false`.
@@ -608,7 +610,7 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   mark pointing from the earlier card to the later one: on the boundary they share (`seam`) when they
   touch, otherwise a link. Touching alone joins cards but says nothing about history, so a boundary
   with no mark is two cards merely placed together, and a card joined to its parent only through a
-  third card still gets a link. A `+` shows wherever it has open space to sit (`continueHandleBlocked`), since a drag can place the next message even when a click has no room beside the card.
+  third card still gets a link. A `+` shows wherever it has open space to sit (`continueHandleBlocked`), since a drag can place the next message even when a click has no room beside the card. A card lying under the `+`'s own card only counts where it shows beyond that card's edge.
 - **Canvas is keyboard-drivable.** Cards are focusable: arrows move to `nearestCardInDirection`,
   Enter/Shift+Enter continue below/right, B goes back (`sourceCardId`; an expansion returns to the whole
   card holding its term, flashed and scrolled into view, by `revealWholeCard`, which never zooms out
@@ -632,7 +634,9 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 - **Canvas expansions are `ExpansionNode`s shown as cards.** `useExpansionContextMenu` chooses the
   term, then `CanvasView` holds it as `Placing` until a rectangle is drawn or clicked. The term stays in
   `ExpansionNode`; the card is a card like any other, wherever it is drawn or dropped, even over its
-  host, and `CanvasLinks` draws the link from the term, under the cards and faintly over them so it never strikes through text. Offsets are
+  host, and `CanvasLinks` draws the link from the term, under the cards and faintly over them so it never strikes through text. The faint copy
+  is left out when a card higher in the pile hides either end of the line (`isCoveredAt`), and the whole line when that card is
+  the line's own other end, as with a small card lying behind its parent; session links and connections follow the same rule (`reachOf`). Offsets are
   measured relative to the scaled `.canvas-card-surface`, which stays correct mid-animation.
   `folded` has no meaning on a canvas. Nothing depends on a card lying inside another: `normalizeCanvasLayout` drops the `inset` flag older canvases stored. A wrapped term's link starts at the middle of its longest line
   (`termPoint`), since the middle of its bounding box can be empty space.

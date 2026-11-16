@@ -235,12 +235,17 @@ const EXPORT_SAVED_MS = 2000
 /** Chats and look-ups in the history menu; search reaches the rest. */
 const HISTORY_OTHERS_LIMIT = 8
 
-const REFUSE_TOO_SMALL = 'That rectangle is too small to hold an answer. Draw a larger one.'
+const REFUSE_TOO_SMALL: Readonly<Record<DrawKind, string>> = {
+  answer: 'That rectangle is too small to hold an answer. Draw a larger one.',
+  note: 'That rectangle is too small to hold a note. Draw a larger one.',
+  frame: 'That frame is too small. Draw a larger one.'
+}
 const REFUSE_ARRANGE = 'Other cards are in the way of that arrangement.'
 const ALREADY_TIDY = 'Already tidy.'
 const NO_CARD_TO_CONNECT = 'Start a connection on a card.'
 const CONNECT_ANOTHER = 'Drag to a different card to connect them.'
 const PASSAGE_PICK_TARGET = 'Click the card that should receive this passage. Esc cancels.'
+const PASSAGE_NO_TARGET = 'No card there, so the passage was not linked.'
 const PASSAGE_ANOTHER = 'Click a different card to send this passage to.'
 const PASSAGE_SOURCE_GONE = 'The card holding this passage is gone.'
 const NO_CONTINUE_FAILED = 'Retry this answer before continuing it.'
@@ -575,8 +580,8 @@ function CanvasBoard({
         )
         return
       }
+      setNotice(null)
       setLinkingPassage({ from, quote })
-      showNotice(PASSAGE_PICK_TARGET)
     },
     [passageCardId, showNotice]
   )
@@ -606,7 +611,7 @@ function CanvasBoard({
           threshold
         )
         const tooSmall = snapped.rect.w < MIN_FRAME_SIZE.w || snapped.rect.h < MIN_FRAME_SIZE.h
-        return { ...snapped, refusal: tooSmall ? REFUSE_TOO_SMALL : null }
+        return { ...snapped, refusal: tooSmall ? REFUSE_TOO_SMALL.frame : null }
       }
 
       const min = placing ? MIN_EXPANSION_SIZE : what === 'note' ? MIN_NOTE_SIZE : MIN_MESSAGE_SIZE
@@ -621,7 +626,7 @@ function CanvasBoard({
         threshold
       )
       const tooSmall = snapped.rect.w < min.w || snapped.rect.h < min.h
-      return { ...snapped, refusal: tooSmall ? REFUSE_TOO_SMALL : null }
+      return { ...snapped, refusal: tooSmall ? REFUSE_TOO_SMALL[what] : null }
     },
     [cards, placing, viewport.zoom]
   )
@@ -764,7 +769,7 @@ function CanvasBoard({
     if (e.button !== 0) return
     const target = cardAtPoint(cards, pointerInWorld(e), stack)
     if (!target || target.id === linkingPassage.from) {
-      showNotice(target ? PASSAGE_ANOTHER : PASSAGE_PICK_TARGET.replace(' Esc cancels.', ''))
+      showNotice(target ? PASSAGE_ANOTHER : PASSAGE_NO_TARGET)
       if (target) setLinkingPassage(linkingPassage)
       return
     }
@@ -2233,6 +2238,13 @@ function CanvasBoard({
 
   const stackRanks = useMemo(() => cardStackRanks(cards, stack), [cards, stack])
 
+  // Faded while a search, or a term waiting for its rectangle, singles out other cards.
+  const dimmedIds = useMemo((): ReadonlySet<string> => {
+    const faded = (id: string): boolean =>
+      placing ? placing.hostId !== id : searchMatches !== null && !searchMatches.has(id)
+    return new Set(cards.map((card) => card.id).filter(faded))
+  }, [cards, placing, searchMatches])
+
   const displayed = useMemo((): CanvasCard[] => {
     if (gesture?.type === 'drag') {
       const { dx, dy } = dragDelta
@@ -2578,12 +2590,23 @@ function CanvasBoard({
     ]
   )
 
+  const moved = dragDelta.dx !== 0 || dragDelta.dy !== 0
+  // What the open outline covers, which the chrome centred on the board has to clear.
+  const narrow =
+    surfaceBox.width > 0 && surfaceBox.width - (outlineOpen ? OUTLINE_WIDTH : 0) < NARROW_VIEW_PX
   const surfaceClasses = [
     'canvas-surface',
     animating ? 'is-animating' : '',
     isDrawMode || tool === 'connect' ? 'is-drawing' : '',
     tool === 'hand' || spaceHeld || gesture?.type === 'pan' ? 'is-panning' : '',
-    gesture?.type === 'pan' ? 'is-grabbing' : '',
+    gesture?.type === 'pan' || (gesture?.type === 'drag' && moved) ? 'is-grabbing' : '',
+    gesture?.type === 'resize' || gesture?.type === 'frameResize' ? 'is-resizing' : '',
+    gesture?.type === 'draftResize'
+      ? gesture.side === 'left' || gesture.side === 'top'
+        ? 'is-resizing-across'
+        : 'is-resizing'
+      : '',
+    linkingPassage ? 'is-picking' : '',
     placing ? 'is-placing' : '',
     overDraft && gesture?.type === 'drag' ? 'is-linking' : ''
   ]
@@ -2597,7 +2620,7 @@ function CanvasBoard({
       ? EXTEND_HINT
       : gesture?.type === 'draw' && gesture.unheld
         ? SIZE_HINT
-        : placing || gesture || showEmpty
+        : placing || linkingPassage || gesture || showEmpty
           ? undefined
           : TOOL_HINTS[tool]
 
@@ -2616,9 +2639,7 @@ function CanvasBoard({
     !editingNoteId
 
   return (
-    <div
-      className={`canvas-view${surfaceBox.width > 0 && surfaceBox.width < NARROW_VIEW_PX ? ' is-narrow' : ''}`}
-    >
+    <div className={`canvas-view${narrow ? ' is-narrow' : ''}${outlineOpen ? ' has-outline' : ''}`}>
       <div
         ref={surfaceRef}
         className={surfaceClasses}
@@ -2659,9 +2680,7 @@ function CanvasBoard({
                 (gesture.id === card.id ||
                   (resizeUpdates?.some((update) => update.id === card.id) ?? false)))
             const stackLevel = (stackRanks.get(card.id) ?? 0) + 1
-            const dimmed = placing
-              ? placing.hostId !== card.id
-              : searchMatches !== null && !searchMatches.has(card.id)
+            const dimmed = dimmedIds.has(card.id)
             if (card.kind === 'note') {
               return (
                 <CanvasNoteView
@@ -2697,8 +2716,8 @@ function CanvasBoard({
                 {...cardContent(card, canvas)}
                 {...actions}
                 dragging={dragging}
-                handleRight={!continueHandleBlocked(card, 'right', displayed)}
-                handleBottom={!continueHandleBlocked(card, 'bottom', displayed)}
+                handleRight={!continueHandleBlocked(card, 'right', displayed, stackRanks)}
+                handleBottom={!continueHandleBlocked(card, 'bottom', displayed, stackRanks)}
                 stackLevel={stackLevel}
                 pulsing={pulseId === card.id}
                 dimmed={dimmed}
@@ -2722,6 +2741,7 @@ function CanvasBoard({
             surfaceRef={surfaceRef}
             dragging={gesture?.type === 'drag' || gesture?.type === 'resize'}
             selectedIds={liveSelection}
+            dimmedIds={dimmedIds}
             editingLinkId={editingLinkId}
             pending={pendingConnector}
             draftLinks={draftLinks}
@@ -2737,7 +2757,11 @@ function CanvasBoard({
               key={draft.key}
               rect={draftRect}
               side={draftParent ? draft.side : undefined}
-              resizing={gesture?.type === 'draftResize'}
+              held={
+                gesture?.type === 'draftResize' ||
+                gesture?.type === 'drag' ||
+                gesture?.type === 'resize'
+              }
               sessions={draftSessions}
               parentId={draftParent?.id}
               sourceCount={draft.sourceIds?.length ?? 0}
@@ -2976,7 +3000,7 @@ function CanvasBoard({
         </button>
         <button
           type="button"
-          className={`canvas-tool${helpOpen ? ' is-active' : ''}`}
+          className={`canvas-tool${helpOpen ? ' is-toggled' : ''}`}
           aria-label="Keyboard shortcuts"
           aria-expanded={helpOpen}
           data-tip="Keyboard and mouse shortcuts  (?)"
@@ -2989,7 +3013,7 @@ function CanvasBoard({
       {helpOpen ? <CanvasShortcuts onClose={() => setHelpOpen(false)} /> : null}
 
       <div className="canvas-bottom">
-        {placing || message || toolHint ? (
+        {placing || linkingPassage || message || toolHint ? (
           <div className="canvas-hint" role="status">
             {message ? (
               <>
@@ -3012,6 +3036,8 @@ function CanvasBoard({
                 Draw a rectangle to size the answer to “{placing.label}”, or click for the default
                 size. Esc cancels.
               </>
+            ) : linkingPassage ? (
+              PASSAGE_PICK_TARGET
             ) : (
               toolHint
             )}
