@@ -1,4 +1,5 @@
 import HotkeyInput from '../../components/settings/HotkeyInput'
+import MaterialsFolder from '../../components/settings/MaterialsFolder'
 import type { LookupContextMode, ThemeMode } from '../../../../shared/models'
 
 interface GeneralTabProps {
@@ -90,6 +91,7 @@ function GeneralTab({
           support tool calling, and never block a look-up.
         </p>
       </div>
+      <MaterialsFolder />
       <div className="settings-section">
         <label className="settings-label">Close to system tray</label>
         <label className="toggle-row">

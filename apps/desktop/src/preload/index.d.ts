@@ -9,6 +9,7 @@ import type { Connection } from '../shared/models'
 import type { KbMaintenanceStatus, KbRunResult } from '../shared/kb'
 import type { ModelCatalogState } from '../shared/model-catalog'
 import type { ConnectionTestResult, DiscoveredModels } from '../main/services/model-discovery'
+import type { MaterialsRenderJob, MaterialsRenderResult } from '../shared/materials-render'
 
 declare global {
   interface Window {
@@ -27,6 +28,7 @@ declare global {
         lookupContextMode: string
         kbAutoMaintain: boolean
         theme: string
+        materialsDir: string
       }>
       /** A partial update: omitted fields keep their stored value. */
       saveSettings: (settings: {
@@ -36,6 +38,11 @@ declare global {
         kbAutoMaintain?: boolean
         theme?: string
       }) => Promise<{ success: boolean; hotkeyMode: 'global' | 'local'; error?: string }>
+      /** Opens the system folder dialog; main stores the choice. Cancel is `'Canceled.'`. */
+      chooseMaterialsFolder: () => Promise<
+        { ok: true; path: string } | { ok: false; error: string }
+      >
+      clearMaterialsFolder: () => Promise<{ ok: boolean }>
       getHotkeyStatus: () => Promise<{ accelerator: string; mode: 'global' | 'local' }>
       setHotkeyCaptureActive: (active: boolean) => void
 
@@ -116,6 +123,11 @@ declare global {
       kbGetStatus: () => Promise<KbMaintenanceStatus>
       kbOnStatus: (cb: (status: KbMaintenanceStatus) => void) => () => void
       onMemoryUpdated: (cb: () => void) => () => void
+
+      /* The hidden render window only */
+      onMaterialsRender: (cb: (job: MaterialsRenderJob) => void) => void
+      materialsRenderReady: () => void
+      materialsRenderResult: (result: MaterialsRenderResult) => void
     }
   }
 }

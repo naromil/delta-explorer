@@ -9,6 +9,7 @@ import type { Connection } from '../shared/models'
 import type { KbMaintenanceStatus, KbRunResult } from '../shared/kb'
 import type { ModelCatalogState } from '../shared/model-catalog'
 import type { ConnectionTestResult, DiscoveredModels } from '../main/services/model-discovery'
+import type { MaterialsRenderJob, MaterialsRenderResult } from '../shared/materials-render'
 
 const api = {
   loadModelConfig: (): Promise<unknown> => ipcRenderer.invoke('load-model-config'),
@@ -28,6 +29,7 @@ const api = {
     lookupContextMode: string
     kbAutoMaintain: boolean
     theme: string
+    materialsDir: string
   }> => ipcRenderer.invoke('load-settings'),
   saveSettings: (settings: {
     hotkey?: string
@@ -37,6 +39,10 @@ const api = {
     theme?: string
   }): Promise<{ success: boolean; hotkeyMode: 'global' | 'local'; error?: string }> =>
     ipcRenderer.invoke('save-settings', settings),
+  chooseMaterialsFolder: (): Promise<{ ok: true; path: string } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('materials-choose-folder'),
+  clearMaterialsFolder: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('materials-clear-folder'),
   getHotkeyStatus: (): Promise<{ accelerator: string; mode: 'global' | 'local' }> =>
     ipcRenderer.invoke('hotkey-status'),
   setHotkeyCaptureActive: (active: boolean) => ipcRenderer.send('hotkey-capture-active', active),
@@ -184,7 +190,14 @@ const api = {
     const handler = (): void => cb()
     ipcRenderer.on('memory-updated', handler)
     return () => ipcRenderer.removeListener('memory-updated', handler)
-  }
+  },
+
+  /* The hidden render window only: main ignores these from any other window */
+  onMaterialsRender: (cb: (job: MaterialsRenderJob) => void) =>
+    ipcRenderer.on('materials-render', (_e, job: MaterialsRenderJob) => cb(job)),
+  materialsRenderReady: () => ipcRenderer.send('materials-render-ready'),
+  materialsRenderResult: (result: MaterialsRenderResult) =>
+    ipcRenderer.send('materials-render-result', result)
 }
 
 // Both windows are sandboxed and context-isolated; only the typed bridge is

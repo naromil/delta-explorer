@@ -116,6 +116,8 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 | `conversation-export`                     | Renderer → Main | Save a conversation as markdown (`{ok,path}` or `{ok:false,error}`; cancel is `'Canceled.'`)       |
 | `conversation-generate-title`             | Renderer → Main | A model-written title from the first message (`string` or `null`, never throws)                    |
 
+| `materials-choose-folder` / `-clear-folder` | Renderer → Main | Pick the learning-materials folder in the system dialog (main stores it) / forget it |
+| `materials-render` / `-render-ready` / `-render-result` | Main ↔ render window | A PDF or image to draw, the hidden window's ready handshake, and its pages (JPEG + text) |
 | `kb-analyze` / `kb-reanalyze` | Renderer → Main | Manual curator passes over unfed conversations / the last N |
 | `kb-get-status` / `kb-status` | Renderer ↔ Main | Automatic learning status: invoke a snapshot; main pushes every change |
 | `memory-updated` | Main → Renderer | The document base changed (any writer); every window shows a transient indicator |
@@ -166,48 +168,53 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 
 ##### Main process (`src/main/`)
 
-| Module              | Path                          | Role                                                                                                                                                                                  |
-| ------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| App lifecycle       | `index.ts`                    | Main window, tray, streaming IPC (chat-send/expand/cancel), lookup transfer, conversation IPC                                                                                         |
-| Conversation store  | `conversations.ts`            | CRUD on `{userData}/conversations/{id}.json` + `{id}.meta.json` sidecars; per-id write chain (`saveConversation`, `mutateConversation`); title+content search, KB-fed mark            |
-| Image support       | `image-support.ts`            | `modelImageSupport(role)` (catalog modalities, fail-open) + `fitImagesToSupport` (refuse current, drop history images)                                                                |
-| Conversation title  | `conversation-title.ts`       | `generateConversationTitle`: names a conversation from its first message with the assistant's model, no tools, `null` on any failure                                                  |
-| Conversation export | `conversation-export.ts`      | `renderConversationMarkdown` (expansions quoted inline) + `exportConversationToFile` (save dialog, atomic write)                                                                      |
-| Memory store        | `memory/store.ts`             | Shell-like ops confined to `{userData}/memories/` (`listMemories`, `readMemory`, `readAutoLoadedMemories`, `grepMemories`, `writeMemory`, `editMemory`, `moveMemory`, `removeMemory`) |
-| Memory tools        | `memory/tools.ts`             | `memory_*` AI SDK tools + `memoryAgentFor(role)` (assistant vs curator prompt, catalog gate, fail-open) + `memory-updated` broadcast                                                  |
-| Context budget      | `context-budget.ts`           | `applyContextBudget(messages, role)`: trims sends to the cached model's window; fail-open on any missing input                                                                        |
-| Streaming helpers   | `streaming.ts`                | IPC payload validation, `withInstructions`, `createChunkBatcher` (32 ms token deltas)                                                                                                 |
-| Window guards       | `window-guards.ts`            | `guardWindowNavigation`: deny window.open / navigation, hand http(s) links to the browser                                                                                             |
-| Edit menu           | `edit-menu.ts`                | `installEditMenu`: native Cut/Copy/Paste/Select All + spelling suggestions for right clicks in text fields the renderer leaves alone                                                  |
-| Secret store        | `services/secret-store.ts`    | `sealSecret` / `openSecret` for API keys (`safeStorage`, `enc:v1:` prefix, plaintext fallback)                                                                                        |
-| Lookup transfer     | `transfer.ts`                 | `prepareTransferredState`: finalizes in-flight frames + folds screen context into a user turn                                                                                         |
-| Main window ref     | `main-window.ts`              | Module-scoped getter/setter for BrowserWindow ref; `clearMainWindow()` on `closed` (used by transfer)                                                                                 |
-| Config              | `config.ts`                   | Settings/config I/O (atomic), hotkey registry (register-first save, startup fallback), Wayland                                                                                        |
-| Atomic writes       | `services/atomic-file.ts`     | Temp-file + rename writes (`writeFileAtomic[Sync]`) for config, KB and conversation files                                                                                             |
-| Provider dispatch   | `provider.ts`                 | `callProvider` + `callProviderStream(…, signal?)` (resolves role → connection → backend)                                                                                              |
-| Claude Code         | `services/claude-code.ts`     | The `claude-code` provider: spawns `claude -p` (stream-json, no own tools/settings, temp cwd), transcript prompt, memory tools over MCP, `probeClaudeCode` for Test                   |
-| Memory over MCP     | `memory/mcp-server.ts`        | `startMemoryMcpServer(tools)`: per-request loopback JSON-RPC MCP endpoint (token-gated) serving a `ToolSet` to a CLI provider                                                         |
-| Model re-exports    | `models/registries.ts`        | Re-exports shared types/registries so main imports stay stable without crossing renderer boundary                                                                                     |
-| Config schema       | `models/config-schema.ts`     | Zod schema, v1→v3 migrations, repair of dangling roles/unknown providers                                                                                                              |
-| Model catalog       | `services/model-catalog.ts`   | models.dev fetch + 24h disk cache (`{userData}/cache/models-dev.json`) + `load-model-catalog` IPC                                                                                     |
-| KB handlers         | `kb/handlers.ts`              | `kb-*` handlers: status and manual curator passes                                                                                                                                     |
-| KB scheduler        | `kb/maintenance.ts`           | Automatic learning: debounce, batching, backoff, single-flight queue, `kb-status` push                                                                                                |
-| KB run pipeline     | `kb/run.ts`                   | `runKbAnalysis(metas, { markFed, signal })` — curates conversations into the document base                                                                                            |
-| KB pacing policy    | `kb/schedule.ts`              | Pure timing/batch decisions (debounce, backlog, retry backoff, startup delay)                                                                                                         |
-| KB store            | `kb/store.ts`                 | `state.json` I/O (atomic): pacing and last error                                                                                                                                      |
-| Lookup orchestrator | `lookup/lookup.ts`            | Hotkey entry point (capture + OCR + create popup)                                                                                                                                     |
-| Lookup popup window | `lookup/window.ts`            | BrowserWindow + grow animation + ref-counted ocr-image handler                                                                                                                        |
-| Capture + OCR       | `lookup/capture.ts`           | Screen capture + tesseract.js worker (bundled `eng` traineddata, never downloaded)                                                                                                    |
-| Handlers            | `lookup/handlers.ts`          | Paste-text and paste-image handlers only (Ask/Expand moved to streaming IPC)                                                                                                          |
-| Session state       | `lookup/state.ts`             | LookupSession interface + helpers (sendToSession, notifySessionState, isSessionAlive)                                                                                                 |
-| Wayland shortcut    | `services/global-shortcut.ts` | XDG GlobalShortcuts portal                                                                                                                                                            |
-| KDE screenshot      | `services/screen-capture.ts`  | Screenshot portal (silent)                                                                                                                                                            |
+| Module              | Path                          | Role                                                                                                                                                                                                                                  |
+| ------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| App lifecycle       | `index.ts`                    | Main window, tray, streaming IPC (chat-send/expand/cancel), lookup transfer, conversation IPC                                                                                                                                         |
+| Conversation store  | `conversations.ts`            | CRUD on `{userData}/conversations/{id}.json` + `{id}.meta.json` sidecars; per-id write chain (`saveConversation`, `mutateConversation`); title+content search, KB-fed mark                                                            |
+| Image support       | `image-support.ts`            | `modelImageSupport(role)` (catalog modalities, fail-open) + `fitImagesToSupport` (refuse current, drop history images)                                                                                                                |
+| Conversation title  | `conversation-title.ts`       | `generateConversationTitle`: names a conversation from its first message with the assistant's model, no tools, `null` on any failure                                                                                                  |
+| Conversation export | `conversation-export.ts`      | `renderConversationMarkdown` (expansions quoted inline) + `exportConversationToFile` (save dialog, atomic write)                                                                                                                      |
+| Memory store        | `memory/store.ts`             | Shell-like ops confined to `{userData}/memories/` (`listMemories`, `readMemory`, `readAutoLoadedMemories`, `grepMemories`, `writeMemory`, `editMemory`, `moveMemory`, `removeMemory`)                                                 |
+| Memory tools        | `memory/tools.ts`             | `memory_*` AI SDK tools + `memoryAgentFor(role)` (assistant vs curator prompt, catalog gate, fail-open) + `memory-updated` broadcast                                                                                                  |
+| Materials store     | `materials/store.ts`          | Read-only ops confined to the user's chosen folder (`listMaterials`, `findMaterials`, `readMaterial` paged by line, `countMaterial`, `grepMaterials` with a scan budget, `readViewableMaterial`); hidden entries and symlinks are out |
+| Materials tools     | `materials/tools.ts`          | `materials_*` AI SDK tools (ls, find, cat, wc, grep, view) + `withMaterials(agent, imageSupport)`, which adds them and the folder's top levels to the assistant's `AgentTools`                                                        |
+| Materials renderer  | `materials/render.ts`         | `renderMaterial`: hidden sandboxed window (`?role=render`) that turns PDF pages and images into JPEGs plus page text; job types in `shared/materials-render.ts`                                                                       |
+| Path confinement    | `services/confined-path.ts`   | `confinePath`: resolves a model-written path below a root, refusing absolute paths, `..` and symlinks (memory and materials stores)                                                                                                   |
+| Context budget      | `context-budget.ts`           | `applyContextBudget(messages, role)`: trims sends to the cached model's window; fail-open on any missing input                                                                                                                        |
+| Streaming helpers   | `streaming.ts`                | IPC payload validation, `withInstructions`, `createChunkBatcher` (32 ms token deltas)                                                                                                                                                 |
+| Window guards       | `window-guards.ts`            | `guardWindowNavigation`: deny window.open / navigation, hand http(s) links to the browser                                                                                                                                             |
+| Edit menu           | `edit-menu.ts`                | `installEditMenu`: native Cut/Copy/Paste/Select All + spelling suggestions for right clicks in text fields the renderer leaves alone                                                                                                  |
+| Secret store        | `services/secret-store.ts`    | `sealSecret` / `openSecret` for API keys (`safeStorage`, `enc:v1:` prefix, plaintext fallback)                                                                                                                                        |
+| Lookup transfer     | `transfer.ts`                 | `prepareTransferredState`: finalizes in-flight frames + folds screen context into a user turn                                                                                                                                         |
+| Main window ref     | `main-window.ts`              | Module-scoped getter/setter for BrowserWindow ref; `clearMainWindow()` on `closed` (used by transfer)                                                                                                                                 |
+| Config              | `config.ts`                   | Settings/config I/O (atomic), hotkey registry (register-first save, startup fallback), Wayland                                                                                                                                        |
+| Atomic writes       | `services/atomic-file.ts`     | Temp-file + rename writes (`writeFileAtomic[Sync]`) for config, KB and conversation files                                                                                                                                             |
+| Provider dispatch   | `provider.ts`                 | `callProvider` + `callProviderStream(…, signal?)` (resolves role → connection → backend)                                                                                                                                              |
+| Claude Code         | `services/claude-code.ts`     | The `claude-code` provider: spawns `claude -p` (stream-json, no own tools/settings, temp cwd), transcript prompt, memory tools over MCP, `probeClaudeCode` for Test                                                                   |
+| Memory over MCP     | `memory/mcp-server.ts`        | `startMemoryMcpServer(tools)`: per-request loopback JSON-RPC MCP endpoint (token-gated) serving a `ToolSet` to a CLI provider                                                                                                         |
+| Model re-exports    | `models/registries.ts`        | Re-exports shared types/registries so main imports stay stable without crossing renderer boundary                                                                                                                                     |
+| Config schema       | `models/config-schema.ts`     | Zod schema, v1→v3 migrations, repair of dangling roles/unknown providers                                                                                                                                                              |
+| Model catalog       | `services/model-catalog.ts`   | models.dev fetch + 24h disk cache (`{userData}/cache/models-dev.json`) + `load-model-catalog` IPC                                                                                                                                     |
+| KB handlers         | `kb/handlers.ts`              | `kb-*` handlers: status and manual curator passes                                                                                                                                                                                     |
+| KB scheduler        | `kb/maintenance.ts`           | Automatic learning: debounce, batching, backoff, single-flight queue, `kb-status` push                                                                                                                                                |
+| KB run pipeline     | `kb/run.ts`                   | `runKbAnalysis(metas, { markFed, signal })` — curates conversations into the document base                                                                                                                                            |
+| KB pacing policy    | `kb/schedule.ts`              | Pure timing/batch decisions (debounce, backlog, retry backoff, startup delay)                                                                                                                                                         |
+| KB store            | `kb/store.ts`                 | `state.json` I/O (atomic): pacing and last error                                                                                                                                                                                      |
+| Lookup orchestrator | `lookup/lookup.ts`            | Hotkey entry point (capture + OCR + create popup)                                                                                                                                                                                     |
+| Lookup popup window | `lookup/window.ts`            | BrowserWindow + grow animation + ref-counted ocr-image handler                                                                                                                                                                        |
+| Capture + OCR       | `lookup/capture.ts`           | Screen capture + tesseract.js worker (bundled `eng` traineddata, never downloaded)                                                                                                                                                    |
+| Handlers            | `lookup/handlers.ts`          | Paste-text and paste-image handlers only (Ask/Expand moved to streaming IPC)                                                                                                                                                          |
+| Session state       | `lookup/state.ts`             | LookupSession interface + helpers (sendToSession, notifySessionState, isSessionAlive)                                                                                                                                                 |
+| Wayland shortcut    | `services/global-shortcut.ts` | XDG GlobalShortcuts portal                                                                                                                                                                                                            |
+| KDE screenshot      | `services/screen-capture.ts`  | Screenshot portal (silent)                                                                                                                                                                                                            |
 
 ##### Renderer (`src/renderer/src/`)
 
 | Module           | Path                                                                    | Role                                                                                                                                                         |
 | ---------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Entry point      | `main.tsx`                                                              | createRoot, imports CSS, mounts Root                                                                                                                         |
+| Entry point      | `main.tsx`, `app-entry.tsx`                                             | `main.tsx` starts the materials renderer in the hidden render window, otherwise loads `app-entry.tsx` (createRoot, CSS, Root)                                |
+| Materials render | `materials-render.ts`                                                   | Runs in the render window: pdfjs (legacy build) page → canvas → JPEG + text layer; images via `fileToImageAttachment`                                        |
 | Root router      | `Root.tsx`                                                              | Routes App (main window) vs LookupApp (popup) by `?role=lookup`                                                                                              |
 | App shell        | `App.tsx`                                                               | Sidebar + 6-view routing, global Ctrl+N/Ctrl+K, search modal, composer draft                                                                                 |
 | Lookup popup     | `LookupApp.tsx`                                                         | Header, context panel, ask input, paste handling, grow transitions                                                                                           |
@@ -280,6 +287,8 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | Change chat auto-scroll                | `ui/lib/stick-to-bottom.ts`                                                                                                    |
 | Renderer chat UI                       | `App.tsx`, `Conversation.tsx`, `Turn.tsx`, `ConversationSearch.tsx`                                                            |
 | Agent memory tools / document base     | `memory/store.ts` (ops + confinement), `memory/tools.ts` (tool set), `shared/prompts.ts` (rules)                               |
+| Learning materials tools / folder      | `materials/store.ts` (ops + limits), `materials/tools.ts`, `shared/prompts.ts` (`buildMaterialsPrompt`), `MaterialsFolder.tsx` |
+| How PDFs and images reach the model    | `materials/render.ts` + renderer `materials-render.ts` (drawing), `provider.ts` (`withToolImages`)                             |
 | What the curator saves                 | `shared/prompts.ts` (`KB_MEMORY_SYSTEM_PROMPT`), `kb/run.ts` (`updateMemories`)                                                |
 | Memory updated indicator               | `components/MemoryIndicator.tsx`, `memory/tools.ts` (`broadcastMemoryUpdated`)                                                 |
 | Canvas geometry, sessions, word fit    | `shared/canvas.ts` (+ `estimateWords` constants mirror `ui/styles/canvas.css`)                                                 |
@@ -356,8 +365,8 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   After changing them, test install, launch, upgrade and removal on a real distro image.
 - **Config files** live under `{userData}/config/` (`providers.json`, `settings.json`).
   `settings.json` holds `hotkey`, `closeToTray`, `lookupContextMode`
-  (default `'none'`), `kbAutoMaintain` (default `true`) and `theme`
-  (`dark` / `light` / `system`, default `dark`); `save-settings` merges a **partial** patch over the stored settings
+  (default `'none'`), `kbAutoMaintain` (default `true`), `theme`
+  (`dark` / `light` / `system`, default `dark`) and `materialsDir` (default `''`); `save-settings` merges a **partial** patch over the stored settings
   (`mergeAppSettings`), so a caller sends only the fields it changes.
   Always go through `config.ts` helpers; call `ensureConfigDir()` before writing. Writes use
   `services/atomic-file.ts` (sibling temp file + rename), so a crash can't truncate them.
@@ -455,6 +464,38 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   - **Indicator.** A successful mutation broadcasts `memory-updated` to every window, and
     `MemoryIndicator` shows a transient pill. It is not on a turn because curator writes happen with
     no reply on screen.
+- **The assistant can explore a learning-materials folder, read-only.** `settings.json → materialsDir`
+  is a folder the user picks in Settings → General. `withMaterials` (chat, look-up and expand; never the
+  curator) adds the `materials_*` tools to the memory agent, appends `buildMaterialsPrompt` with the
+  folder's top two levels, and raises `maxSteps` to 16. They travel as the same `AgentTools`, so every
+  provider gets them, Claude Code over the same MCP server.
+  - **Shell-like, not a shell.** `materials_ls`, `_find` (name glob), `_cat` (`start_line`/`line_count`),
+    `_wc`, `_grep` and `_view` are each implemented in JS, like the memory tools and for the same reason:
+    the model reads untrusted screen and file text, so there is no command execution and no write tool.
+    `materials/store.ts` confines paths with `confinePath`, hides dotfiles and `node_modules`, never
+    follows a symlink, tells text from binary by content, pages long files by line and gives grep a file
+    and byte budget, reading between awaits so a large folder cannot stall the main process. Tool
+    inputs are all required: optional fields break strict OpenAI-compatible tool schemas.
+  - **PDFs and images are looked at, as pictures.** `materials_view` sends the file's bytes to a hidden,
+    sandboxed `BrowserWindow` (`materials/render.ts`, the app bundle with `?role=render`; `main.tsx`
+    then runs `materials-render.ts` instead of React). It draws PDF pages with `pdfjs-dist` (at most 4
+    per call, long edge 1568px, JPEG) and returns each page's text layer too; images go through
+    `fileToImageAttachment`. So PDF parsing stays out of the main process and no native canvas addon
+    is needed. Import pdfjs's **legacy** build: the default one needs JavaScript newer than Electron
+    39's Chromium and fails to draw. The window opens on demand, closes after 30s idle or with the
+    last user window (`closeRenderWindow`), answers only its own `webContents`, and is never one of
+    the user's windows (`isRenderWindow`, used by `activate`).
+  - **Pictures follow the tool result as a user message.** A tool result is text on the
+    OpenAI-compatible route, so the tool puts its pictures in `AgentTools.toolImages` by tool call id
+    and `withToolImages` (`provider.ts`, from `prepareStep`) inserts a user message (`TOOL_IMAGES_NOTE`
+    - `file` parts) after that tool message on every step, identically, so the prefix stays cacheable.
+      They live only in the request: nothing is stored on a turn. At most 12 pictures per request. A
+      model the catalog says reads no images, and Claude Code, get the text layer only
+      (`modelImageSupport`); an unknown model is sent pictures, as with attachments. `materials_grep`
+      does not search PDFs.
+  - **Only the system dialog sets the folder** (`materials-choose-folder`): `save-settings` keeps the
+    stored value whatever the patch says, so a renderer payload cannot aim the tools at another path.
+    A model without tools gets no materials.
 - **Every conversation is one entity with type-specific properties.** A `ConversationRecord` has shared
   fields and `state.turns`, and `source` picks its type: a chat has nothing extra, a look-up holds
   `lookup.context`, a canvas holds `canvas`. Only the owning type may hold a property:

@@ -1,6 +1,6 @@
-import { join } from 'path'
+import { isAbsolute, join } from 'path'
 import { readFileSync, existsSync, mkdirSync } from 'fs'
-import { app, ipcMain, globalShortcut, nativeTheme } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, globalShortcut, nativeTheme } from 'electron'
 import { registerGlobalShortcutPortal } from './services/global-shortcut'
 import { configureLocalShortcut, setHotkeyCaptureActive } from './services/local-shortcut'
 import { handleHotkeyPressed } from './lookup/lookup'
@@ -47,6 +47,8 @@ interface AppSettings {
   /** Learn the user's preferences in the background; see `kb/maintenance.ts`. */
   kbAutoMaintain: boolean
   theme: ThemeMode
+  /** The learning-materials folder the assistant may read; empty when none is chosen. */
+  materialsDir: string
 }
 
 /* ---- Wayland detection ----
@@ -180,7 +182,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   closeToTray: true,
   lookupContextMode: 'none',
   kbAutoMaintain: true,
-  theme: 'dark'
+  theme: 'dark',
+  materialsDir: ''
 }
 
 /** Accept only the shapes the app can honour; a hand-edited file must not poison them. */
@@ -208,7 +211,11 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
     theme:
       record.theme === 'system' || record.theme === 'light' || record.theme === 'dark'
         ? record.theme
-        : DEFAULT_SETTINGS.theme
+        : DEFAULT_SETTINGS.theme,
+    materialsDir:
+      typeof record.materialsDir === 'string' && isAbsolute(record.materialsDir)
+        ? record.materialsDir
+        : DEFAULT_SETTINGS.materialsDir
   }
 }
 
@@ -400,7 +407,12 @@ export function registerConfigIpcHandlers(): void {
       patch: Partial<AppSettings>
     ): Promise<{ success: boolean; hotkeyMode: 'global' | 'local'; error?: string }> => {
       const previous = loadAppSettings()
-      const normalized = mergeAppSettings(previous, patch)
+      // The materials folder is only ever set through the system dialog below, so no
+      // renderer payload can point the assistant's file tools at an arbitrary path.
+      const normalized = mergeAppSettings(previous, {
+        ...patch,
+        materialsDir: previous.materialsDir
+      })
 
       let registered: boolean
       try {
@@ -444,6 +456,31 @@ export function registerConfigIpcHandlers(): void {
   ipcMain.handle('load-settings', (): AppSettings => {
     return loadAppSettings()
   })
+
+  /* Learning materials: the folder is picked in the system dialog and stored by main */
+  ipcMain.handle(
+    'materials-choose-folder',
+    async (): Promise<{ ok: true; path: string } | { ok: false; error: string }> => {
+      const options = {
+        title: 'Choose your learning materials folder',
+        properties: ['openDirectory' as const]
+      }
+      const owner = BrowserWindow.getFocusedWindow()
+      const result =
+        owner && !owner.isDestroyed()
+          ? await dialog.showOpenDialog(owner, options)
+          : await dialog.showOpenDialog(options)
+      const path = result.filePaths[0]
+      if (result.canceled || !path) return { ok: false, error: 'Canceled.' }
+      return saveAppSettings({ ...loadAppSettings(), materialsDir: path })
+        ? { ok: true, path }
+        : { ok: false, error: 'Failed to save settings.' }
+    }
+  )
+
+  ipcMain.handle('materials-clear-folder', (): { ok: boolean } => ({
+    ok: saveAppSettings({ ...loadAppSettings(), materialsDir: '' })
+  }))
 
   /* Where the look-up key currently works (system-wide or in-app only) */
   ipcMain.handle('hotkey-status', (): HotkeyStatus => getHotkeyStatus())

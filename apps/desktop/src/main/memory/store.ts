@@ -1,8 +1,9 @@
-import { lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync } from 'fs'
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync } from 'fs'
 import type { Stats } from 'fs'
 import { dirname, join } from 'path'
 import { app } from 'electron'
 import { writeFileAtomicSync } from '../services/atomic-file'
+import { confinePath, lstatOrNull, type ConfinedPath } from '../services/confined-path'
 import { AUTO_LOADED_MEMORY_PREFIX, type AutoLoadedMemory } from '@delta/core/prompts'
 
 /* ---- Memory document base ----
@@ -32,39 +33,10 @@ export function memoriesDir(): string {
 
 /* ---- Path confinement ---- */
 
-interface MemoryPath {
-  absolute: string
-  /** Relative to the root with `/` separators; empty for the root itself. */
-  relative: string
-}
-
-function lstatOrNull(path: string): Stats | null {
-  try {
-    return lstatSync(path)
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
-    throw err
-  }
-}
+type MemoryPath = ConfinedPath
 
 function locate(root: string, input: string): MemoryPath {
-  const normalized = input.trim().replaceAll('\\', '/')
-  // eslint-disable-next-line no-control-regex
-  if (normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized) || /[\x00-\x1f]/.test(input)) {
-    throw new MemoryError(`Invalid path "${input}": use a path relative to the memories directory.`)
-  }
-  const segments = normalized.split('/').filter((part) => part !== '' && part !== '.')
-  if (segments.includes('..')) {
-    throw new MemoryError(`Invalid path "${input}": ".." is not allowed.`)
-  }
-  let absolute = root
-  for (const segment of segments) {
-    absolute = join(absolute, segment)
-    if (lstatOrNull(absolute)?.isSymbolicLink()) {
-      throw new MemoryError(`Invalid path "${input}": symbolic links are not followed.`)
-    }
-  }
-  return { absolute, relative: segments.join('/') }
+  return confinePath(root, input, 'the memories directory', (message) => new MemoryError(message))
 }
 
 function locateMarkdown(root: string, input: string): MemoryPath {
