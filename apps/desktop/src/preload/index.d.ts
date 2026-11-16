@@ -27,6 +27,7 @@ declare global {
         lookupContextMode: string
         kbAutoMaintain: boolean
         theme: string
+        materialsDir: string
       }>
       /** A partial update: omitted fields keep their stored value. */
       saveSettings: (settings: {
@@ -36,6 +37,11 @@ declare global {
         kbAutoMaintain?: boolean
         theme?: string
       }) => Promise<{ success: boolean; hotkeyMode: 'global' | 'local'; error?: string }>
+      /** Opens the system folder dialog; main stores the choice. Cancel is `'Canceled.'`. */
+      chooseMaterialsFolder: () => Promise<
+        { ok: true; path: string } | { ok: false; error: string }
+      >
+      clearMaterialsFolder: () => Promise<{ ok: boolean }>
       getHotkeyStatus: () => Promise<{ accelerator: string; mode: 'global' | 'local' }>
       setHotkeyCaptureActive: (active: boolean) => void
 

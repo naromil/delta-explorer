@@ -38,10 +38,19 @@ const DEFAULTS = {
   closeToTray: true,
   lookupContextMode: 'none',
   kbAutoMaintain: true,
-  theme: 'dark'
+  theme: 'dark',
+  materialsDir: ''
 }
 
 describe('normalizeAppSettings', () => {
+  it('keeps only an absolute materials folder', () => {
+    expect(normalizeAppSettings({ materialsDir: '/home/me/notes' }).materialsDir).toBe(
+      '/home/me/notes'
+    )
+    expect(normalizeAppSettings({ materialsDir: 'notes' }).materialsDir).toBe('')
+    expect(normalizeAppSettings({ materialsDir: 7 }).materialsDir).toBe('')
+  })
+
   it('falls back to defaults for a non-object payload', () => {
     expect(normalizeAppSettings(null)).toEqual(DEFAULTS)
     expect(normalizeAppSettings('nope')).toEqual(DEFAULTS)
@@ -90,7 +99,8 @@ describe('mergeAppSettings', () => {
     closeToTray: false,
     lookupContextMode: 'clipboard' as const,
     kbAutoMaintain: false,
-    theme: 'dark'
+    theme: 'dark',
+    materialsDir: ''
   }
 
   it('changes only the fields in the patch', () => {

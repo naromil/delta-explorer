@@ -57,6 +57,7 @@ import { startKbAutoMaintenance, stopKbAutoMaintenance } from './kb/maintenance'
 import { migrateLegacyKbPrompt } from './kb/store'
 import { registerModelCatalogIpcHandlers } from './services/model-catalog'
 import { memoryAgentFor, withAutoLoadedMemories } from './memory/tools'
+import { withMaterials } from './materials/tools'
 
 interface ActiveStream {
   controller: AbortController
@@ -115,7 +116,7 @@ if (!hasSingleInstanceLock) {
             safeSend(sender, 'chat-response', { requestId, text, cancelled: true }),
           failed: (error) => safeSend(sender, 'chat-error', { requestId, error })
         },
-        memoryAgentFor(ASSISTANT_ROLE)
+        withMaterials(memoryAgentFor(ASSISTANT_ROLE))
       )
     })
 
@@ -134,7 +135,7 @@ if (!hasSingleInstanceLock) {
         return
       }
       // A model that cannot use the tools still gets the auto-loaded notes.
-      const agent = memoryAgentFor(ASSISTANT_ROLE)
+      const agent = withMaterials(memoryAgentFor(ASSISTANT_ROLE))
       const messages = applyContextBudget(
         agent ? fitted : withAutoLoadedMemories(fitted),
         ASSISTANT_ROLE

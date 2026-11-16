@@ -28,6 +28,7 @@ const api = {
     lookupContextMode: string
     kbAutoMaintain: boolean
     theme: string
+    materialsDir: string
   }> => ipcRenderer.invoke('load-settings'),
   saveSettings: (settings: {
     hotkey?: string
@@ -37,6 +38,10 @@ const api = {
     theme?: string
   }): Promise<{ success: boolean; hotkeyMode: 'global' | 'local'; error?: string }> =>
     ipcRenderer.invoke('save-settings', settings),
+  chooseMaterialsFolder: (): Promise<{ ok: true; path: string } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('materials-choose-folder'),
+  clearMaterialsFolder: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('materials-clear-folder'),
   getHotkeyStatus: (): Promise<{ accelerator: string; mode: 'global' | 'local' }> =>
     ipcRenderer.invoke('hotkey-status'),
   setHotkeyCaptureActive: (active: boolean) => ipcRenderer.send('hotkey-capture-active', active),
