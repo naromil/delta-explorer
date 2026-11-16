@@ -208,6 +208,17 @@ export function createDefaultModelConfig(): ModelConfig {
   }
 }
 
+/**
+ * A fresh install has no connection to answer with, so the main window opens on Settings → Models
+ * instead of an empty Home. Anything that is not a readable config counts as configured.
+ */
+export function hasNoConnections(config: unknown): boolean {
+  if (!config || typeof config !== 'object') return false
+  const connections = (config as { connections?: unknown }).connections
+  if (!connections || typeof connections !== 'object' || Array.isArray(connections)) return false
+  return Object.keys(connections).length === 0
+}
+
 export function generateConnectionId(): string {
   return `conn_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 }
