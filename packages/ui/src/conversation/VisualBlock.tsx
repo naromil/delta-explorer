@@ -1,10 +1,13 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import type { VisualBlockKind } from '@delta/core/prompts'
 import type { Vars } from '../lib/math-expression'
+import { layoutNetwork } from '../lib/network-layout'
+import type { LayoutPoint } from '../lib/network-layout'
 import type {
   ChartFrame,
   Graph,
   GraphParam,
+  NetworkEdge,
   TraceFrame,
   Visual,
   VisualItem,
@@ -395,6 +398,168 @@ function Matrix({
           <span>{x[1]} →</span>
         </span>
       ) : null}
+    </span>
+  )
+}
+
+/* ---- Network ---- */
+
+/** The drawing's own units; the box keeps this shape, so they scale evenly. */
+const NET = { width: 150, height: 100, padX: 20, padY: 9, gapX: 36, gapY: 19 }
+/** How far a link bows aside when another joins the same two nodes. */
+const NET_BEND = 9
+const NET_LOOP = 7
+
+interface NetworkLine {
+  d: string
+  label: LayoutPoint
+  /** Arrowheads: where each sits and the way it points, in degrees. */
+  heads: Array<LayoutPoint & { angle: number }>
+}
+
+function curvePoint(a: LayoutPoint, c: LayoutPoint, b: LayoutPoint, t: number): LayoutPoint {
+  const u = 1 - t
+  return {
+    x: u * u * a.x + 2 * u * t * c.x + t * t * b.x,
+    y: u * u * a.y + 2 * u * t * c.y + t * t * b.y
+  }
+}
+
+function headAt(
+  a: LayoutPoint,
+  c: LayoutPoint,
+  b: LayoutPoint,
+  t: number,
+  backwards: boolean
+): LayoutPoint & { angle: number } {
+  const here = curvePoint(a, c, b, t)
+  const next = curvePoint(a, c, b, t + (backwards ? -0.02 : 0.02))
+  return { ...here, angle: (Math.atan2(next.y - here.y, next.x - here.x) * 180) / Math.PI }
+}
+
+/** A link that returns to its own node: a ring on the node's outer side. */
+function loopLine(at: LayoutPoint, directed: boolean): NetworkLine {
+  const dx = at.x - NET.width / 2
+  const dy = at.y - NET.height / 2
+  const length = Math.hypot(dx, dy)
+  const out = length < 1 ? { x: 0, y: -1 } : { x: dx / length, y: dy / length }
+  const centre = { x: at.x + out.x * NET_LOOP * 1.9, y: at.y + out.y * NET_LOOP * 1.9 }
+  const far = { x: centre.x + out.x * NET_LOOP, y: centre.y + out.y * NET_LOOP }
+  const near = { x: centre.x - out.x * NET_LOOP, y: centre.y - out.y * NET_LOOP }
+  return {
+    d: `M ${near.x} ${near.y} A ${NET_LOOP} ${NET_LOOP} 0 1 1 ${far.x} ${far.y} A ${NET_LOOP} ${NET_LOOP} 0 1 1 ${near.x} ${near.y}`,
+    label: { x: far.x + out.x * 5, y: far.y + out.y * 5 },
+    heads: directed ? [{ ...far, angle: (Math.atan2(out.x, -out.y) * 180) / Math.PI }] : []
+  }
+}
+
+/**
+ * Each link as a curve between its nodes' centres, which the node boxes cover. So an arrowhead
+ * sits along the line rather than at its end, where a box of unknown size would hide it.
+ */
+function networkLines(edges: NetworkEdge[], points: LayoutPoint[]): NetworkLine[] {
+  return edges.map((edge, index) => {
+    const a = points[edge.from]
+    const b = points[edge.to]
+    if (edge.from === edge.to) return loopLine(a, edge.direction !== 'none')
+    const shared = edges.some(
+      (other, at) =>
+        at !== index &&
+        ((other.from === edge.from && other.to === edge.to) ||
+          (other.from === edge.to && other.to === edge.from))
+    )
+    const length = Math.hypot(b.x - a.x, b.y - a.y) || 1
+    // Sideways as seen along the link, so the link back bows the other way.
+    const bend = shared ? NET_BEND : 0
+    const c = {
+      x: (a.x + b.x) / 2 - ((b.y - a.y) / length) * bend,
+      y: (a.y + b.y) / 2 + ((b.x - a.x) / length) * bend
+    }
+    return {
+      d: `M ${a.x} ${a.y} Q ${c.x} ${c.y} ${b.x} ${b.y}`,
+      label: curvePoint(a, c, b, 0.5),
+      heads: [
+        ...(edge.direction === 'none' ? [] : [headAt(a, c, b, 0.72, false)]),
+        ...(edge.direction === 'both' ? [headAt(a, c, b, 0.28, true)] : [])
+      ]
+    }
+  })
+}
+
+const LINK_MARK: Record<NetworkEdge['direction'], string> = { forward: '→', both: '↔', none: '—' }
+
+/** Nodes joined by labelled links; a step is one link, in the order they were written. */
+function Network({
+  nodes,
+  edges,
+  step
+}: {
+  nodes: string[]
+  edges: NetworkEdge[]
+  step: number | null
+}): React.JSX.Element {
+  const points = useMemo(() => layoutNetwork(nodes.length, edges, NET), [nodes.length, edges])
+  const lines = useMemo(() => networkLines(edges, points), [edges, points])
+  const left = (x: number): string => `${(x / NET.width) * 100}%`
+  const top = (y: number): string => `${(y / NET.height) * 100}%`
+  /** A node appears with the first link that names it; one no link names is always there. */
+  const nodeClass = (index: number): string => {
+    if (step === null) return ''
+    const first = edges.findIndex((edge) => edge.from === index || edge.to === index)
+    const current = edges[step]
+    if (current && (current.from === index || current.to === index)) return ' is-current'
+    return first > step ? ' is-ahead' : ''
+  }
+  return (
+    <span className="md-visual-network">
+      <span className={`md-network-plane${nodes.length > 7 ? ' is-dense' : ''}`}>
+        <svg viewBox={`0 0 ${NET.width} ${NET.height}`} aria-hidden="true">
+          {lines.map((line, index) => (
+            <g key={index} className={stepClass(index, step).trim() || undefined}>
+              <path className="md-network-link" d={line.d} />
+              {line.heads.map((head, at) => (
+                <path
+                  key={at}
+                  className="md-network-head"
+                  d="M-2.6 -2L2.6 0L-2.6 2z"
+                  transform={`translate(${head.x} ${head.y}) rotate(${head.angle})`}
+                />
+              ))}
+            </g>
+          ))}
+        </svg>
+        {nodes.map((node, index) => (
+          <span
+            key={index}
+            className={`md-visual-box md-network-node${nodeClass(index)}`}
+            style={{ left: left(points[index].x), top: top(points[index].y) }}
+          >
+            <span className="md-visual-title">{node}</span>
+          </span>
+        ))}
+        {lines.map((line, index) =>
+          edges[index].label ? (
+            <span
+              key={index}
+              className={`md-network-label${stepClass(index, step)}`}
+              style={{ left: left(line.label.x), top: top(line.label.y) }}
+            >
+              {edges[index].label}
+            </span>
+          ) : null
+        )}
+      </span>
+      {/* Narrow cards cannot fit the plane; this list replaces it there (see markdown.css). */}
+      <span className="md-network-list">
+        {edges.map((edge, index) => (
+          <span key={index} className={`md-network-row${stepClass(index, step)}`}>
+            <span className="md-visual-title">
+              {nodes[edge.from]} {LINK_MARK[edge.direction]} {nodes[edge.to]}
+            </span>
+            {edge.label ? <span className="md-visual-detail">{edge.label}</span> : null}
+          </span>
+        ))}
+      </span>
     </span>
   )
 }
@@ -817,6 +982,12 @@ function VisualBody({ visual }: { visual: Visual }): React.JSX.Element {
       return (
         <Stepped count={visual.items.length} rest>
           {(step) => <Cycle items={visual.items} step={step} />}
+        </Stepped>
+      )
+    case 'network':
+      return (
+        <Stepped count={visual.edges.length} rest>
+          {(step) => <Network nodes={visual.nodes} edges={visual.edges} step={step} />}
         </Stepped>
       )
     case 'timeline':

@@ -174,4 +174,19 @@ describe('diagram blocks', () => {
     ])
     expect(table.frames[0].rows[0][1].marked).toBe(true)
   })
+
+  it('read a network: links, chains, directions and a label that holds a dash', () => {
+    const visual = parseVisual(
+      'network',
+      'Idle -> Running: start -- now\nrunning <-> Paused\nPaused -- Idle -> Done\nAlone\nIdle ->'
+    )
+    if (visual?.kind !== 'network') throw new Error('not a network')
+    expect(visual.nodes).toEqual(['Idle', 'Running', 'Paused', 'Done', 'Alone'])
+    expect(visual.edges).toEqual([
+      { from: 0, to: 1, direction: 'forward', label: 'start -- now' },
+      { from: 1, to: 2, direction: 'both' },
+      { from: 2, to: 0, direction: 'none' },
+      { from: 0, to: 3, direction: 'forward' }
+    ])
+  })
 })

@@ -1,6 +1,6 @@
 /**
  * Diagrams written as fenced blocks (`flow`, `cycle`, `timeline`, `tree`, `venn`, `matrix`,
- * `graph`, `chart`, `trace`), read line by line so a block still streaming draws what has
+ * `graph`, `chart`, `trace`, `network`), read line by line so a block still streaming draws what has
  * arrived. The syntax the model is taught lives in `VISUAL_BLOCK_SYNTAX`
  * (`@delta/core/prompts`); keep the two in step.
  *
@@ -80,8 +80,17 @@ export interface TraceFrame {
   rows: TraceCell[][]
 }
 
+/** `forward` is an arrow from `from` to `to`, `both` one each way, `none` a plain line. */
+export interface NetworkEdge {
+  from: number
+  to: number
+  direction: 'forward' | 'both' | 'none'
+  label?: string
+}
+
 export type Visual =
   | Graph
+  | { kind: 'network'; nodes: string[]; edges: NetworkEdge[] }
   | { kind: 'chart'; title?: string; frames: ChartFrame[] }
   | { kind: 'trace'; head?: string[]; frames: TraceFrame[] }
   | { kind: 'flow' | 'cycle' | 'timeline'; items: VisualItem[] }
@@ -352,11 +361,56 @@ function parseTrace(source: string): Visual | null {
   return drawn.length > 0 ? { kind: 'trace', frames: drawn, ...(head ? { head } : {}) } : null
 }
 
+const NETWORK_NODE_LIMIT = 14
+const NETWORK_EDGE_LIMIT = 24
+const NETWORK_LINK = /\s*(<-+>|↔|-+>|→|--+|—)\s*/
+
+function linkDirection(link: string): NetworkEdge['direction'] {
+  if (link.startsWith('<') || link === '↔') return 'both'
+  return link.endsWith('>') || link === '→' ? 'forward' : 'none'
+}
+
+/**
+ * `A -> B: label`, one link per line or a chain (`A -> B -> C`), whose label belongs to its
+ * last link. A line with no link is a node standing alone. Names match without regard to case.
+ */
+function parseNetwork(source: string): Visual | null {
+  const nodes: string[] = []
+  const edges: NetworkEdge[] = []
+  const nodeIndex = (name: string): number => {
+    const known = nodes.findIndex((node) => node.toLowerCase() === name.toLowerCase())
+    if (known >= 0 || nodes.length >= NETWORK_NODE_LIMIT) return known
+    return nodes.push(name) - 1
+  }
+  for (const line of lines(source)) {
+    // The label is cut off first, so a dash or arrow inside it is not read as a link.
+    const colon = line.search(/:(\s|$)/)
+    const label = colon < 0 ? '' : plain(line.slice(colon + 1))
+    const parts = (colon < 0 ? line : line.slice(0, colon)).split(NETWORK_LINK)
+    const names = parts.filter((_, index) => index % 2 === 0).map((name) => plain(name))
+    let from = names[0] ? nodeIndex(names[0]) : -1
+    for (let index = 1; index < names.length; index += 1) {
+      const to = names[index] ? nodeIndex(names[index]) : -1
+      if (from >= 0 && to >= 0 && edges.length < NETWORK_EDGE_LIMIT) {
+        edges.push({
+          from,
+          to,
+          direction: linkDirection(parts[index * 2 - 1]),
+          ...(label && index === names.length - 1 ? { label } : {})
+        })
+      }
+      from = to
+    }
+  }
+  return nodes.length > 0 ? { kind: 'network', nodes, edges } : null
+}
+
 /** The diagram in `source`, or null when nothing in it can be drawn yet. */
 export function parseVisual(kind: VisualBlockKind, source: string): Visual | null {
   if (kind === 'graph') return parseGraph(source)
   if (kind === 'chart') return parseChart(source)
   if (kind === 'trace') return parseTrace(source)
+  if (kind === 'network') return parseNetwork(source)
   if (kind === 'tree') {
     const roots = parseTree(source)
     return roots.length > 0 ? { kind, roots } : null

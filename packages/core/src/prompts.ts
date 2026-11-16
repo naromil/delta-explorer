@@ -307,6 +307,10 @@ export const VISUAL_BLOCK_SYNTAX = {
     '```chart\ntitle: Planet radius (thousand km)\nMercury: 2.4\nEarth: 6.4\nJupiter: 69.9\n```',
     'To show quantities changing, give the bars under several `[Heading]` lines, one per moment, with the same labels in each; the reader plays from one to the next.'
   ].join('\n'),
+  network: [
+    'A network (things joined by labelled relationships that are not a single line or a tree: a food web, a state machine, a signalling pathway, a concept map) is a fenced code block with the language `network`: one link per line as `From -> To: label`, the label optional; `<->` for both ways and `--` for no direction. Name a thing the same way every time; up to 14 things. The reader can play the links in the order written. Example:',
+    '```network\nGrass -> Rabbit: eaten by\nGrass -> Mouse: eaten by\nRabbit -> Fox: eaten by\nMouse -> Fox: eaten by\nMouse -> Owl: eaten by\n```'
+  ].join('\n'),
   trace: [
     'A trace (a row or table of values changing step by step: an algorithm on an array, a worked calculation, a table being filled in) is a fenced code block with the language `trace`: each step is a `[What happens]` line followed by the whole state after it, one row per line, cells separated by spaces, or by ` | ` when a cell holds a space. End a cell with `*` to mark it as the one the step is about. An optional first line `head: A | B | C` names the columns. The reader steps through it. A single step with no `[...]` line is a plain table, such as a Punnett square. Example:',
     '```trace\n[Start with the unsorted list]\n5 2 8 1\n[Compare 5 and 2: out of order]\n5* 2* 8 1\n[Swap them]\n2* 5* 8 1\n[Compare 5 and 8: in order]\n2 5* 8* 1\n```'
@@ -317,7 +321,7 @@ export type VisualBlockKind = keyof typeof VISUAL_BLOCK_SYNTAX
 
 const VISUAL_BLOCK_RULES = [
   'Inside a diagram block, write only what its syntax allows: no markdown, links or $ formulas. Keep each title to a few words and each detail to one short line, and put any explanation outside the block.',
-  'The reader can play a flow, cycle, timeline or tree one line at a time, so order the lines the way you would explain them. Prefer a diagram that moves (a slider, chart moments, a trace) when the point is how something changes, and change one thing per step.'
+  'The reader can play a flow, cycle, timeline, tree or network one line at a time, so order the lines the way you would explain them. Prefer a diagram that moves (a slider, chart moments, a trace) when the point is how something changes, and change one thing per step.'
 ].join('\n')
 
 /** Every diagram the renderer draws, with the rules for writing inside one. */
@@ -353,7 +357,7 @@ export const CANVAS_TOOL_FIELDS = {
 export function buildCanvasToolInstructions(explore: boolean): string {
   return [
     'Your answer appears in a card on an infinite canvas, and you can add cards beside it with the canvas tools. Your own answer is text: never draw a diagram block in it; put every visual in a card instead.',
-    `Use canvas_add_visual when seeing it helps the user learn: a graph when a function or rate is involved (with a slider when the effect of a quantity is the point), a chart for quantities, a trace for a procedure or a table of values, a diagram for a process, cycle, timeline, structure, comparison or classification. At most ${CANVAS_SPAWN_LIMITS.visual} per answer; usually zero or one.`,
+    `Use canvas_add_visual when seeing it helps the user learn: a graph when a function or rate is involved (with a slider when the effect of a quantity is the point), a chart for quantities, a trace for a procedure or a table of values, a network for how several things relate, a diagram for a process, cycle, timeline, structure, comparison or classification. At most ${CANVAS_SPAWN_LIMITS.visual} per answer; usually zero or one.`,
     ...(explore
       ? [
           `Use canvas_add_explore when something deserves more than your space allows, or a concept the user likely does not know would stop them understanding: name it briefly in your answer and give it its own card instead of cramming it in. At most ${CANVAS_SPAWN_LIMITS.explore} per answer; add none when the answer is complete as it is.`
