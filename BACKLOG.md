@@ -13,16 +13,12 @@
 - [x] Test that `safeHref` (`ui/lib/safe-url.ts`) agrees with `isSafeExternalUrl` (`window-guards.ts`) — AGENTS.md requires the two allowlists to match and nothing enforces it
 - [ ] Unit-test `straightenBlocks` in `canvas-straighten.ts` — the only canvas layout module with no tests, and tidy relies on it never resizing or detaching cards
 - [x] Display what tool calls are in process when the agent calls tools instead of responding directly, so the user knows what is going on.
-
-## Proposed (needs the owner's OK — move to Routine to approve)
-
-- [ ] Per-message timestamps — requires adding a field to the stored `Turn` format
-- [ ] Show which model produced each answer — adds a field to the stored `Turn` format
 - [ ] Jump to the matching message when opening a search result — `conversation-search` results would need a turn id (IPC contract change)
 - [ ] Copy a whole conversation as markdown to the clipboard — needs a new IPC channel or moving the export renderer into `shared/`
 - [ ] Remember the main window's size and position — adds a field to the `settings.json` schema
-- [ ] Fork a conversation from a message — a new UX concept that creates a second record from an existing one; the owner should pick the entry point
 - [ ] Find in conversation (Ctrl/Cmd+F) — Electron shows no find bar; needs `webContents.findInPage` behind a new IPC channel
+
+## Proposed (needs the owner's OK — move to Routine to approve)
 
 ## Ideas for the owner to consider (never built automatically)
 
@@ -38,3 +34,6 @@
 - Conversation history sidebar in the chat view — a layout redesign of the chat screen
 - Quiz / flashcard mode built from the KB profile and history, with spaced repetition
 - Expansion: dedicated `expand` model role — inline answers should appear almost immediately, but expand uses the chat or lookup model; a fast, cheap role falling back to the current one (new `RoleId`, needs a config-schema migration)
+- Show which model produced each answer — adds a field to the stored `Turn` format
+- Per-message timestamps — requires adding a field to the stored `Turn` format
+- Fork a conversation from a message — a new UX concept that creates a second record from an existing one; the owner should pick the entry point
