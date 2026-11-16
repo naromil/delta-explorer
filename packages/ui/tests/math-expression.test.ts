@@ -40,4 +40,16 @@ describe('compileExpression', () => {
     expect(compileExpression('y')).toBeNull()
     expect(compileExpression('')).toBeNull()
   })
+
+  it('reads declared parameters, and nothing undeclared', () => {
+    const fn = compileExpression('a sin(x) + 2k', ['a', 'k'])
+    expect(fn?.(Math.PI / 2, { a: 3, k: 1 })).toBeCloseTo(5)
+    expect(fn?.(0)).toBeNaN()
+    expect(compileExpression('a x')).toBeNull()
+    // Names that already mean something are not up for grabs.
+    expect(compileExpression('e + x', ['e', 'x', 'y'])?.(1, { e: 5, x: 9 })).toBeCloseTo(Math.E + 1)
+    expect(compileExpression('y', ['y'])).toBeNull()
+    // A known function wins over a parameter followed by letters.
+    expect(compileExpression('asin(x)', ['a'])?.(1, { a: 0 })).toBeCloseTo(Math.PI / 2)
+  })
 })

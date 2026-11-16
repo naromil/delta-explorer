@@ -92,9 +92,34 @@ describe('diagram blocks', () => {
     if (visual?.kind !== 'graph') throw new Error('not a graph')
     expect(visual.curves.map((curve) => curve.label)).toEqual(['y = x^2 - 2', 'f(x) = 2x + 1'])
     expect(visual.curves[0].fn(3)).toBe(7)
-    expect(visual.verticals).toEqual([{ x: 1, label: 'x = 1' }])
+    expect(visual.verticals.map((line) => [line.x(NaN), line.label])).toEqual([[1, 'x = 1']])
     expect(visual.xRange).toEqual([-4, 4])
-    expect(visual.points).toEqual([{ x: 0, y: -2, label: 'vertex' }])
+    expect(visual.points.map((p) => [p.x(NaN), p.y(NaN), p.label])).toEqual([[0, -2, 'vertex']])
+    expect(visual.params).toEqual([])
+  })
+
+  it('read a graph parameter as a slider that curves, lines and points may use', () => {
+    const visual = parseVisual(
+      'graph',
+      'y = a*sin(x) + k\nx = t\npoint: (t, a*sin(t)) here\na: 0 | 3 | 2\nt: -6 | 6\nk: 2 | 4\nx: -8 | 8\ne: 0 | 1'
+    )
+    if (visual?.kind !== 'graph') throw new Error('not a graph')
+    // A parameter may be declared after the line that uses it; x, y and e are never one.
+    expect(visual.params).toEqual([
+      { name: 'a', min: 0, max: 3, start: 2 },
+      { name: 't', min: -6, max: 6, start: 1 },
+      { name: 'k', min: 2, max: 4, start: 3 }
+    ])
+    expect(visual.xRange).toEqual([-8, 8])
+    const vars = { a: 2, t: Math.PI / 2, k: 1 }
+    expect(visual.curves[0].fn(Math.PI / 2, vars)).toBeCloseTo(3)
+    expect(visual.verticals[0].x(NaN, vars)).toBeCloseTo(Math.PI / 2)
+    expect(visual.points[0].y(NaN, vars)).toBeCloseTo(2)
+  })
+
+  it('leave out a line that names a parameter nobody declared', () => {
+    const visual = parseVisual('graph', 'y = b*x\ny = x')
+    expect(visual?.kind === 'graph' && visual.curves.map((curve) => curve.label)).toEqual(['y = x'])
   })
 
   it('read a chart: its title and one bar per line', () => {
@@ -102,10 +127,51 @@ describe('diagram blocks', () => {
     expect(visual).toEqual({
       kind: 'chart',
       title: 'Population',
-      bars: [
-        { label: 'Canada', value: 40100000 },
-        { label: 'Iceland', value: 0.39 }
+      frames: [
+        {
+          heading: '',
+          bars: [
+            { label: 'Canada', value: 40100000 },
+            { label: 'Iceland', value: 0.39 }
+          ]
+        }
       ]
     })
+  })
+
+  it('read a chart with headings as frames, dropping one with no bars yet', () => {
+    const visual = parseVisual('chart', '[1990]\nA: 1\nB: 2\n[2020]\nA: 3\n[2050]')
+    if (visual?.kind !== 'chart') throw new Error('not a chart')
+    expect(visual.frames.map((frame) => [frame.heading, frame.bars.length])).toEqual([
+      ['1990', 2],
+      ['2020', 1]
+    ])
+  })
+
+  it('read a trace: a frame per caption, marked cells, and cells that hold spaces', () => {
+    const visual = parseVisual('trace', example('trace'))
+    if (visual?.kind !== 'trace') throw new Error('not a trace')
+    expect(visual.frames).toHaveLength(4)
+    expect(visual.frames[2].caption).toBe('Swap them')
+    expect(visual.frames[2].rows).toEqual([
+      [
+        { text: '2', marked: true },
+        { text: '5', marked: true },
+        { text: '8', marked: false },
+        { text: '1', marked: false }
+      ]
+    ])
+    const table = parseVisual(
+      'trace',
+      'head: | R | r\n|---|---|---|\n| R | RR* | Rr |\nr | Rr | r r'
+    )
+    if (table?.kind !== 'trace') throw new Error('not a trace')
+    expect(table.head).toEqual(['', 'R', 'r'])
+    expect(table.frames).toHaveLength(1)
+    expect(table.frames[0].rows.map((row) => row.map((cell) => cell.text))).toEqual([
+      ['R', 'RR', 'Rr'],
+      ['r', 'Rr', 'r r']
+    ])
+    expect(table.frames[0].rows[0][1].marked).toBe(true)
   })
 })

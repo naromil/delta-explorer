@@ -2,9 +2,12 @@
  * A function of x written the way a model or a textbook writes it (`2x^2 - sin(x)/x`), compiled
  * to a plain closure. Nothing is ever evaluated as code: this is a small recursive-descent parser
  * over numbers, x, constants, a fixed list of functions, + - * / ^ and implicit multiplication.
+ * It may also name parameters (`a sin(x)`), whose values arrive with each call.
  */
 
-export type Fn = (x: number) => number
+export type Vars = Readonly<Record<string, number>>
+
+export type Fn = (x: number, vars?: Vars) => number
 
 const FUNCTIONS: Record<string, (value: number) => number> = {
   asin: Math.asin,
@@ -30,10 +33,17 @@ const FUNCTIONS: Record<string, (value: number) => number> = {
 
 const CONSTANTS: Record<string, number> = { pi: Math.PI, e: Math.E }
 
+const RESERVED = [...Object.keys(FUNCTIONS), ...Object.keys(CONSTANTS), 'x']
+
+/** A parameter is one letter that means nothing else: not x, y (the axes) or e. */
+export function isParameterName(name: string): boolean {
+  return /^[a-z]$/.test(name) && name !== 'y' && !RESERVED.includes(name)
+}
+
 /** Longest names first, so `sinh` is not read as `sin` followed by `h`. */
-const NAMES = [...Object.keys(FUNCTIONS), ...Object.keys(CONSTANTS), 'x'].sort(
-  (a, b) => b.length - a.length
-)
+function namesWith(parameters: readonly string[]): string[] {
+  return [...RESERVED, ...parameters.filter(isParameterName)].sort((a, b) => b.length - a.length)
+}
 
 type Token =
   { type: 'num'; value: number } | { type: 'name'; value: string } | { type: 'op'; value: string }
@@ -51,7 +61,7 @@ function normalize(source: string): string {
     .toLowerCase()
 }
 
-function tokenize(source: string): Token[] | null {
+function tokenize(source: string, names: string[]): Token[] | null {
   const text = normalize(source)
   const tokens: Token[] = []
   let i = 0
@@ -65,7 +75,7 @@ function tokenize(source: string): Token[] | null {
       tokens.push({ type: 'num', value: Number(match[0]) })
       i += match[0].length
     } else if (/[a-z]/.test(char)) {
-      const name = NAMES.find((candidate) => text.startsWith(candidate, i))
+      const name = names.find((candidate) => text.startsWith(candidate, i))
       if (!name) return null
       tokens.push({ type: 'name', value: name })
       i += name.length
@@ -113,7 +123,7 @@ class Parser {
       const op = (this.tokens[this.index++] as { value: string }).value
       const a = left
       const b = this.term()
-      left = op === '+' ? (x) => a(x) + b(x) : (x) => a(x) - b(x)
+      left = op === '+' ? (x, v) => a(x, v) + b(x, v) : (x, v) => a(x, v) - b(x, v)
     }
     return left
   }
@@ -131,11 +141,11 @@ class Parser {
         const op = (this.tokens[this.index++] as { value: string }).value
         const a = left
         const b = this.unary()
-        left = op === '*' ? (x) => a(x) * b(x) : (x) => a(x) / b(x)
+        left = op === '*' ? (x, v) => a(x, v) * b(x, v) : (x, v) => a(x, v) / b(x, v)
       } else if (this.startsPrimary()) {
         const a = left
         const b = this.power()
-        left = (x) => a(x) * b(x)
+        left = (x, v) => a(x, v) * b(x, v)
       } else {
         return left
       }
@@ -147,7 +157,7 @@ class Parser {
     if (this.isOp('-')) {
       this.index += 1
       const inner = this.unary()
-      return (x) => -inner(x)
+      return (x, v) => -inner(x, v)
     }
     if (this.isOp('+')) {
       this.index += 1
@@ -161,7 +171,7 @@ class Parser {
     if (!this.isOp('^')) return base
     this.index += 1
     const exponent = this.unary()
-    return (x) => Math.pow(base(x), exponent(x))
+    return (x, v) => Math.pow(base(x, v), exponent(x, v))
   }
 
   private primary(): Fn {
@@ -183,6 +193,10 @@ class Parser {
       const value = CONSTANTS[token.value]
       return () => value
     }
+    if (!(token.value in FUNCTIONS)) {
+      const name = token.value
+      return (_x, v) => v?.[name] ?? NaN
+    }
     const fn = FUNCTIONS[token.value]
     // `sin^2(x)` is how squares of functions are written.
     let exponent: Fn | null = null
@@ -192,15 +206,18 @@ class Parser {
     }
     // `sin x` and `sin(x)` alike; without parentheses the argument is one power.
     const argument = this.isOp('(') ? this.primary() : this.power()
-    if (!exponent) return (x) => fn(argument(x))
+    if (!exponent) return (x, v) => fn(argument(x, v))
     const power = exponent
-    return (x) => Math.pow(fn(argument(x)), power(x))
+    return (x, v) => Math.pow(fn(argument(x, v)), power(x, v))
   }
 }
 
-/** The function `source` describes, or null when it is not one this can read. */
-export function compileExpression(source: string): Fn | null {
-  const tokens = tokenize(source)
+/**
+ * The function `source` describes, or null when it is not one this can read. `parameters` are
+ * the one-letter names it may use besides x; a call without a value for one gives NaN.
+ */
+export function compileExpression(source: string, parameters: readonly string[] = []): Fn | null {
+  const tokens = tokenize(source, namesWith(parameters))
   if (!tokens || tokens.length === 0) return null
   try {
     return new Parser(tokens).parse()

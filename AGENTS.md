@@ -235,7 +235,7 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | Markdown         | `ui/conversation/Markdown.tsx`                                                                                                                  | remark → mdast → hast → React; block mode for turns, inline mode+`md-*` spans for frames; `data-src` text anchors                                            |
 | Markdown core    | `ui/lib/markdown.ts`                                                                                                                            | Pure parse/splice/anchor helpers (`prepareMarkdownTree`, `anchoredRange`, `isAnchoredRange`), math delimiters                                                |
 | Code / math      | `ui/lib/highlight.ts`, `ui/lib/math.ts`                                                                                                         | lowlight → hast (text-preserving) and KaTeX → HTML (`trust: false`)                                                                                          |
-| Visuals          | `ui/lib/visuals.ts` (pure parser), `ui/lib/math-expression.ts`, `ui/conversation/VisualBlock.tsx`, `.md-visual*`/`.md-graph*` in `markdown.css` | Fenced `graph`/`chart`/`flow`/`cycle`/`timeline`/`tree`/`venn`/`matrix` blocks drawn as visuals; one selection atom each                                     |
+| Visuals          | `ui/lib/visuals.ts` (pure parser), `ui/lib/math-expression.ts`, `ui/conversation/VisualBlock.tsx`, `.md-visual*`/`.md-graph*` in `markdown.css` | Fenced `graph`/`chart`/`trace`/`flow`/`cycle`/`timeline`/`tree`/`venn`/`matrix` blocks drawn as visuals, several animated; one selection atom each           |
 | Image attach     | `ui/lib/image-attachments.ts`, `ui/conversation/useImageAttachments.ts`                                                                         | Decode + scale + re-encode to JPEG; composer add flow (capability check, limits, notices)                                                                    |
 | ExpansionFrame   | `ui/conversation/ExpansionFrame.tsx`                                                                                                            | Inline expandable frames, folded pills, nested children                                                                                                      |
 | ContextMenu      | `ui/conversation/ContextMenu.tsx`                                                                                                               | Right-click Expand / Expand on… / Copy / Select All; also the list of answers on one range (`items`)                                                         |
@@ -606,7 +606,7 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   at rest because every card inherits it. A `glideTo` eases by CSS instead, so the surface transitions
   its dots (`is-animating`) with the same timing as the world, or they would jump ahead of the cards.
 - **Visuals are fenced blocks the renderer draws.** A block whose language is a `VisualBlockKind`
-  (`graph`, `chart`, `flow`, `cycle`, `timeline`, `tree`, `venn`, `matrix`) goes to `VisualBlock`
+  (`graph`, `chart`, `trace`, `flow`, `cycle`, `timeline`, `tree`, `venn`, `matrix`) goes to `VisualBlock`
   instead of the code block, in every view. `graph` plots functions of x through
   `ui/lib/math-expression.ts`, a recursive-descent parser over a fixed grammar (never `eval`, which
   also keeps model text from running as code); y fits the curves between their 2nd and 98th
@@ -615,6 +615,20 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   so a block still streaming draws what has arrived. A visual is all spans (an expansion frame's host
   is one), falls back to a column on narrow cards with container queries, takes its colours from
   tokens (graph series use the `--code-*` ones), and is one selection atom, like a code block.
+- **Animated visuals are declarative scenes the reader paces.** The block says what the states are and
+  the renderer moves between them; nothing plays on its own. `Stepped` (`VisualBlock.tsx`) holds the
+  step and the controls (back, play, forward; play stops at the last state). A flow, cycle, timeline or
+  tree rests showing everything, as before, and steps in the order its lines were written
+  (`is-current`, `is-ahead`). A `chart` or `trace` with `[Heading]` frames always stands on one frame:
+  each frame is the whole state, so a block still streaming draws the frames that have arrived, bars
+  share one scale across frames, and a trace cell is keyed by its text so a changed value flashes. A
+  `graph` line `a: min | max | start` declares a parameter (`isParameterName`: one letter, never x, y
+  or e; at most 3), read before the curves so it may be declared after its use. Curves, vertical lines
+  and point coordinates are `Fn(x, vars)`, a slider sets the value and its play button sweeps it by
+  `requestAnimationFrame`, and the view is fitted once to every parameter's ends and start
+  (`parameterCorners`) so the axes stand still while the curve moves. Motion between states is CSS
+  transitions, switched off under `prefers-reduced-motion`. Give a new kind of motion a declarative
+  form like these rather than model-written code.
 - **A canvas answer can add cards beside itself.** A canvas card's `chat-send` carries
   `canvas: { explore }`, and main adds `canvas_add_visual` and (when `explore`) `canvas_add_explore`
   to the memory tools (`withCanvasTools`, more steps, limits in `CANVAS_SPAWN_LIMITS`), with

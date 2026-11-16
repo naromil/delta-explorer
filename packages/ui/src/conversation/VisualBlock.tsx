@@ -1,19 +1,26 @@
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import type { VisualBlockKind } from '@delta/core/prompts'
+import type { Vars } from '../lib/math-expression'
 import type {
-  ChartBar,
+  ChartFrame,
   Graph,
+  GraphParam,
+  TraceFrame,
   Visual,
   VisualItem,
   VisualSection,
   VisualTreeNode
 } from '../lib/visuals'
-import { parseVisual } from '../lib/visuals'
+import { parseVisual, startValues } from '../lib/visuals'
 
 /**
  * A diagram drawn from a fenced block. Everything is a span, because inside an expansion frame
  * the markdown host is itself a span; CSS gives them their boxes. The block is one selection
  * atom, like the code block it replaces, and "Text" shows the source it was drawn from.
+ *
+ * Diagrams that move are paced by the reader: ordered ones rest showing everything and step
+ * on request, a chart or trace with frames always stands on one, and a graph's parameters
+ * are sliders. Motion between states is CSS, so `prefers-reduced-motion` turns it off there.
  */
 
 interface VisualBlockProps {
@@ -21,6 +28,133 @@ interface VisualBlockProps {
   'data-source'?: string
   'data-atom-start'?: number
   'data-atom-end'?: number
+}
+
+/* ---- Stepping ---- */
+
+const STEP_MS = 1700
+
+type IconName = 'play' | 'pause' | 'back' | 'forward'
+
+const ICON_PATHS: Record<IconName, string> = {
+  play: 'M4 2.5v11l9-5.5z',
+  pause: 'M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z',
+  back: 'M10.5 2.5L5 8l5.5 5.5',
+  forward: 'M5.5 2.5L11 8l-5.5 5.5'
+}
+
+function Icon({ name }: { name: IconName }): React.JSX.Element {
+  const stroked = name === 'back' || name === 'forward'
+  return (
+    <svg
+      className={`md-visual-icon${stroked ? ' is-stroked' : ''}`}
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+    >
+      <path d={ICON_PATHS[name]} />
+    </svg>
+  )
+}
+
+/** `is-current` for the step being shown, `is-ahead` for those not reached; nothing at rest. */
+function stepClass(index: number, step: number | null): string {
+  if (step === null) return ''
+  return index === step ? ' is-current' : index > step ? ' is-ahead' : ''
+}
+
+/**
+ * A diagram with `count` states and the controls to move through them. With `rest` it starts
+ * on none (`step` is null and everything shows, as a static diagram would); otherwise it
+ * always stands on one. Play walks to the last state and stops there.
+ */
+function Stepped({
+  count,
+  rest,
+  label,
+  children
+}: {
+  count: number
+  rest: boolean
+  label?: (step: number) => string
+  children: (step: number | null) => React.JSX.Element
+}): React.JSX.Element {
+  const [at, setAt] = useState<number | null>(null)
+  const [playing, setPlaying] = useState(false)
+  const last = count - 1
+  const step = at === null ? (rest ? null : 0) : Math.min(at, last)
+
+  useEffect(() => {
+    if (!playing) return
+    const timer = window.setTimeout(() => {
+      const next = Math.min((step ?? -1) + 1, last)
+      setAt(next)
+      if (next >= last) setPlaying(false)
+    }, STEP_MS)
+    return () => window.clearTimeout(timer)
+  }, [playing, step, last])
+
+  const go = (next: number): void => {
+    setPlaying(false)
+    setAt(Math.min(last, Math.max(0, next)))
+  }
+  const togglePlay = (): void => {
+    if (playing) return setPlaying(false)
+    if (step === null || step >= last) setAt(0)
+    setPlaying(true)
+  }
+
+  return (
+    <span className="md-visual-stepped" data-stepping={step === null ? undefined : ''}>
+      {children(step)}
+      {count > 1 ? (
+        <span className="md-visual-controls">
+          <button
+            type="button"
+            className="md-visual-control"
+            title="Previous step"
+            disabled={step === null || step === 0}
+            onClick={() => go((step ?? 0) - 1)}
+          >
+            <Icon name="back" />
+          </button>
+          <button
+            type="button"
+            className="md-visual-control"
+            title={playing ? 'Pause' : 'Play step by step'}
+            onClick={togglePlay}
+          >
+            <Icon name={playing ? 'pause' : 'play'} />
+          </button>
+          <button
+            type="button"
+            className="md-visual-control"
+            title="Next step"
+            disabled={step !== null && step >= last}
+            onClick={() => go((step ?? -1) + 1)}
+          >
+            <Icon name="forward" />
+          </button>
+          <span className="md-visual-progress">
+            {step === null ? `${count} steps` : `${step + 1} / ${count}`}
+            {step !== null && label?.(step) ? ` · ${label(step)}` : ''}
+          </span>
+          {rest && step !== null ? (
+            <button
+              type="button"
+              className="md-visual-control md-visual-control--text"
+              title="Show every step again"
+              onClick={() => {
+                setPlaying(false)
+                setAt(null)
+              }}
+            >
+              Show all
+            </button>
+          ) : null}
+        </span>
+      ) : null}
+    </span>
+  )
 }
 
 function ItemText({ item }: { item: VisualItem }): React.JSX.Element {
@@ -32,11 +166,11 @@ function ItemText({ item }: { item: VisualItem }): React.JSX.Element {
   )
 }
 
-function Flow({ items }: { items: VisualItem[] }): React.JSX.Element {
+function Flow({ items, step }: { items: VisualItem[]; step: number | null }): React.JSX.Element {
   return (
     <span className="md-visual-flow">
       {items.map((item, index) => (
-        <span key={index} className="md-visual-step">
+        <span key={index} className={`md-visual-step${stepClass(index, step)}`}>
           {index > 0 ? <span className="md-visual-arrow" aria-hidden="true" /> : null}
           <span className="md-visual-box">
             <span className="md-visual-index">{index + 1}</span>
@@ -55,7 +189,7 @@ function ringPoint(angle: number): { x: number; y: number } {
 }
 
 /** Stages on a ring, with an arrow along it from each to the next. */
-function Cycle({ items }: { items: VisualItem[] }): React.JSX.Element {
+function Cycle({ items, step }: { items: VisualItem[]; step: number | null }): React.JSX.Element {
   const markerId = `md-visual-arrow-${useId().replace(/:/g, '')}`
   const angleOf = (index: number): number => (index / items.length) * 2 * Math.PI - Math.PI / 2
   // Arcs leave room for the stage boxes, which sit over the ring.
@@ -86,7 +220,13 @@ function Cycle({ items }: { items: VisualItem[] }): React.JSX.Element {
             </marker>
           </defs>
           {arcs.map((d, index) => (
-            <path key={index} d={d} markerEnd={`url(#${markerId})`} />
+            // Arc `index` leads into stage `index + 1`, so it belongs to that step.
+            <path
+              key={index}
+              className={stepClass(index + 1, step).trim() || undefined}
+              d={d}
+              markerEnd={`url(#${markerId})`}
+            />
           ))}
         </svg>
         {items.map((item, index) => {
@@ -94,7 +234,7 @@ function Cycle({ items }: { items: VisualItem[] }): React.JSX.Element {
           return (
             <span
               key={index}
-              className="md-visual-box md-visual-stage"
+              className={`md-visual-box md-visual-stage${stepClass(index, step)}`}
               style={{ left: `${point.x}%`, top: `${point.y}%` }}
             >
               <ItemText item={item} />
@@ -104,18 +244,24 @@ function Cycle({ items }: { items: VisualItem[] }): React.JSX.Element {
       </span>
       {/* Narrow cards cannot fit a ring; this list replaces it there (see markdown.css). */}
       <span className="md-visual-cycle-list">
-        <Flow items={items} />
+        <Flow items={items} step={step} />
         <span className="md-visual-repeat">↻ then back to {items[0]?.title}</span>
       </span>
     </span>
   )
 }
 
-function Timeline({ items }: { items: VisualItem[] }): React.JSX.Element {
+function Timeline({
+  items,
+  step
+}: {
+  items: VisualItem[]
+  step: number | null
+}): React.JSX.Element {
   return (
     <span className="md-visual-timeline">
       {items.map((item, index) => (
-        <span key={index} className="md-visual-event">
+        <span key={index} className={`md-visual-event${stepClass(index, step)}`}>
           <span className="md-visual-dot" aria-hidden="true" />
           <span className="md-visual-when">{item.title}</span>
           {item.detail ? <span className="md-visual-detail">{item.detail}</span> : null}
@@ -125,16 +271,40 @@ function Timeline({ items }: { items: VisualItem[] }): React.JSX.Element {
   )
 }
 
-function TreeNode({ node, depth }: { node: VisualTreeNode; depth: number }): React.JSX.Element {
+/** Every node's place in the order the tree was written, which is the order it plays in. */
+function treeOrder(roots: VisualTreeNode[]): Map<VisualTreeNode, number> {
+  const order = new Map<VisualTreeNode, number>()
+  const walk = (node: VisualTreeNode): void => {
+    order.set(node, order.size)
+    node.children.forEach(walk)
+  }
+  roots.forEach(walk)
+  return order
+}
+
+interface TreeStep {
+  order: Map<VisualTreeNode, number>
+  step: number | null
+}
+
+function TreeNode({
+  node,
+  depth,
+  at
+}: {
+  node: VisualTreeNode
+  depth: number
+  at: TreeStep
+}): React.JSX.Element {
   return (
     <span className={`md-visual-node${depth === 0 ? ' is-root' : ''}`}>
-      <span className="md-visual-box">
+      <span className={`md-visual-box${stepClass(at.order.get(node) ?? 0, at.step)}`}>
         <ItemText item={node} />
       </span>
       {node.children.length > 0 ? (
         <span className="md-visual-children">
           {node.children.map((child, index) => (
-            <TreeNode key={index} node={child} depth={depth + 1} />
+            <TreeNode key={index} node={child} depth={depth + 1} at={at} />
           ))}
         </span>
       ) : null}
@@ -143,12 +313,17 @@ function TreeNode({ node, depth }: { node: VisualTreeNode; depth: number }): Rea
 }
 
 function Tree({ roots }: { roots: VisualTreeNode[] }): React.JSX.Element {
+  const order = useMemo(() => treeOrder(roots), [roots])
   return (
-    <span className="md-visual-tree">
-      {roots.map((root, index) => (
-        <TreeNode key={index} node={root} depth={0} />
-      ))}
-    </span>
+    <Stepped count={order.size} rest>
+      {(step) => (
+        <span className="md-visual-tree">
+          {roots.map((root, index) => (
+            <TreeNode key={index} node={root} depth={0} at={{ order, step }} />
+          ))}
+        </span>
+      )}
+    </Stepped>
   )
 }
 
@@ -252,13 +427,38 @@ function formatTick(value: number): string {
   return Number(value.toPrecision(4)).toString()
 }
 
+/** Steady digits for the slider's span, so the number does not jitter in width as it plays. */
+function formatParameter(value: number, param: GraphParam): string {
+  const span = param.max - param.min
+  return value.toFixed(span >= 100 ? 0 : span >= 10 ? 1 : 2)
+}
+
 function quantile(sorted: number[], q: number): number {
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(q * (sorted.length - 1))))]
 }
 
-function xDomain(graph: Graph): [number, number] {
+/**
+ * Every combination of each parameter's ends and start. The view is fitted to all of them
+ * once, so it stands still while a slider moves and the curve is what changes.
+ */
+function parameterCorners(params: GraphParam[]): Vars[] {
+  return params.reduce<Vars[]>(
+    (corners, param) =>
+      corners.flatMap((vars) =>
+        [param.min, param.start, param.max].map((value) => ({ ...vars, [param.name]: value }))
+      ),
+    [{}]
+  )
+}
+
+function xDomain(graph: Graph, corners: Vars[]): [number, number] {
   if (graph.xRange) return graph.xRange
-  const marks = [...graph.points.map((p) => p.x), ...graph.verticals.map((v) => v.x)]
+  const marks = corners
+    .flatMap((vars) => [
+      ...graph.points.map((p) => p.x(NaN, vars)),
+      ...graph.verticals.map((v) => v.x(NaN, vars))
+    ])
+    .filter((x) => Number.isFinite(x))
   if (marks.length === 0) return DEFAULT_X
   const low = Math.min(DEFAULT_X[0], ...marks.map((x) => x - 1))
   const high = Math.max(DEFAULT_X[1], ...marks.map((x) => x + 1))
@@ -266,13 +466,17 @@ function xDomain(graph: Graph): [number, number] {
 }
 
 /** Fitted to the curves, ignoring the extreme 2% each way so an asymptote cannot flatten them. */
-function yDomain(graph: Graph, xs: number[]): [number, number] {
+function yDomain(graph: Graph, xs: number[], corners: Vars[]): [number, number] {
   if (graph.yRange) return graph.yRange
-  const values = graph.curves
-    .flatMap((curve) => xs.map((x) => curve.fn(x)))
+  // Fewer samples per corner when there are many, so a graph with sliders costs about the same.
+  const sampled = corners.length > 1 ? xs.filter((_, index) => index % 4 === 0) : xs
+  const values = corners
+    .flatMap((vars) => graph.curves.flatMap((curve) => sampled.map((x) => curve.fn(x, vars))))
     .filter((y) => Number.isFinite(y))
     .sort((a, b) => a - b)
-  const marks = graph.points.map((p) => p.y)
+  const marks = corners
+    .flatMap((vars) => graph.points.map((p) => p.y(NaN, vars)))
+    .filter((y) => Number.isFinite(y))
   const low = Math.min(...(values.length ? [quantile(values, 0.02)] : []), ...marks)
   const high = Math.max(...(values.length ? [quantile(values, 0.98)] : []), ...marks)
   if (!Number.isFinite(low) || !Number.isFinite(high)) return [-5, 5]
@@ -280,11 +484,91 @@ function yDomain(graph: Graph, xs: number[]): [number, number] {
   return [low - span * 0.1, high + span * 0.1]
 }
 
+function graphView(graph: Graph): { xs: number[]; x: [number, number]; y: [number, number] } {
+  const corners = parameterCorners(graph.params)
+  const x = xDomain(graph, corners)
+  const xs = Array.from({ length: SAMPLES + 1 }, (_, i) => x[0] + ((x[1] - x[0]) * i) / SAMPLES)
+  return { xs, x, y: yDomain(graph, xs, corners) }
+}
+
+/** One sweep of a playing slider from end to end. */
+const SWEEP_MS = 3500
+
+/** 0 → 1 → 0 as `phase` goes 0 → 1 → 2, and round again. */
+function triangle(phase: number): number {
+  const turn = ((phase % 2) + 2) % 2
+  return turn <= 1 ? turn : 2 - turn
+}
+
+interface Playing {
+  name: string
+  /** Where on the way up the slider stood when play was pressed, from 0 to 1. */
+  from: number
+}
+
+/** The sliders' values: where the reader left each, or where it starts. */
+function useParameters(params: GraphParam[]): {
+  values: Vars
+  playing: string | null
+  set: (name: string, value: number) => void
+  togglePlay: (param: GraphParam) => void
+} {
+  const [moved, setMoved] = useState<Vars>({})
+  const [playing, setPlaying] = useState<Playing | null>(null)
+  const values = useMemo(() => {
+    const start = startValues(params)
+    return Object.fromEntries(
+      params.map((param) => [
+        param.name,
+        Math.min(param.max, Math.max(param.min, moved[param.name] ?? start[param.name]))
+      ])
+    )
+  }, [params, moved])
+
+  useEffect(() => {
+    const param = playing && params.find((candidate) => candidate.name === playing.name)
+    if (!playing || !param) return
+    let frame = 0
+    let began: number | null = null
+    const tick = (now: number): void => {
+      began ??= now
+      const along = triangle(playing.from + (now - began) / SWEEP_MS)
+      setMoved((current) => ({
+        ...current,
+        [param.name]: param.min + along * (param.max - param.min)
+      }))
+      frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [playing, params])
+
+  return {
+    values,
+    playing: playing?.name ?? null,
+    set: (name, value) => {
+      setPlaying(null)
+      setMoved((current) => ({ ...current, [name]: value }))
+    },
+    togglePlay: (param) => {
+      if (playing?.name === param.name) return setPlaying(null)
+      // From the top, `triangle` leads back down.
+      setPlaying({
+        name: param.name,
+        from: (values[param.name] - param.min) / (param.max - param.min)
+      })
+    }
+  }
+}
+
 function GraphView({ graph }: { graph: Graph }): React.JSX.Element {
   const clipId = `md-graph-clip-${useId().replace(/:/g, '')}`
-  const [x0, x1] = xDomain(graph)
-  const xs = Array.from({ length: SAMPLES + 1 }, (_, i) => x0 + ((x1 - x0) * i) / SAMPLES)
-  const [y0, y1] = yDomain(graph, xs)
+  const view = useMemo(() => graphView(graph), [graph])
+  const parameters = useParameters(graph.params)
+  const vars = parameters.values
+  const { xs } = view
+  const [x0, x1] = view.x
+  const [y0, y1] = view.y
   const plotW = PLOT.w - PLOT.left - PLOT.right
   const plotH = PLOT.h - PLOT.top - PLOT.bottom
   const sx = (x: number): number => PLOT.left + ((x - x0) / (x1 - x0)) * plotW
@@ -295,7 +579,7 @@ function GraphView({ graph }: { graph: Graph }): React.JSX.Element {
     let pen = false
     let last = NaN
     for (const x of xs) {
-      const y = curve.fn(x)
+      const y = curve.fn(x, vars)
       // Off far beyond the view, or a jump across it: an asymptote, so the pen lifts.
       const usable = Number.isFinite(y) && y > y0 - span * 3 && y < y1 + span * 3
       if (!usable || (pen && Math.abs(y - last) > span * 1.5)) {
@@ -359,8 +643,8 @@ function GraphView({ graph }: { graph: Graph }): React.JSX.Element {
             <line
               key={index}
               className="md-graph-vertical"
-              x1={sx(line.x)}
-              x2={sx(line.x)}
+              x1={sx(line.x(NaN, vars))}
+              x2={sx(line.x(NaN, vars))}
               y1={PLOT.top}
               y2={PLOT.top + plotH}
             />
@@ -368,16 +652,21 @@ function GraphView({ graph }: { graph: Graph }): React.JSX.Element {
           {paths.map((d, index) => (
             <path key={index} className={`md-graph-curve md-graph-series-${index}`} d={d} />
           ))}
-          {graph.points.map((point, index) => (
-            <g key={index}>
-              <circle className="md-graph-point" cx={sx(point.x)} cy={sy(point.y)} r={3.5} />
-              {point.label ? (
-                <text className="md-graph-label" x={sx(point.x) + 6} y={sy(point.y) - 6}>
-                  {point.label}
-                </text>
-              ) : null}
-            </g>
-          ))}
+          {graph.points.map((point, index) => {
+            const x = sx(point.x(NaN, vars))
+            const y = sy(point.y(NaN, vars))
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+            return (
+              <g key={index}>
+                <circle className="md-graph-point" cx={x} cy={y} r={3.5} />
+                {point.label ? (
+                  <text className="md-graph-label" x={x + 6} y={y - 6}>
+                    {point.label}
+                  </text>
+                ) : null}
+              </g>
+            )
+          })}
         </g>
       </svg>
       {graph.curves.length + graph.verticals.length > 0 ? (
@@ -394,39 +683,148 @@ function GraphView({ graph }: { graph: Graph }): React.JSX.Element {
           ))}
         </span>
       ) : null}
+      {graph.params.map((param) => {
+        const value = vars[param.name]
+        const isPlaying = parameters.playing === param.name
+        return (
+          <span key={param.name} className="md-graph-param">
+            <button
+              type="button"
+              className="md-visual-control"
+              title={isPlaying ? 'Pause' : `Play ${param.name} back and forth`}
+              onClick={() => parameters.togglePlay(param)}
+            >
+              <Icon name={isPlaying ? 'pause' : 'play'} />
+            </button>
+            <span className="md-graph-param-value">
+              {param.name} = {formatParameter(value, param)}
+            </span>
+            <input
+              type="range"
+              className="md-graph-slider"
+              aria-label={`Value of ${param.name}`}
+              min={param.min}
+              max={param.max}
+              step="any"
+              value={value}
+              onChange={(e) => parameters.set(param.name, Number(e.target.value))}
+            />
+          </span>
+        )
+      })}
     </span>
   )
 }
 
-function Chart({ title, bars }: { title?: string; bars: ChartBar[] }): React.JSX.Element {
-  const largest = Math.max(...bars.map((bar) => Math.abs(bar.value))) || 1
+/** The bars of every frame under one scale, in the order their labels first appear. */
+function chartRows(frames: ChartFrame[]): { labels: string[]; largest: number } {
+  const labels = [...new Set(frames.flatMap((frame) => frame.bars.map((bar) => bar.label)))]
+  const values = frames.flatMap((frame) => frame.bars.map((bar) => Math.abs(bar.value)))
+  return { labels, largest: Math.max(...values) || 1 }
+}
+
+function Chart({ title, frames }: { title?: string; frames: ChartFrame[] }): React.JSX.Element {
+  const { labels, largest } = useMemo(() => chartRows(frames), [frames])
   return (
-    <span className="md-visual-chart">
-      {title ? <span className="md-visual-title">{title}</span> : null}
-      {bars.map((bar, index) => (
-        <span key={index} className="md-chart-row">
-          <span className="md-chart-label">{bar.label}</span>
-          <span className="md-chart-track">
-            <span
-              className={`md-chart-bar${bar.value < 0 ? ' is-negative' : ''}`}
-              style={{ width: `${(Math.abs(bar.value) / largest) * 100}%` }}
-            />
+    <Stepped count={frames.length} rest={false} label={(step) => frames[step]?.heading ?? ''}>
+      {(step) => {
+        const frame = frames[step ?? 0] ?? frames[0]
+        return (
+          <span className="md-visual-chart">
+            {title ? <span className="md-visual-title">{title}</span> : null}
+            {labels.map((label) => {
+              const value = frame.bars.find((bar) => bar.label === label)?.value
+              return (
+                <span key={label} className="md-chart-row">
+                  <span className="md-chart-label">{label}</span>
+                  <span className="md-chart-track">
+                    <span
+                      className={`md-chart-bar${(value ?? 0) < 0 ? ' is-negative' : ''}`}
+                      style={{ width: `${(Math.abs(value ?? 0) / largest) * 100}%` }}
+                    />
+                  </span>
+                  <span className="md-chart-value">
+                    {value === undefined ? '–' : value.toLocaleString()}
+                  </span>
+                </span>
+              )
+            })}
           </span>
-          <span className="md-chart-value">{bar.value.toLocaleString()}</span>
-        </span>
-      ))}
-    </span>
+        )
+      }}
+    </Stepped>
+  )
+}
+
+/* ---- Trace ---- */
+
+function Trace({ head, frames }: { head?: string[]; frames: TraceFrame[] }): React.JSX.Element {
+  const columns = Math.max(
+    head?.length ?? 0,
+    ...frames.flatMap((frame) => frame.rows.map((row) => row.length))
+  )
+  return (
+    <Stepped count={frames.length} rest={false}>
+      {(step) => {
+        const frame = frames[step ?? 0] ?? frames[0]
+        return (
+          <span className="md-visual-trace">
+            <span
+              className="md-trace-grid"
+              style={{ gridTemplateColumns: `repeat(${columns}, minmax(2.4em, auto))` }}
+            >
+              {head
+                ? Array.from({ length: columns }, (_, column) => (
+                    <span key={`h${column}`} className="md-trace-head">
+                      {head[column] ?? ''}
+                    </span>
+                  ))
+                : null}
+              {frame.rows.flatMap((row, r) =>
+                Array.from({ length: columns }, (_, c) => {
+                  const cell = row[c]
+                  return (
+                    <span
+                      key={`${r}-${c}`}
+                      className={`md-trace-cell${cell?.marked ? ' is-marked' : ''}`}
+                    >
+                      {/* Keyed by its text, so a value that changes arrives with a flash. */}
+                      <span key={cell?.text ?? ''} className="md-trace-value">
+                        {cell?.text ?? ''}
+                      </span>
+                    </span>
+                  )
+                })
+              )}
+            </span>
+            {frame.caption ? <span className="md-trace-caption">{frame.caption}</span> : null}
+          </span>
+        )
+      }}
+    </Stepped>
   )
 }
 
 function VisualBody({ visual }: { visual: Visual }): React.JSX.Element {
   switch (visual.kind) {
     case 'flow':
-      return <Flow items={visual.items} />
+      return (
+        <Stepped count={visual.items.length} rest>
+          {(step) => <Flow items={visual.items} step={step} />}
+        </Stepped>
+      )
     case 'cycle':
-      return <Cycle items={visual.items} />
+      return (
+        <Stepped count={visual.items.length} rest>
+          {(step) => <Cycle items={visual.items} step={step} />}
+        </Stepped>
+      )
     case 'timeline':
-      return <Timeline items={visual.items} />
+      return (
+        <Stepped count={visual.items.length} rest>
+          {(step) => <Timeline items={visual.items} step={step} />}
+        </Stepped>
+      )
     case 'tree':
       return <Tree roots={visual.roots} />
     case 'venn':
@@ -436,7 +834,9 @@ function VisualBody({ visual }: { visual: Visual }): React.JSX.Element {
     case 'graph':
       return <GraphView graph={visual} />
     case 'chart':
-      return <Chart title={visual.title} bars={visual.bars} />
+      return <Chart title={visual.title} frames={visual.frames} />
+    case 'trace':
+      return <Trace head={visual.head} frames={visual.frames} />
   }
 }
 

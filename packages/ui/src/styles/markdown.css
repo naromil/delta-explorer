@@ -458,7 +458,7 @@
   -webkit-box-decoration-break: clone;
 }
 
-/* ---- Diagrams (VisualBlock): fenced flow, cycle, timeline, tree, venn and matrix blocks ---- */
+/* ---- Diagrams (VisualBlock): fenced flow, cycle, timeline, tree, venn, matrix, graph, chart and trace blocks ---- */
 
 /* Every part is a span (an expansion frame's host is one), so each sets its own display. */
 .md-visual {
@@ -832,7 +832,7 @@
   display: block;
 }
 
-.md-visual-graph svg {
+.md-visual-graph > svg {
   display: block;
   width: 100%;
   height: auto;
@@ -956,6 +956,7 @@
   min-width: 2px;
   border-radius: 3px;
   background: var(--accent);
+  transition: width 450ms var(--ease-out);
 }
 
 .md-chart-bar.is-negative {
@@ -965,6 +966,214 @@
 .md-chart-value {
   font-variant-numeric: tabular-nums;
   color: var(--text-1);
+}
+
+/* Trace: a row or table of cells, one frame at a time. */
+.md-visual-trace {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.md-trace-grid {
+  display: inline-grid;
+  gap: 4px;
+}
+
+.md-trace-head,
+.md-trace-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.1em;
+  padding: 2px 8px;
+  text-align: center;
+}
+
+.md-trace-head {
+  min-height: 0;
+  font-size: 0.82em;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.md-trace-cell {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  transition:
+    background var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
+}
+
+.md-trace-cell.is-marked {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface-3));
+}
+
+.md-trace-value {
+  display: block;
+  animation: md-trace-arrive 320ms var(--ease-out);
+}
+
+@keyframes md-trace-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+}
+
+.md-trace-caption {
+  display: block;
+  min-height: 1.35em;
+  color: var(--text-2);
+}
+
+/* Stepping: the controls under a diagram, and how a step looks while it is walked through. */
+.md-visual-stepped {
+  display: block;
+}
+
+.md-visual-controls,
+.md-graph-param {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  user-select: none;
+}
+
+.md-visual-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    color var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out);
+}
+
+.md-visual-control:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+
+.md-visual-control:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.md-visual-control--text {
+  margin-left: auto;
+}
+
+.md-visual-icon {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+.md-visual-icon.is-stroked {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.md-visual-progress {
+  min-width: 0;
+  margin-left: 6px;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 0.82em;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-visual-step,
+.md-visual-event,
+.md-visual-ring path {
+  transition: opacity var(--dur-2) var(--ease-out);
+}
+
+.md-visual-box {
+  transition:
+    opacity var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out);
+}
+
+.md-visual-stepped .is-ahead {
+  opacity: 0.22;
+}
+
+.md-visual-step.is-current > .md-visual-box,
+.md-visual-box.is-current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.md-visual-ring path.is-current {
+  stroke: var(--accent);
+}
+
+.md-visual-event.is-current .md-visual-dot {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* Graph parameters: a slider each, with a play button that sweeps it back and forth. */
+.md-graph-param {
+  margin-top: 6px;
+}
+
+.md-graph-param-value {
+  flex: none;
+  min-width: 5.5em;
+  margin-left: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+
+.md-graph-slider {
+  flex: 1;
+  min-width: 60px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-visual-step,
+  .md-visual-event,
+  .md-visual-box,
+  .md-visual-ring path,
+  .md-trace-cell,
+  .md-chart-bar {
+    transition: none;
+  }
+
+  .md-trace-value {
+    animation: none;
+  }
 }
 
 /* ---- Tool activity: what the model is doing before it answers ---- */
