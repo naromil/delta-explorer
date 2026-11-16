@@ -85,6 +85,7 @@ import ContextMenu from '../conversation/ContextMenu'
 import type { ContextMenuItem, ContextMenuState } from '../conversation/ContextMenu'
 import ExpandPrompt from '../conversation/ExpandPrompt'
 import ExpandSelectionBar from '../conversation/ExpandSelectionBar'
+import { ToolActivityContext } from '../lib/tool-activity'
 import type { useCanvas } from './useCanvas'
 import { useExpansionContextMenu } from '../conversation/useExpansionContextMenu'
 import type { SelectedPassage } from '../conversation/useExpansionContextMenu'
@@ -2639,477 +2640,481 @@ function CanvasBoard({
     !editingNoteId
 
   return (
-    <div className={`canvas-view${narrow ? ' is-narrow' : ''}${outlineOpen ? ' has-outline' : ''}`}>
+    <ToolActivityContext.Provider value={canvas.toolActivity}>
       <div
-        ref={surfaceRef}
-        className={surfaceClasses}
-        onPointerDownCapture={handleSizingPress}
-        onPointerDown={handleSurfaceDown}
-        onMouseDown={handleSurfaceMouseDown}
-        onPointerMove={handleSurfaceMove}
-        onPointerUp={handleSurfaceUp}
-        onPointerCancel={() => {
-          rightDrag.onCancel()
-          setGesture(null)
-        }}
-        onContextMenuCapture={rightDrag.onContextMenuCapture}
-        onContextMenu={openPlaneMenu}
+        className={`canvas-view${narrow ? ' is-narrow' : ''}${outlineOpen ? ' has-outline' : ''}`}
       >
-        <div ref={worldRef} className={`canvas-world${animating ? ' is-animating' : ''}`}>
-          {displayedFrames.map((frame) => (
-            <CanvasFrameView
-              key={frame.id}
-              frame={frame}
-              editing={editingFrameId === frame.id}
-              selected={liveSelection.has(frame.id)}
-              dragging={gesture?.type === 'drag' && gesture.frameIds.has(frame.id)}
-              pulsing={pulseId === frame.id}
-              dimmed={searchMatches !== null && !searchMatches.has(frame.id)}
-              onDragStart={handleDragStart}
-              onResizeStart={handleFrameResizeStart}
-              onMenu={handleFrameMenu}
-              onEdit={setEditingFrameId}
-              onRename={renameFrame}
-              onZoomTo={zoomToItem}
-            />
-          ))}
-          {displayed.map((card) => {
-            const dragging =
-              (gesture?.type === 'drag' && gesture.ids.has(card.id)) ||
-              (gesture?.type === 'resize' &&
-                (gesture.id === card.id ||
-                  (resizeUpdates?.some((update) => update.id === card.id) ?? false)))
-            const stackLevel = (stackRanks.get(card.id) ?? 0) + 1
-            const dimmed = dimmedIds.has(card.id)
-            if (card.kind === 'note') {
+        <div
+          ref={surfaceRef}
+          className={surfaceClasses}
+          onPointerDownCapture={handleSizingPress}
+          onPointerDown={handleSurfaceDown}
+          onMouseDown={handleSurfaceMouseDown}
+          onPointerMove={handleSurfaceMove}
+          onPointerUp={handleSurfaceUp}
+          onPointerCancel={() => {
+            rightDrag.onCancel()
+            setGesture(null)
+          }}
+          onContextMenuCapture={rightDrag.onContextMenuCapture}
+          onContextMenu={openPlaneMenu}
+        >
+          <div ref={worldRef} className={`canvas-world${animating ? ' is-animating' : ''}`}>
+            {displayedFrames.map((frame) => (
+              <CanvasFrameView
+                key={frame.id}
+                frame={frame}
+                editing={editingFrameId === frame.id}
+                selected={liveSelection.has(frame.id)}
+                dragging={gesture?.type === 'drag' && gesture.frameIds.has(frame.id)}
+                pulsing={pulseId === frame.id}
+                dimmed={searchMatches !== null && !searchMatches.has(frame.id)}
+                onDragStart={handleDragStart}
+                onResizeStart={handleFrameResizeStart}
+                onMenu={handleFrameMenu}
+                onEdit={setEditingFrameId}
+                onRename={renameFrame}
+                onZoomTo={zoomToItem}
+              />
+            ))}
+            {displayed.map((card) => {
+              const dragging =
+                (gesture?.type === 'drag' && gesture.ids.has(card.id)) ||
+                (gesture?.type === 'resize' &&
+                  (gesture.id === card.id ||
+                    (resizeUpdates?.some((update) => update.id === card.id) ?? false)))
+              const stackLevel = (stackRanks.get(card.id) ?? 0) + 1
+              const dimmed = dimmedIds.has(card.id)
+              if (card.kind === 'note') {
+                return (
+                  <CanvasNoteView
+                    key={card.id}
+                    card={card}
+                    editing={editingNoteId === card.id}
+                    selected={liveSelection.has(card.id)}
+                    dragging={dragging}
+                    stackLevel={stackLevel}
+                    pulsing={pulseId === card.id}
+                    dimmed={dimmed}
+                    continued={
+                      connectFromId === card.id ||
+                      connectToId === card.id ||
+                      pickedIds.has(card.id) ||
+                      (tool === 'connect' && !gesture && hoverCardId === card.id)
+                    }
+                    onDragStart={handleDragStart}
+                    onResizeStart={handleResizeStart}
+                    onClick={handleCardClick}
+                    onKeyDown={handleCardKeyDown}
+                    onMenu={handleCardMenu}
+                    onEdit={setEditingNoteId}
+                    onCommit={updateNote}
+                  />
+                )
+              }
               return (
-                <CanvasNoteView
+                <CanvasCardView
                   key={card.id}
                   card={card}
-                  editing={editingNoteId === card.id}
-                  selected={liveSelection.has(card.id)}
+                  rect={card.rect}
+                  {...cardContent(card, canvas)}
+                  {...actions}
                   dragging={dragging}
+                  handleRight={!continueHandleBlocked(card, 'right', displayed, stackRanks)}
+                  handleBottom={!continueHandleBlocked(card, 'bottom', displayed, stackRanks)}
                   stackLevel={stackLevel}
                   pulsing={pulseId === card.id}
                   dimmed={dimmed}
+                  selected={liveSelection.has(card.id)}
+                  onPath={pathIds.has(card.id)}
                   continued={
+                    continuedId === card.id ||
                     connectFromId === card.id ||
                     connectToId === card.id ||
                     pickedIds.has(card.id) ||
                     (tool === 'connect' && !gesture && hoverCardId === card.id)
                   }
-                  onDragStart={handleDragStart}
-                  onResizeStart={handleResizeStart}
-                  onClick={handleCardClick}
-                  onKeyDown={handleCardKeyDown}
-                  onMenu={handleCardMenu}
-                  onEdit={setEditingNoteId}
-                  onCommit={updateNote}
+                  pulseTermId={pulseTerm?.cardId === card.id ? pulseTerm.expansionId : null}
                 />
               )
-            }
-            return (
-              <CanvasCardView
-                key={card.id}
-                card={card}
-                rect={card.rect}
-                {...cardContent(card, canvas)}
-                {...actions}
-                dragging={dragging}
-                handleRight={!continueHandleBlocked(card, 'right', displayed, stackRanks)}
-                handleBottom={!continueHandleBlocked(card, 'bottom', displayed, stackRanks)}
-                stackLevel={stackLevel}
-                pulsing={pulseId === card.id}
-                dimmed={dimmed}
-                selected={liveSelection.has(card.id)}
-                onPath={pathIds.has(card.id)}
-                continued={
-                  continuedId === card.id ||
-                  connectFromId === card.id ||
-                  connectToId === card.id ||
-                  pickedIds.has(card.id) ||
-                  (tool === 'connect' && !gesture && hoverCardId === card.id)
+            })}
+            <CanvasLinks
+              cards={displayed}
+              links={links}
+              stackRanks={stackRanks}
+              surfaceRef={surfaceRef}
+              dragging={gesture?.type === 'drag' || gesture?.type === 'resize'}
+              selectedIds={liveSelection}
+              dimmedIds={dimmedIds}
+              editingLinkId={editingLinkId}
+              pending={pendingConnector}
+              draftLinks={draftLinks}
+              onFollow={handleFollowLink}
+              onFollowRelation={handleFollowRelation}
+              onSelectLink={handleSelectLink}
+              onLinkMenu={handleLinkMenu}
+              onEditLink={setEditingLinkId}
+              onLabelLink={labelLink}
+            />
+            {draft && draftRect ? (
+              <CanvasDraft
+                key={draft.key}
+                rect={draftRect}
+                side={draftParent ? draft.side : undefined}
+                held={
+                  gesture?.type === 'draftResize' ||
+                  gesture?.type === 'drag' ||
+                  gesture?.type === 'resize'
                 }
-                pulseTermId={pulseTerm?.cardId === card.id ? pulseTerm.expansionId : null}
+                sessions={draftSessions}
+                parentId={draftParent?.id}
+                sourceCount={draft.sourceIds?.length ?? 0}
+                context={draftChips}
+                contextTokens={draftContextSize.tokens}
+                contextClipped={draftContextSize.clipped}
+                linkTarget={overDraft}
+                waiting={
+                  parentStatus === 'streaming'
+                    ? WAITING_PARENT
+                    : parentStatus === 'failed'
+                      ? FAILED_PARENT
+                      : contextStreaming
+                        ? WAITING_CONTEXT
+                        : null
+                }
+                onPage={draftParent?.kind === 'page'}
+                onParentChange={changeDraftParent}
+                onActivity={refollow}
+                onContextMode={setDraftContextMode}
+                onContextRemove={removeDraftContext}
+                onResizeStart={startDraftResize}
+                onResizeBy={resizeDraftBy}
+                onCancel={cancelDraft}
+                onSubmit={submitDraft}
               />
-            )
-          })}
-          <CanvasLinks
-            cards={displayed}
-            links={links}
-            stackRanks={stackRanks}
-            surfaceRef={surfaceRef}
-            dragging={gesture?.type === 'drag' || gesture?.type === 'resize'}
-            selectedIds={liveSelection}
-            dimmedIds={dimmedIds}
-            editingLinkId={editingLinkId}
-            pending={pendingConnector}
-            draftLinks={draftLinks}
-            onFollow={handleFollowLink}
-            onFollowRelation={handleFollowRelation}
-            onSelectLink={handleSelectLink}
-            onLinkMenu={handleLinkMenu}
-            onEditLink={setEditingLinkId}
-            onLabelLink={labelLink}
-          />
-          {draft && draftRect ? (
-            <CanvasDraft
-              key={draft.key}
-              rect={draftRect}
-              side={draftParent ? draft.side : undefined}
-              held={
-                gesture?.type === 'draftResize' ||
-                gesture?.type === 'drag' ||
-                gesture?.type === 'resize'
-              }
-              sessions={draftSessions}
-              parentId={draftParent?.id}
-              sourceCount={draft.sourceIds?.length ?? 0}
-              context={draftChips}
-              contextTokens={draftContextSize.tokens}
-              contextClipped={draftContextSize.clipped}
-              linkTarget={overDraft}
-              waiting={
-                parentStatus === 'streaming'
-                  ? WAITING_PARENT
-                  : parentStatus === 'failed'
-                    ? FAILED_PARENT
-                    : contextStreaming
-                      ? WAITING_CONTEXT
-                      : null
-              }
-              onPage={draftParent?.kind === 'page'}
-              onParentChange={changeDraftParent}
-              onActivity={refollow}
-              onContextMode={setDraftContextMode}
-              onContextRemove={removeDraftContext}
-              onResizeStart={startDraftResize}
-              onResizeBy={resizeDraftBy}
-              onCancel={cancelDraft}
-              onSubmit={submitDraft}
-            />
-          ) : null}
-          {noteDraft ? (
-            <CanvasNoteDraft
-              key={noteDraft.key}
-              rect={noteDraft.rect}
-              onCancel={() => setNoteDraft(null)}
-              onCommit={commitNoteDraft}
-            />
-          ) : null}
-          {activeGuides.x.map((x) => (
-            <span key={`x${x}`} className="canvas-guide canvas-guide--x" style={{ left: x }} />
-          ))}
-          {activeGuides.y.map((y) => (
-            <span key={`y${y}`} className="canvas-guide canvas-guide--y" style={{ top: y }} />
-          ))}
-          {drawing && gesture?.type === 'draw' ? (
-            <div
-              className={`canvas-draw-rect${drawing.refusal ? ' is-invalid' : ''}`}
-              style={{
-                transform: `translate(${drawing.rect.x}px, ${drawing.rect.y}px)`,
-                width: drawing.rect.w,
-                height: drawing.rect.h
-              }}
-            >
-              <span className="canvas-draw-badge">
-                {drawsAnswer
-                  ? `≈ ${estimateWords(drawing.rect, drawCaption, bodyCharWidth())} words`
-                  : ''}
-                {!drawsAnswer && gesture.what === 'note' ? 'Note' : ''}
-                {!drawsAnswer && gesture.what === 'frame' ? 'Frame' : ''}
-                {drawParent
-                  ? drawSessions.length > 1
-                    ? ` · continues the newest of ${drawSessions.length} sessions`
-                    : ' · continues session'
-                  : ''}
-              </span>
+            ) : null}
+            {noteDraft ? (
+              <CanvasNoteDraft
+                key={noteDraft.key}
+                rect={noteDraft.rect}
+                onCancel={() => setNoteDraft(null)}
+                onCommit={commitNoteDraft}
+              />
+            ) : null}
+            {activeGuides.x.map((x) => (
+              <span key={`x${x}`} className="canvas-guide canvas-guide--x" style={{ left: x }} />
+            ))}
+            {activeGuides.y.map((y) => (
+              <span key={`y${y}`} className="canvas-guide canvas-guide--y" style={{ top: y }} />
+            ))}
+            {drawing && gesture?.type === 'draw' ? (
+              <div
+                className={`canvas-draw-rect${drawing.refusal ? ' is-invalid' : ''}`}
+                style={{
+                  transform: `translate(${drawing.rect.x}px, ${drawing.rect.y}px)`,
+                  width: drawing.rect.w,
+                  height: drawing.rect.h
+                }}
+              >
+                <span className="canvas-draw-badge">
+                  {drawsAnswer
+                    ? `≈ ${estimateWords(drawing.rect, drawCaption, bodyCharWidth())} words`
+                    : ''}
+                  {!drawsAnswer && gesture.what === 'note' ? 'Note' : ''}
+                  {!drawsAnswer && gesture.what === 'frame' ? 'Frame' : ''}
+                  {drawParent
+                    ? drawSessions.length > 1
+                      ? ` · continues the newest of ${drawSessions.length} sessions`
+                      : ' · continues session'
+                    : ''}
+                </span>
+              </div>
+            ) : null}
+            {gesture?.type === 'marquee' ? (
+              <div
+                className="canvas-marquee"
+                style={(() => {
+                  const box = rectFromPoints(gesture.start, gesture.end)
+                  return {
+                    transform: `translate(${box.x}px, ${box.y}px)`,
+                    width: box.w,
+                    height: box.h
+                  }
+                })()}
+              />
+            ) : null}
+          </div>
+          {showEmpty ? (
+            <div className="canvas-empty">
+              <h2>Draw a rectangle</h2>
+              <p>
+                Delta writes an answer sized to fit it. Draw against a side to continue the same
+                conversation, or anywhere else to start a new one.
+              </p>
+              <ul className="canvas-empty-keys">
+                <li>
+                  <kbd>N</kbd> type a question
+                </li>
+                <li>
+                  <kbd>T</kbd> write a note
+                </li>
+                <li>
+                  <kbd>?</kbd> every shortcut
+                </li>
+              </ul>
             </div>
           ) : null}
-          {gesture?.type === 'marquee' ? (
-            <div
-              className="canvas-marquee"
-              style={(() => {
-                const box = rectFromPoints(gesture.start, gesture.end)
-                return {
-                  transform: `translate(${box.x}px, ${box.y}px)`,
-                  width: box.w,
-                  height: box.h
+        </div>
+
+        <CanvasToolRail
+          tool={placing ? 'answer' : tool}
+          onTool={chooseTool}
+          undoLabel={canvas.undoLabel}
+          redoLabel={canvas.redoLabel}
+          onUndo={() => handleUndo(undo)}
+          onRedo={() => handleUndo(redo)}
+          outlineOpen={outlineOpen}
+          onToggleOutline={() => (outlineOpen ? setOutlineOpen(false) : openOutline())}
+        />
+
+        {outlineOpen ? (
+          <CanvasOutline
+            rows={outlineRows}
+            selectedIds={selectedIds}
+            streamingIds={streamingIds}
+            focusRequest={outlineFocus}
+            onSearchMatches={setSearchMatches}
+            onGoTo={goToItem}
+            onClose={() => setOutlineOpen(false)}
+          />
+        ) : null}
+
+        <div className="canvas-toolbar canvas-toolbar--title">
+          <input
+            key={canvas.title}
+            className="canvas-title"
+            aria-label="Canvas name"
+            defaultValue={canvas.title}
+            title={canvas.title}
+            onBlur={(e) => canvas.rename(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return
+              if (e.key === 'Enter') e.currentTarget.blur()
+              else if (e.key === 'Escape') {
+                // Put the name back before blur commits it, and keep the key from the board.
+                e.preventDefault()
+                e.stopPropagation()
+                e.currentTarget.value = canvas.title
+                e.currentTarget.blur()
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="canvas-tool"
+            aria-haspopup="menu"
+            aria-label="History"
+            data-tip="History: canvases, chats and look-ups"
+            onClick={openCanvasMenu}
+          >
+            ▾
+          </button>
+          <button
+            type="button"
+            className="canvas-tool"
+            data-tip="Start a new, empty canvas"
+            disabled={cards.length === 0 && frames.length === 0}
+            onClick={canvas.newCanvas}
+          >
+            New
+          </button>
+          <button
+            type="button"
+            className="canvas-tool"
+            data-tip="Save this canvas as markdown"
+            disabled={cards.length === 0 || exportState === 'exporting'}
+            onClick={() => void handleExport()}
+          >
+            {exportState === 'exporting'
+              ? 'Exporting…'
+              : exportState === 'saved'
+                ? 'Saved'
+                : 'Export'}
+          </button>
+          {toolbarExtras}
+        </div>
+
+        {minimapOpen && cards.length + frames.length > 0 ? (
+          <CanvasMinimap
+            ref={minimapRef}
+            cards={displayed}
+            frames={displayedFrames}
+            selectedIds={liveSelection}
+            size={surfaceBox}
+            viewportRef={viewportRef}
+            onNavigate={navigateFromMinimap}
+          />
+        ) : null}
+
+        <div className="canvas-toolbar canvas-toolbar--zoom" role="toolbar" aria-label="Zoom">
+          <button
+            type="button"
+            className="canvas-tool"
+            aria-label="Zoom out"
+            data-tip="Zoom out  (−)"
+            onClick={() => zoomBy(1 / ZOOM_STEP)}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            className="canvas-tool canvas-zoom-value"
+            aria-label="Reset zoom to 100%"
+            data-tip="Reset to 100%  (1)"
+            onClick={() => zoomBy(1 / viewportRef.current.zoom)}
+          >
+            <span ref={zoomValueRef} />
+          </button>
+          <button
+            type="button"
+            className="canvas-tool"
+            aria-label="Zoom in"
+            data-tip="Zoom in  (+)"
+            onClick={() => zoomBy(ZOOM_STEP)}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            className="canvas-tool"
+            data-tip="Show everything  (0)"
+            onClick={showEverything}
+          >
+            Fit
+          </button>
+          <button
+            type="button"
+            className={`canvas-tool canvas-tool--icon${minimapOpen ? ' is-toggled' : ''}`}
+            aria-label="Map"
+            aria-pressed={minimapOpen}
+            data-tip="Show or hide the map  (M)"
+            onClick={toggleMinimap}
+          >
+            <CanvasIcon name="map" />
+          </button>
+          <button
+            type="button"
+            className={`canvas-tool${helpOpen ? ' is-toggled' : ''}`}
+            aria-label="Keyboard shortcuts"
+            aria-expanded={helpOpen}
+            data-tip="Keyboard and mouse shortcuts  (?)"
+            onClick={() => setHelpOpen((open) => !open)}
+          >
+            ?
+          </button>
+        </div>
+
+        {helpOpen ? <CanvasShortcuts onClose={() => setHelpOpen(false)} /> : null}
+
+        <div className="canvas-bottom">
+          {placing || linkingPassage || message || toolHint ? (
+            <div className="canvas-hint" role="status">
+              {message ? (
+                <>
+                  {message.text}
+                  {message.undoable ? (
+                    <button
+                      type="button"
+                      className="canvas-hint-action"
+                      onClick={() => {
+                        setNotice(null)
+                        handleUndo(undo)
+                      }}
+                    >
+                      Undo
+                    </button>
+                  ) : null}
+                </>
+              ) : placing ? (
+                <>
+                  Draw a rectangle to size the answer to “{placing.label}”, or click for the default
+                  size. Esc cancels.
+                </>
+              ) : linkingPassage ? (
+                PASSAGE_PICK_TARGET
+              ) : (
+                toolHint
+              )}
+            </div>
+          ) : null}
+          {draftHidden ? (
+            <button
+              type="button"
+              className="canvas-jump"
+              title="Bring your question box back into view (Enter)"
+              onClick={() => {
+                refollow()
+                surfaceRef.current
+                  ?.querySelector<HTMLTextAreaElement>('[data-canvas-draft] textarea')
+                  ?.focus({ preventScroll: true })
+              }}
+            >
+              Back to your question
+            </button>
+          ) : null}
+          {showBar ? (
+            <CanvasSelectionBar
+              count={selectedIds.size}
+              colorable={chosenCards.length + selectedFrameCount > 0}
+              color={sharedColor(barItems, selectedIds)}
+              askable={chosenCards.length + selectedFrameCount > 0}
+              connectable={chosenCards.length === 2 && selectedIds.size === 2}
+              collapsible={collapsibleCards.length > 0}
+              collapsed={collapsibleCards.every((card) => card.collapsedFrom !== undefined)}
+              blocks={selectionBlockCount(barItems, selectedIds)}
+              linkOnly={
+                selectedIds.size === 1 && chosenCards.length === 0 && selectedFrameCount === 0
+              }
+              onAsk={askAboutSelection}
+              onColor={(color) => setColor(selectedIds, color)}
+              onAlign={(edge) =>
+                applyArrangement('Align', alignSelection(barItems, selectedIds, edge))
+              }
+              onDistribute={(axis) =>
+                applyArrangement('Space evenly', distributeSelection(barItems, selectedIds, axis))
+              }
+              onTidy={() => applyTidy(tidySelection({ ...barItems, links }, selectedIds))}
+              onConnect={() => {
+                const [from, to] = chosenCards
+                const id = addLink(from.id, to.id)
+                if (id !== null) {
+                  select([id])
+                  setEditingLinkId(id)
                 }
-              })()}
+              }}
+              onCollapse={() => handleCollapse(selectedIds)}
+              onFrame={() => frameSelection(selectedIds)}
+              onDuplicate={() => handleDuplicate(selectedIds)}
+              onCopy={() => handleCopy(selectedIds)}
+              onZoom={zoomToSelection}
+              onDelete={() => deleteItems(selectedIds)}
+              onLabelLink={() => setEditingLinkId([...selectedIds][0])}
+              onReverseLink={() => reverseLink([...selectedIds][0])}
             />
           ) : null}
         </div>
-        {showEmpty ? (
-          <div className="canvas-empty">
-            <h2>Draw a rectangle</h2>
-            <p>
-              Delta writes an answer sized to fit it. Draw against a side to continue the same
-              conversation, or anywhere else to start a new one.
-            </p>
-            <ul className="canvas-empty-keys">
-              <li>
-                <kbd>N</kbd> type a question
-              </li>
-              <li>
-                <kbd>T</kbd> write a note
-              </li>
-              <li>
-                <kbd>?</kbd> every shortcut
-              </li>
-            </ul>
-          </div>
-        ) : null}
-      </div>
 
-      <CanvasToolRail
-        tool={placing ? 'answer' : tool}
-        onTool={chooseTool}
-        undoLabel={canvas.undoLabel}
-        redoLabel={canvas.redoLabel}
-        onUndo={() => handleUndo(undo)}
-        onRedo={() => handleUndo(redo)}
-        outlineOpen={outlineOpen}
-        onToggleOutline={() => (outlineOpen ? setOutlineOpen(false) : openOutline())}
-      />
-
-      {outlineOpen ? (
-        <CanvasOutline
-          rows={outlineRows}
-          selectedIds={selectedIds}
-          streamingIds={streamingIds}
-          focusRequest={outlineFocus}
-          onSearchMatches={setSearchMatches}
-          onGoTo={goToItem}
-          onClose={() => setOutlineOpen(false)}
-        />
-      ) : null}
-
-      <div className="canvas-toolbar canvas-toolbar--title">
-        <input
-          key={canvas.title}
-          className="canvas-title"
-          aria-label="Canvas name"
-          defaultValue={canvas.title}
-          title={canvas.title}
-          onBlur={(e) => canvas.rename(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing) return
-            if (e.key === 'Enter') e.currentTarget.blur()
-            else if (e.key === 'Escape') {
-              // Put the name back before blur commits it, and keep the key from the board.
-              e.preventDefault()
-              e.stopPropagation()
-              e.currentTarget.value = canvas.title
-              e.currentTarget.blur()
-            }
+        <ContextMenu
+          state={selection.ctxMenu ?? listMenu}
+          onClose={() => {
+            selection.closeContextMenu()
+            setListMenu(null)
           }}
         />
-        <button
-          type="button"
-          className="canvas-tool"
-          aria-haspopup="menu"
-          aria-label="History"
-          data-tip="History: canvases, chats and look-ups"
-          onClick={openCanvasMenu}
-        >
-          ▾
-        </button>
-        <button
-          type="button"
-          className="canvas-tool"
-          data-tip="Start a new, empty canvas"
-          disabled={cards.length === 0 && frames.length === 0}
-          onClick={canvas.newCanvas}
-        >
-          New
-        </button>
-        <button
-          type="button"
-          className="canvas-tool"
-          data-tip="Save this canvas as markdown"
-          disabled={cards.length === 0 || exportState === 'exporting'}
-          onClick={() => void handleExport()}
-        >
-          {exportState === 'exporting'
-            ? 'Exporting…'
-            : exportState === 'saved'
-              ? 'Saved'
-              : 'Export'}
-        </button>
-        {toolbarExtras}
+        <ExpandPrompt state={selection.expandPrompt} onClose={selection.closeExpandPrompt} />
+        <ExpandSelectionBar state={selection.selectionBar} />
       </div>
-
-      {minimapOpen && cards.length + frames.length > 0 ? (
-        <CanvasMinimap
-          ref={minimapRef}
-          cards={displayed}
-          frames={displayedFrames}
-          selectedIds={liveSelection}
-          size={surfaceBox}
-          viewportRef={viewportRef}
-          onNavigate={navigateFromMinimap}
-        />
-      ) : null}
-
-      <div className="canvas-toolbar canvas-toolbar--zoom" role="toolbar" aria-label="Zoom">
-        <button
-          type="button"
-          className="canvas-tool"
-          aria-label="Zoom out"
-          data-tip="Zoom out  (−)"
-          onClick={() => zoomBy(1 / ZOOM_STEP)}
-        >
-          −
-        </button>
-        <button
-          type="button"
-          className="canvas-tool canvas-zoom-value"
-          aria-label="Reset zoom to 100%"
-          data-tip="Reset to 100%  (1)"
-          onClick={() => zoomBy(1 / viewportRef.current.zoom)}
-        >
-          <span ref={zoomValueRef} />
-        </button>
-        <button
-          type="button"
-          className="canvas-tool"
-          aria-label="Zoom in"
-          data-tip="Zoom in  (+)"
-          onClick={() => zoomBy(ZOOM_STEP)}
-        >
-          +
-        </button>
-        <button
-          type="button"
-          className="canvas-tool"
-          data-tip="Show everything  (0)"
-          onClick={showEverything}
-        >
-          Fit
-        </button>
-        <button
-          type="button"
-          className={`canvas-tool canvas-tool--icon${minimapOpen ? ' is-toggled' : ''}`}
-          aria-label="Map"
-          aria-pressed={minimapOpen}
-          data-tip="Show or hide the map  (M)"
-          onClick={toggleMinimap}
-        >
-          <CanvasIcon name="map" />
-        </button>
-        <button
-          type="button"
-          className={`canvas-tool${helpOpen ? ' is-toggled' : ''}`}
-          aria-label="Keyboard shortcuts"
-          aria-expanded={helpOpen}
-          data-tip="Keyboard and mouse shortcuts  (?)"
-          onClick={() => setHelpOpen((open) => !open)}
-        >
-          ?
-        </button>
-      </div>
-
-      {helpOpen ? <CanvasShortcuts onClose={() => setHelpOpen(false)} /> : null}
-
-      <div className="canvas-bottom">
-        {placing || linkingPassage || message || toolHint ? (
-          <div className="canvas-hint" role="status">
-            {message ? (
-              <>
-                {message.text}
-                {message.undoable ? (
-                  <button
-                    type="button"
-                    className="canvas-hint-action"
-                    onClick={() => {
-                      setNotice(null)
-                      handleUndo(undo)
-                    }}
-                  >
-                    Undo
-                  </button>
-                ) : null}
-              </>
-            ) : placing ? (
-              <>
-                Draw a rectangle to size the answer to “{placing.label}”, or click for the default
-                size. Esc cancels.
-              </>
-            ) : linkingPassage ? (
-              PASSAGE_PICK_TARGET
-            ) : (
-              toolHint
-            )}
-          </div>
-        ) : null}
-        {draftHidden ? (
-          <button
-            type="button"
-            className="canvas-jump"
-            title="Bring your question box back into view (Enter)"
-            onClick={() => {
-              refollow()
-              surfaceRef.current
-                ?.querySelector<HTMLTextAreaElement>('[data-canvas-draft] textarea')
-                ?.focus({ preventScroll: true })
-            }}
-          >
-            Back to your question
-          </button>
-        ) : null}
-        {showBar ? (
-          <CanvasSelectionBar
-            count={selectedIds.size}
-            colorable={chosenCards.length + selectedFrameCount > 0}
-            color={sharedColor(barItems, selectedIds)}
-            askable={chosenCards.length + selectedFrameCount > 0}
-            connectable={chosenCards.length === 2 && selectedIds.size === 2}
-            collapsible={collapsibleCards.length > 0}
-            collapsed={collapsibleCards.every((card) => card.collapsedFrom !== undefined)}
-            blocks={selectionBlockCount(barItems, selectedIds)}
-            linkOnly={
-              selectedIds.size === 1 && chosenCards.length === 0 && selectedFrameCount === 0
-            }
-            onAsk={askAboutSelection}
-            onColor={(color) => setColor(selectedIds, color)}
-            onAlign={(edge) =>
-              applyArrangement('Align', alignSelection(barItems, selectedIds, edge))
-            }
-            onDistribute={(axis) =>
-              applyArrangement('Space evenly', distributeSelection(barItems, selectedIds, axis))
-            }
-            onTidy={() => applyTidy(tidySelection({ ...barItems, links }, selectedIds))}
-            onConnect={() => {
-              const [from, to] = chosenCards
-              const id = addLink(from.id, to.id)
-              if (id !== null) {
-                select([id])
-                setEditingLinkId(id)
-              }
-            }}
-            onCollapse={() => handleCollapse(selectedIds)}
-            onFrame={() => frameSelection(selectedIds)}
-            onDuplicate={() => handleDuplicate(selectedIds)}
-            onCopy={() => handleCopy(selectedIds)}
-            onZoom={zoomToSelection}
-            onDelete={() => deleteItems(selectedIds)}
-            onLabelLink={() => setEditingLinkId([...selectedIds][0])}
-            onReverseLink={() => reverseLink([...selectedIds][0])}
-          />
-        ) : null}
-      </div>
-
-      <ContextMenu
-        state={selection.ctxMenu ?? listMenu}
-        onClose={() => {
-          selection.closeContextMenu()
-          setListMenu(null)
-        }}
-      />
-      <ExpandPrompt state={selection.expandPrompt} onClose={selection.closeExpandPrompt} />
-      <ExpandSelectionBar state={selection.selectionBar} />
-    </div>
+    </ToolActivityContext.Provider>
   )
 }
 

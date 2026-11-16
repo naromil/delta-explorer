@@ -5,6 +5,7 @@ import {
   ContextMenu,
   ExpandPrompt,
   ExpandSelectionBar,
+  ToolActivityContext,
   useExpansionContextMenu
 } from '@delta/ui/conversation'
 import { useStickToBottom } from '@delta/ui/lib/stick-to-bottom'
@@ -44,6 +45,7 @@ function LookupApp(): React.JSX.Element {
 
   const {
     state,
+    toolActivity,
     loading,
     contextReady,
     send,
@@ -392,26 +394,28 @@ function LookupApp(): React.JSX.Element {
           )}
         </div>
         <div ref={scrollRef} className={`lookup-conversation${grown ? ' visible' : ''}`}>
-          {visibleTurns.map((turn) => (
-            <div
-              key={turn.id}
-              className="message-turn"
-              data-turn-id={turn.id}
-              onContextMenu={handleContextMenu}
-            >
-              <Turn
-                turn={turn}
-                loading={loading}
-                onFold={fold}
-                onUnfold={unfold}
-                onRetryExpansion={regenerateExpansion}
-                onEditExpansion={startEditingExpansion}
-                onDismissExpansion={removeExpansion}
-                onAskAnotherExpansion={askAnotherExpansion}
-                onPickExpansionAnswer={pickExpansionAnswer}
-              />
-            </div>
-          ))}
+          <ToolActivityContext.Provider value={toolActivity}>
+            {visibleTurns.map((turn) => (
+              <div
+                key={turn.id}
+                className="message-turn"
+                data-turn-id={turn.id}
+                onContextMenu={handleContextMenu}
+              >
+                <Turn
+                  turn={turn}
+                  loading={loading}
+                  onFold={fold}
+                  onUnfold={unfold}
+                  onRetryExpansion={regenerateExpansion}
+                  onEditExpansion={startEditingExpansion}
+                  onDismissExpansion={removeExpansion}
+                  onAskAnotherExpansion={askAnotherExpansion}
+                  onPickExpansionAnswer={pickExpansionAnswer}
+                />
+              </div>
+            ))}
+          </ToolActivityContext.Provider>
         </div>
       </div>
       <ContextMenu state={ctxMenu} onClose={closeContextMenu} />

@@ -91,6 +91,14 @@ const api = {
     ipcRenderer.on('chat-card', handler)
     return () => ipcRenderer.removeListener('chat-card', handler)
   },
+  chatOnActivity: (cb: (data: { requestId: string; label: string }) => void) => {
+    const handler = (
+      _e: Electron.IpcRendererEvent,
+      data: { requestId: string; label: string }
+    ): void => cb(data)
+    ipcRenderer.on('chat-activity', handler)
+    return () => ipcRenderer.removeListener('chat-activity', handler)
+  },
   chatOnChunk: (cb: (data: { requestId: string; delta: string }) => void) => {
     const handler = (
       _e: Electron.IpcRendererEvent,

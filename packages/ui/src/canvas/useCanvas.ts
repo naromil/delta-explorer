@@ -6,7 +6,7 @@
  * curator treat it as one. Unlike a chat, its turns are a pool rather than a
  * line: what a request sends is found by walking a card's session.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   CanvasCard,
   CanvasColor,
@@ -60,6 +60,14 @@ import type { ExpandOutcome } from '../conversation/expand-outcome'
 import { bodyCharWidth } from '../lib/char-width'
 import { useUiHost } from '../host'
 import type { ExportResult, StreamListener } from '../host'
+import type { ActivityLabels, ToolActivity } from '../lib/tool-activity'
+import {
+  NO_ACTIVITY_LABELS,
+  liveActivityLabels,
+  resolveToolActivity,
+  withActivityLabel,
+  withoutActivityLabel
+} from '../lib/tool-activity'
 
 const SAVE_DELAY_MS = 300
 const UNTITLED = 'Untitled canvas'
@@ -219,6 +227,8 @@ export function useCanvas(asker?: CanvasAsker | null): {
   redoLabel: string | null
   /** Assistant turns with a request in flight. */
   streamingTurnIds: ReadonlySet<number>
+  /** What each streaming card's model is doing with its tools, until it answers. */
+  toolActivity: ToolActivity
   /** Cards whose height should be fitted to their answer the next time they are on screen. */
   fitCardIds: ReadonlySet<string>
   /** The page `startFromPage` just put down, until the board has opened a question beside it. */
@@ -307,6 +317,7 @@ export function useCanvas(asker?: CanvasAsker | null): {
   const [fitCardIds, setFitCardIds] = useState<ReadonlySet<string>>(new Set())
   const [startedPageId, setStartedPageId] = useState<string | null>(null)
   const [opening, setOpening] = useState<CanvasOpening | null>(null)
+  const [activityLabels, setActivityLabels] = useState<ActivityLabels>(NO_ACTIVITY_LABELS)
 
   // Requests start from event handlers and must see the newest state at once.
   const docRef = useRef(doc)
@@ -455,7 +466,15 @@ export function useCanvas(asker?: CanvasAsker | null): {
       if (request.kind === 'send') ids.add(request.turnId)
     }
     setStreamingTurnIds(ids)
+    // A settled or dropped request's label must not outlive it.
+    const live = new Set(requestsRef.current.keys())
+    setActivityLabels((prev) => liveActivityLabels(prev, (requestId) => live.has(requestId)))
   }, [])
+
+  const toolActivity = useMemo(
+    (): ToolActivity => resolveToolActivity(activityLabels),
+    [activityLabels]
+  )
 
   const cancelStream = useCallback(
     (requestId: string): void => {
@@ -1430,10 +1449,24 @@ export function useCanvas(asker?: CanvasAsker | null): {
       }))
     }
 
+    // Text means the model is answering again, so whatever it was doing is over.
+    const clearActivity = (requestId: string): void =>
+      setActivityLabels((prev) => withoutActivityLabel(prev, requestId))
+
     const listener: StreamListener = {
+      activity: ({ requestId, label }) => {
+        const request = requestsRef.current.get(requestId)
+        if (!request) return
+        const target =
+          request.kind === 'send'
+            ? { turnId: request.turnId }
+            : { expansionId: request.expansionId }
+        setActivityLabels((prev) => withActivityLabel(prev, requestId, label, target))
+      },
       chunk: ({ requestId, delta }) => {
         const request = requestsRef.current.get(requestId)
         if (request?.kind !== 'send') return
+        clearActivity(requestId)
         editTurn(request.turnId, (turn) => ({ ...turn, content: turn.content + delta }))
       },
       response: ({ requestId, text, cancelled }) => {
@@ -1473,6 +1506,7 @@ export function useCanvas(asker?: CanvasAsker | null): {
         const request = requestsRef.current.get(data.requestId)
         if (request?.kind !== 'expand') return
         const { delta, text, done, error, cancelled } = data
+        clearActivity(data.requestId)
         updateDoc((prev) => ({
           ...prev,
           turns: applyExpansionChunk(prev.turns, request.expansionId, {
@@ -1512,6 +1546,7 @@ export function useCanvas(asker?: CanvasAsker | null): {
     undoLabel: historyLabels.undo,
     redoLabel: historyLabels.redo,
     streamingTurnIds,
+    toolActivity,
     fitCardIds,
     startedPageId,
     opening,

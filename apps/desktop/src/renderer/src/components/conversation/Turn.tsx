@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { Turn as TurnType } from '@delta/core/conversation'
 import type { ExpansionNode } from '@delta/core/rich-text'
 import { attachmentSrc } from '@delta/ui/lib/image-attachments'
-import { ExpansionFrame, Markdown } from '@delta/ui/conversation'
+import { ExpansionFrame, Markdown, ToolActivityLine, useToolActivity } from '@delta/ui/conversation'
 import type { FramePopupAt } from '@delta/ui/conversation'
 
 interface TurnProps {
@@ -103,6 +103,7 @@ function Turn({
   }
 
   const isStreamingPlaceholder = turn.content === '' && loading && !isUser
+  const activity = useToolActivity().turns.get(turn.id)
 
   // Stable across streamed chunks, so memoized nested frames are not invalidated.
   const renderExpansion = useCallback(
@@ -179,12 +180,18 @@ function Turn({
         )}
         {isStreamingPlaceholder ? (
           <div className="message-content">
-            <div className="loading-dots" aria-hidden="true">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <span className="sr-only">Delta Explorer is responding</span>
+            {activity ? (
+              <ToolActivityLine label={activity} />
+            ) : (
+              <>
+                <div className="loading-dots" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <span className="sr-only">Delta Explorer is responding</span>
+              </>
+            )}
           </div>
         ) : editing ? (
           <div className="message-content message-edit">
@@ -221,6 +228,11 @@ function Turn({
               onUnfold={onUnfold}
               renderExpansion={renderExpansion}
             />
+            {activity && loading && !isUser ? (
+              <div className="message-tool-activity">
+                <ToolActivityLine label={activity} />
+              </div>
+            ) : null}
             {turn.error && onRetry && (
               <button className="message-retry" onClick={() => onRetry(turn.id)}>
                 Retry

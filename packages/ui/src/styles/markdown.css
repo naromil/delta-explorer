@@ -966,3 +966,44 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-1);
 }
+
+/* ---- Tool activity: what the model is doing before it answers ---- */
+
+.tool-activity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  color: var(--text-3);
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.tool-activity-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-activity-spinner {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--text-3);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: tool-activity-spin 900ms linear infinite;
+}
+
+@keyframes tool-activity-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-activity-spinner {
+    animation: none;
+  }
+}

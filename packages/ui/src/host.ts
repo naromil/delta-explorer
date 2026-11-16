@@ -45,6 +45,11 @@ export interface StreamListener {
   expandChunk: (data: ExpandChunkEvent) => void
   /** A card the model added beside a canvas answer; `card` is untrusted (`soundSpawn`). */
   card?: (data: { requestId: string; card: unknown }) => void
+  /**
+   * A send or expand began a tool call (`label` says what it does). It stands until text
+   * arrives or the stream ends; a host without tools never reports one.
+   */
+  activity?: (data: { requestId: string; label: string }) => void
 }
 
 export type ExportResult = { ok: true; path: string } | { ok: false; error: string }

@@ -10,6 +10,8 @@ import type { ExpansionNode, TextHighlight } from '@delta/core/rich-text'
 import { flattenMarkdown } from '@delta/core/rich-text'
 import Markdown from '../conversation/Markdown'
 import { OriginalText } from '../conversation/ExpansionFrame'
+import ToolActivityLine from '../conversation/ToolActivityLine'
+import { useToolActivity } from '../lib/tool-activity'
 import { nextPinned } from '../lib/stick-to-bottom'
 import { safeHref } from '../lib/safe-url'
 
@@ -266,6 +268,15 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
     .join(' ')
   const canContinue = status === 'done' && !collapsed
   const waiting = status === 'streaming' && answer === ''
+  const toolActivity = useToolActivity()
+  const activity =
+    status !== 'streaming'
+      ? undefined
+      : card.kind === 'message'
+        ? toolActivity.turns.get(card.turnId)
+        : card.kind === 'expansion'
+          ? toolActivity.expansions.get(card.expansionId)
+          : undefined
   const expansionId = card.kind === 'expansion' ? card.expansionId : undefined
   const hasSource =
     card.kind === 'expansion' || (card.kind === 'message' && card.parentId !== undefined)
@@ -475,7 +486,16 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
             />
           ) : (
             <div className="message-content">
-              {waiting ? <Skeleton lines={4} /> : null}
+              {waiting ? (
+                activity ? (
+                  <>
+                    <ToolActivityLine label={activity} />
+                    <Skeleton lines={3} />
+                  </>
+                ) : (
+                  <Skeleton lines={4} />
+                )
+              ) : null}
               {status === 'failed' ? <p className="canvas-card-failure">{failure}</p> : null}
               {!waiting && status !== 'failed' ? (
                 <Markdown
@@ -486,6 +506,11 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
                   onUnfold={noop}
                   renderExpansion={renderExpansion}
                 />
+              ) : null}
+              {!waiting && activity ? (
+                <div className="canvas-card-activity">
+                  <ToolActivityLine label={activity} />
+                </div>
               ) : null}
             </div>
           )}

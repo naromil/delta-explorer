@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import type { ConversationState, Turn, ProviderMessage } from '@delta/core/conversation'
 import {
   serializeForChat,
@@ -22,7 +22,13 @@ import {
   updateExpansion
 } from '@delta/core/rich-text'
 import { isAnchoredRange } from '@delta/ui/lib/markdown'
-import type { ExpandOutcome, HighlightRequest } from '@delta/ui/conversation'
+import type {
+  ActivityLabels,
+  ExpandOutcome,
+  HighlightRequest,
+  ToolActivity
+} from '@delta/ui/conversation'
+import { NO_ACTIVITY_LABELS, liveActivityLabels, resolveToolActivity } from '@delta/ui/conversation'
 import { buildExpandRequest } from '@delta/core/expand-prompt'
 import {
   clearRequests,
@@ -50,6 +56,8 @@ interface UseChatStreamingOptions {
 
 export function useChatStreaming(options?: UseChatStreamingOptions): {
   state: ConversationState
+  /** What the model is doing with its tools, per waiting turn and expansion. */
+  toolActivity: ToolActivity
   loading: boolean
   contextReady: boolean
   conversationId: string | null
@@ -89,6 +97,7 @@ export function useChatStreaming(options?: UseChatStreamingOptions): {
   const [contextReady, setContextReady] = useState(role !== 'lookup')
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [conversationTitle, setConversationTitle] = useState('')
+  const [activityLabels, setActivityLabels] = useState<ActivityLabels>(NO_ACTIVITY_LABELS)
   const requestsRef = useRef<RequestBookkeeping>(createRequests())
   const expansionIdCounterRef = useRef(1)
   const hasSentRef = useRef(false)
@@ -123,6 +132,7 @@ export function useChatStreaming(options?: UseChatStreamingOptions): {
       getRequests,
       setRequests,
       setState,
+      setActivityLabels,
       setLoading,
       setContextReady,
       requestSave,
@@ -154,14 +164,24 @@ export function useChatStreaming(options?: UseChatStreamingOptions): {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /**
+   * Requests leave the book on many paths (stop, navigation, retry); a new one is the moment
+   * a dropped request's label could reach a reused id, so that is when they are forgotten.
+   */
+  const forgetDroppedActivity = useCallback((): void => {
+    const live = new Set(requestsRef.current.pending.keys())
+    setActivityLabels((prev) => liveActivityLabels(prev, (requestId) => live.has(requestId)))
+  }, [])
+
   const requestCompletion = useCallback(
     (messages: ProviderMessage[], assistantTurnId: number) => {
       const requestId = generateRequestId()
       requestsRef.current = registerSend(requestsRef.current, requestId, assistantTurnId)
+      forgetDroppedActivity()
       window.api.chatSend({ messages, requestId, role })
       setLoading(true)
     },
-    [role]
+    [role, forgetDroppedActivity]
   )
 
   const stop = useCallback(() => {
@@ -348,9 +368,10 @@ export function useChatStreaming(options?: UseChatStreamingOptions): {
     (turnId: number, expansionId: number, messages: ProviderMessage[]): void => {
       const requestId = generateRequestId()
       requestsRef.current = registerExpand(requestsRef.current, requestId, turnId, expansionId)
+      forgetDroppedActivity()
       window.api.chatExpand({ messages, requestId, role })
     },
-    [role]
+    [role, forgetDroppedActivity]
   )
 
   const expand = useCallback(
@@ -586,8 +607,11 @@ export function useChatStreaming(options?: UseChatStreamingOptions): {
     [cancelAllRequests, reportSaveOutcome, clearSaveError]
   )
 
+  const toolActivity = useMemo(() => resolveToolActivity(activityLabels), [activityLabels])
+
   return {
     state,
+    toolActivity,
     loading,
     contextReady,
     conversationId,

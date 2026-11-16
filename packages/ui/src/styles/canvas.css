@@ -521,6 +521,16 @@
   width: 60%;
 }
 
+/* A tool call during an answer, under the text so far */
+.canvas-card-activity {
+  margin-top: 8px;
+}
+
+.canvas-skeleton + .tool-activity,
+.tool-activity + .canvas-skeleton {
+  margin-top: 10px;
+}
+
 /* ---- Continue handles, sitting on the shared side ---- */
 
 .canvas-continue {

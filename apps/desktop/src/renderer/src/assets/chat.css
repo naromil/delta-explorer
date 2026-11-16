@@ -366,6 +366,11 @@ body {
   color: var(--error);
 }
 
+/* A tool call during an answer, under the text so far */
+.message-tool-activity {
+  margin-top: 8px;
+}
+
 /* Loading dots */
 .loading-dots {
   display: inline-flex;

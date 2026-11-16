@@ -1,6 +1,6 @@
 /**
  * The shared UI's host in the desktop app: every call goes to main over the preload
- * bridge. Stream events arrive on four IPC channels for the whole window, so a listener
+ * bridge. Stream events arrive on IPC channels for the whole window, so a listener
  * receives every request's events and keeps only the ids it holds.
  */
 import type { UiHost } from '@delta/ui/host'
@@ -23,7 +23,8 @@ export const desktopHost: UiHost = {
       window.api.chatOnResponse(listener.response),
       window.api.chatOnError(listener.error),
       window.api.chatOnExpandChunk(listener.expandChunk),
-      ...(listener.card ? [window.api.chatOnCard(listener.card)] : [])
+      ...(listener.card ? [window.api.chatOnCard(listener.card)] : []),
+      ...(listener.activity ? [window.api.chatOnActivity(listener.activity)] : [])
     ]
     return () => {
       for (const unsub of unsubs) unsub()

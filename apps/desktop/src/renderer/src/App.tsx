@@ -6,6 +6,7 @@ import HomeView from './views/home/HomeView'
 import KnowledgeView from './views/knowledge/KnowledgeView'
 import LookupGuideView from './views/lookup-guide/LookupGuideView'
 import { CanvasView, useCanvas } from '@delta/ui/canvas'
+import { ToolActivityContext } from '@delta/ui/conversation'
 import { useChatStreaming } from './hooks/useChatStreaming'
 import MemoryIndicator from './components/MemoryIndicator'
 import type { ImageAttachment } from '@delta/core/attachments'
@@ -119,6 +120,7 @@ function App(): React.JSX.Element {
   const [draftAttachments, setDraftAttachments] = useState<ImageAttachment[]>([])
   const {
     state,
+    toolActivity,
     loading,
     send,
     stop,
@@ -257,35 +259,37 @@ function App(): React.JSX.Element {
       <div className="app-main">
         {view === 'home' && <HomeView onNavigate={setView} onOpenConversation={openConversation} />}
         {view === 'chat' && (
-          <Conversation
-            state={state}
-            loading={loading}
-            onSend={send}
-            onStop={stop}
-            onRetry={retry}
-            onRegenerate={regenerate}
-            onEditMessage={editMessage}
-            onRename={renameConversation}
-            onDelete={deleteConversation}
-            onNewChat={newChat}
-            onOpenSearch={openSearch}
-            searchOpen={showSearch}
-            input={draft}
-            onInputChange={setDraft}
-            attachments={draftAttachments}
-            onAttachmentsChange={setDraftAttachments}
-            conversationId={conversationId}
-            conversationTitle={conversationTitle}
-            saveError={saveError}
-            onExpand={expand}
-            onFold={fold}
-            onUnfold={unfold}
-            onRetryExpansion={retryExpansion}
-            onEditExpansion={editExpansion}
-            onDismissExpansion={dismissExpansion}
-            onHighlight={toggleHighlight}
-            transferKey={transferKey}
-          />
+          <ToolActivityContext.Provider value={toolActivity}>
+            <Conversation
+              state={state}
+              loading={loading}
+              onSend={send}
+              onStop={stop}
+              onRetry={retry}
+              onRegenerate={regenerate}
+              onEditMessage={editMessage}
+              onRename={renameConversation}
+              onDelete={deleteConversation}
+              onNewChat={newChat}
+              onOpenSearch={openSearch}
+              searchOpen={showSearch}
+              input={draft}
+              onInputChange={setDraft}
+              attachments={draftAttachments}
+              onAttachmentsChange={setDraftAttachments}
+              conversationId={conversationId}
+              conversationTitle={conversationTitle}
+              saveError={saveError}
+              onExpand={expand}
+              onFold={fold}
+              onUnfold={unfold}
+              onRetryExpansion={retryExpansion}
+              onEditExpansion={editExpansion}
+              onDismissExpansion={dismissExpansion}
+              onHighlight={toggleHighlight}
+              transferKey={transferKey}
+            />
+          </ToolActivityContext.Provider>
         )}
         {view === 'canvas' && <CanvasView canvas={canvas} onOpenSearch={openSearch} />}
         {view === 'knowledge' && <KnowledgeView />}

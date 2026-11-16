@@ -4,6 +4,8 @@ import type { ExpansionNode } from '@delta/core/rich-text'
 import { attachmentSrc } from '../lib/image-attachments'
 import { isPlainMarkdown } from '../lib/markdown'
 import Markdown from './Markdown'
+import ToolActivityLine from './ToolActivityLine'
+import { useToolActivity } from '../lib/tool-activity'
 
 /** Screen point of the control that opened a popup, so the popup appears next to it. */
 export type FramePopupAt = { x: number; y: number }
@@ -103,6 +105,7 @@ function ExpansionFrame({ node, group, ...actions }: ExpansionFrameProps): React
   const copiedTimerRef = useRef<number | null>(null)
   const question = node.prompt?.trim() || null
   const answerCount = group?.length ?? 1
+  const toolActivity = useToolActivity()
 
   useEffect(() => {
     return () => {
@@ -154,6 +157,7 @@ function ExpansionFrame({ node, group, ...actions }: ExpansionFrameProps): React
   }
 
   const pending = node.status === 'loading' && node.answer === ''
+  const activity = pending ? toolActivity.expansions.get(node.id) : undefined
   const finished = node.status !== 'loading'
   const showSource = isCodeOrMath(node.originalText)
   const frameClass = [
@@ -186,7 +190,11 @@ function ExpansionFrame({ node, group, ...actions }: ExpansionFrameProps): React
           </span>
         ) : null}
         {pending ? (
-          <span className="frame-placeholder">Thinking…</span>
+          activity ? (
+            <ToolActivityLine label={activity} />
+          ) : (
+            <span className="frame-placeholder">Thinking…</span>
+          )
         ) : (
           <Markdown
             source={node.answer}

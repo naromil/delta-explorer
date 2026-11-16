@@ -78,6 +78,7 @@ declare global {
       }) => void
       chatCancel: (requestId: string) => void
       /** Terms in a finished answer worth underlining; empty when off or unavailable. */
+      chatOnActivity: (cb: (data: { requestId: string; label: string }) => void) => () => void
       chatOnChunk: (cb: (data: { requestId: string; delta: string }) => void) => () => void
       /** A card the model added beside a canvas answer through a canvas tool. */
       chatOnCard: (cb: (data: { requestId: string; card: unknown }) => void) => () => void

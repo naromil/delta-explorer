@@ -9,6 +9,8 @@ import type { Dispatch, SetStateAction } from 'react'
 import type { ConversationState } from '@delta/core/conversation'
 import type { ExpansionChunk } from '@delta/core/rich-text'
 import { applyExpansionChunk } from '@delta/core/rich-text'
+import { withActivityLabel, withoutActivityLabel } from '@delta/ui/conversation'
+import type { ActivityLabels } from '@delta/ui/conversation'
 import { pendingRequest, settleRequest } from './requests'
 import type { RequestBookkeeping } from './requests'
 
@@ -24,6 +26,7 @@ export interface ChatTransportHandlers {
   getRequests: () => RequestBookkeeping
   setRequests: (book: RequestBookkeeping) => void
   setState: Dispatch<SetStateAction<ConversationState>>
+  setActivityLabels: Dispatch<SetStateAction<ActivityLabels>>
   setLoading: (loading: boolean) => void
   setContextReady: (contextReady: boolean) => void
   requestSave: (touchContent: boolean) => void
@@ -33,11 +36,29 @@ export interface ChatTransportHandlers {
 
 export function subscribeChatTransport(handlers: ChatTransportHandlers): () => void {
   const unsubs: Array<() => void> = []
+  // Text, or the end of the stream, means the model is no longer busy with a tool.
+  const clearActivity = (requestId: string): void =>
+    handlers.setActivityLabels((prev) => withoutActivityLabel(prev, requestId))
+
+  unsubs.push(
+    window.api.chatOnActivity((data) => {
+      const pending = handlers.getRequests().pending.get(data.requestId)
+      if (!pending) return
+      const target =
+        pending.expansionId !== undefined
+          ? { expansionId: pending.expansionId }
+          : { turnId: pending.turnId }
+      handlers.setActivityLabels((prev) =>
+        withActivityLabel(prev, data.requestId, data.label, target)
+      )
+    })
+  )
 
   unsubs.push(
     window.api.chatOnChunk((data) => {
       const pending = pendingRequest(handlers.getRequests(), data.requestId, 'send')
       if (!pending) return
+      clearActivity(data.requestId)
 
       handlers.setState((prev) => {
         const turns = [...prev.turns]
@@ -56,6 +77,7 @@ export function subscribeChatTransport(handlers: ChatTransportHandlers): () => v
       if (!pending) return
 
       handlers.setRequests(settleRequest(requests, data.requestId).book)
+      clearActivity(data.requestId)
       handlers.setState((prev) => {
         const turns = [...prev.turns]
         const turnIdx = turns.findIndex((t) => t.id === pending.turnId)
@@ -79,6 +101,7 @@ export function subscribeChatTransport(handlers: ChatTransportHandlers): () => v
       if (!pending) return
 
       handlers.setRequests(settleRequest(requests, data.requestId).book)
+      clearActivity(data.requestId)
       handlers.setState((prev) => {
         const turns = [...prev.turns]
         const turnIdx = turns.findIndex((t) => t.id === pending.turnId)
@@ -98,6 +121,7 @@ export function subscribeChatTransport(handlers: ChatTransportHandlers): () => v
       const pending = pendingRequest(requests, data.requestId, 'expand')
       const expansionId = pending?.expansionId
       if (expansionId === undefined) return
+      clearActivity(data.requestId)
 
       const chunk: ExpansionChunk = {
         ...(data.delta !== undefined ? { delta: data.delta } : {}),

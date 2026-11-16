@@ -115,6 +115,7 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 | `conversation-list-unfed` / `-kb-fed`     | Renderer → Main | KB model integration: list unfed; mark fed                                                         |
 | `conversation-export`                     | Renderer → Main | Save a conversation as markdown (`{ok,path}` or `{ok:false,error}`; cancel is `'Canceled.'`)       |
 | `chat-card`                               | Main → Renderer | A card the model added through a canvas tool during a canvas `chat-send` (`{requestId, card}`)     |
+| `chat-activity`                           | Main → Renderer | A tool call began during a `chat-send`/`chat-expand` (`{requestId, label}`); shown until text      |
 | `conversation-generate-title`             | Renderer → Main | A model-written title from the first message (`string` or `null`, never throws)                    |
 
 | `materials-choose-folder` / `-clear-folder` | Renderer → Main | Pick the learning-materials folder in the system dialog (main stores it) / forget it |
@@ -185,6 +186,7 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | Path confinement    | `services/confined-path.ts`   | `confinePath`: resolves a model-written path below a root, refusing absolute paths, `..` and symlinks (memory and materials stores)                                                                                                   |
 | Context budget      | `context-budget.ts`           | `applyContextBudget(messages, role)`: trims sends to the cached model's window; fail-open on any missing input                                                                                                                        |
 | Streaming helpers   | `streaming.ts`                | IPC payload validation, `withInstructions`, `createChunkBatcher` (32 ms token deltas)                                                                                                                                                 |
+| Tool activity       | `tool-activity.ts`            | `toolActivityLabel` (a human line per tool call, input distrusted) + `withToolActivity`, which wraps every tool's `execute` to report it                                                                                              |
 | Window guards       | `window-guards.ts`            | `guardWindowNavigation`: deny window.open / navigation, hand http(s) links to the browser                                                                                                                                             |
 | Edit menu           | `edit-menu.ts`                | `installEditMenu`: native Cut/Copy/Paste/Select All + spelling suggestions for right clicks in text fields the renderer leaves alone                                                                                                  |
 | Secret store        | `services/secret-store.ts`    | `sealSecret` / `openSecret` for API keys (`safeStorage`, `enc:v1:` prefix, plaintext fallback)                                                                                                                                        |
@@ -293,6 +295,7 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | Learning materials tools / folder        | `materials/store.ts` (ops + limits), `materials/tools.ts`, `shared/prompts.ts` (`buildMaterialsPrompt`), `MaterialsFolder.tsx` |
 | How PDFs and images reach the model      | `materials/render.ts` + renderer `materials-render.ts` (drawing), `provider.ts` (`withToolImages`)                             |
 | What the curator saves                   | `shared/prompts.ts` (`KB_MEMORY_SYSTEM_PROMPT`), `kb/run.ts` (`updateMemories`)                                                |
+| What the window shows during tool calls  | `main/tool-activity.ts` (labels), `ui/lib/tool-activity.ts` (state + context), `ToolActivityLine.tsx`                          |
 | Memory updated indicator                 | `components/MemoryIndicator.tsx`, `memory/tools.ts` (`broadcastMemoryUpdated`)                                                 |
 | Canvas geometry, sessions, word fit      | `shared/canvas.ts` (+ `estimateWords` constants mirror `ui/styles/canvas.css`)                                                 |
 | Canvas gestures, tools, expansion flow   | `ui/canvas/CanvasView.tsx`                                                                                                     |
@@ -789,6 +792,15 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   `serializeForChat` omits assistant turns that are `error: true` or have blank/whitespace
   content (in-flight/legacy placeholders), so neither error text nor empty placeholders are
   replayed to the model; error turns stay on disk so Retry survives a reload.
+- **Tool calls show while the user waits.** `streamToSender` wraps the request's tools with
+  `withToolActivity`, so every call (HTTP route and Claude Code's MCP route alike) sends `chat-activity`
+  with a label from `toolActivityLabel`, after flushing buffered text so a later chunk always follows
+  it. The label stands until text arrives, because the model's next step is what the user waits for.
+  The UI keeps labels by request (`UiHost`'s optional `activity` listener; the chat hook's transport),
+  records the turn or expansion each answers, and provides them as `ToolActivityContext`; the chat
+  turn, expansion frame and canvas card show `ToolActivityLine` in place of their placeholder, or under
+  the partial text. A dropped request's label is forgotten when the next request registers (chat) or
+  the book syncs (canvas). The extension's host never reports activity.
 - **Auto-scroll is a pin, not a proximity check.** `ui/lib/stick-to-bottom.ts` follows new
   chunks only while the reader is at the bottom. Scrolling up unpins the view immediately, so
   streaming can never drag the reader back down; returning to the bottom, clicking Latest, or

@@ -13,3 +13,20 @@ export { useExpansionContextMenu } from './useExpansionContextMenu'
 export type { ExpandRequest, HighlightRequest, SelectedPassage } from './useExpansionContextMenu'
 export { useImageAttachments } from './useImageAttachments'
 export type { ExpandOutcome } from './expand-outcome'
+export { default as ToolActivityLine } from './ToolActivityLine'
+export {
+  NO_ACTIVITY_LABELS,
+  NO_TOOL_ACTIVITY,
+  ToolActivityContext,
+  liveActivityLabels,
+  resolveToolActivity,
+  useToolActivity,
+  withActivityLabel,
+  withoutActivityLabel
+} from '../lib/tool-activity'
+export type {
+  ActivityEntry,
+  ActivityLabels,
+  ActivityTarget,
+  ToolActivity
+} from '../lib/tool-activity'

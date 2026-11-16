@@ -12,7 +12,7 @@
 - [x] Unit-test `generateConversationTitle` in `main/conversation-title.ts` — its "`null` on any failure, never throws" contract guards every first send and has no test
 - [x] Test that `safeHref` (`ui/lib/safe-url.ts`) agrees with `isSafeExternalUrl` (`window-guards.ts`) — AGENTS.md requires the two allowlists to match and nothing enforces it
 - [ ] Unit-test `straightenBlocks` in `canvas-straighten.ts` — the only canvas layout module with no tests, and tidy relies on it never resizing or detaching cards
-- [ ] Display what tool calls are in process when the agent calls tools instead of responding directly, so the user knows what is going on.
+- [x] Display what tool calls are in process when the agent calls tools instead of responding directly, so the user knows what is going on.
 
 ## Proposed (needs the owner's OK — move to Routine to approve)
 

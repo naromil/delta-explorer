@@ -61,6 +61,7 @@ import { closeRenderWindow, isRenderWindow } from './materials/render'
 import { withMaterials } from './materials/tools'
 import { withCanvasTools } from './canvas-tools'
 import type { CanvasToolOptions } from './canvas-tools'
+import { withToolActivity } from './tool-activity'
 
 interface ActiveStream {
   controller: AbortController
@@ -117,7 +118,8 @@ if (!hasSingleInstanceLock) {
           done: (text) => safeSend(sender, 'chat-response', { requestId, text }),
           cancelled: (text) =>
             safeSend(sender, 'chat-response', { requestId, text, cancelled: true }),
-          failed: (error) => safeSend(sender, 'chat-error', { requestId, error })
+          failed: (error) => safeSend(sender, 'chat-error', { requestId, error }),
+          activity: (label) => safeSend(sender, 'chat-activity', { requestId, label })
         },
         withMaterials(
           request.canvas
@@ -160,7 +162,8 @@ if (!hasSingleInstanceLock) {
           done: (text) => safeSend(sender, 'chat-expand-chunk', { requestId, text, done: true }),
           cancelled: (text) =>
             safeSend(sender, 'chat-expand-chunk', { requestId, text, done: true, cancelled: true }),
-          failed: (error) => safeSend(sender, 'chat-expand-chunk', { requestId, error })
+          failed: (error) => safeSend(sender, 'chat-expand-chunk', { requestId, error }),
+          activity: (label) => safeSend(sender, 'chat-activity', { requestId, label })
         },
         agent
       )
@@ -379,6 +382,8 @@ interface StreamEvents {
   done: (text: string) => void
   cancelled: (partialText: string) => void
   failed: (error: string) => void
+  /** A tool call began; the window shows it until text arrives. */
+  activity: (label: string) => void
 }
 
 /**
@@ -400,9 +405,15 @@ async function streamToSender(
   sender.once('destroyed', onDestroyed)
   activeStreams.set(requestId, { controller, senderId: sender.id })
   const batcher = createChunkBatcher(events.chunk)
+  // Text before the call goes out first, so a chunk the window receives always follows it.
+  const reported = withToolActivity(agent, (label) => {
+    if (controller.signal.aborted) return
+    batcher.flush()
+    events.activity(label)
+  })
   let fullResponse = ''
   try {
-    for await (const chunk of callProviderStream(messages, role, controller.signal, agent)) {
+    for await (const chunk of callProviderStream(messages, role, controller.signal, reported)) {
       fullResponse += chunk
       batcher.push(chunk)
     }
