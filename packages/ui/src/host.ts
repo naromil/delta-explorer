@@ -21,6 +21,11 @@ export interface StreamRequest {
   requestId: string
   messages: ProviderMessage[]
   role: 'chat' | 'lookup'
+  /**
+   * A canvas card's answer: the model may add cards beside it, reported through `card`. A
+   * host without the canvas tools ignores this and the answer is plain text.
+   */
+  canvas?: { explore: boolean }
 }
 
 export interface ExpandChunkEvent {
@@ -38,6 +43,8 @@ export interface StreamListener {
   response: (data: { requestId: string; text: string; cancelled?: boolean }) => void
   error: (data: { requestId: string; error: string }) => void
   expandChunk: (data: ExpandChunkEvent) => void
+  /** A card the model added beside a canvas answer; `card` is untrusted (`soundSpawn`). */
+  card?: (data: { requestId: string; card: unknown }) => void
 }
 
 export type ExportResult = { ok: true; path: string } | { ok: false; error: string }

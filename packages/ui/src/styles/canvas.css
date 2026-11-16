@@ -1124,6 +1124,13 @@
     opacity var(--dur-2) var(--ease-out);
 }
 
+/* How a concept map branch relates to its parent: words on the session line, not a control. */
+.canvas-relation-label {
+  color: var(--text-2);
+  font-style: italic;
+  pointer-events: none;
+}
+
 .canvas-connector-label.is-selected {
   border-color: var(--accent);
 }

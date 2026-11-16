@@ -457,3 +457,512 @@
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
+
+/* ---- Diagrams (VisualBlock): fenced flow, cycle, timeline, tree, venn and matrix blocks ---- */
+
+/* Every part is a span (an expansion frame's host is one), so each sets its own display. */
+.md-visual {
+  position: relative;
+  display: block;
+  container-type: inline-size;
+  margin: 0.6em 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.md-visual-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease-out);
+}
+
+.md-visual:hover .md-visual-toggle,
+.md-visual-toggle:focus-visible {
+  opacity: 1;
+}
+
+.md-visual-source {
+  display: block;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.88em;
+  white-space: pre-wrap;
+  color: var(--text-2);
+}
+
+.md-visual-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+.md-visual-title {
+  display: block;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.md-visual-detail {
+  display: block;
+  font-size: 0.9em;
+  color: var(--text-2);
+}
+
+/* Flow: boxes joined by arrows, a column on a narrow card. */
+.md-visual-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 6px 0;
+}
+
+.md-visual-step {
+  display: flex;
+  align-items: center;
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.md-visual-step .md-visual-box {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.md-visual-index {
+  display: block;
+  font-size: 0.75em;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.md-visual-arrow {
+  display: block;
+  flex: none;
+  width: 18px;
+  height: 12px;
+  margin: 0 4px;
+  background: var(--text-3);
+  clip-path: polygon(0 40%, 60% 40%, 60% 0, 100% 50%, 60% 100%, 60% 60%, 0 60%);
+}
+
+@container (max-width: 460px) {
+  .md-visual-flow {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  .md-visual-step {
+    flex-direction: column;
+    align-items: stretch;
+    flex: none;
+  }
+
+  .md-visual-step .md-visual-arrow {
+    align-self: center;
+    width: 12px;
+    height: 16px;
+    margin: 0 0 6px;
+    clip-path: polygon(40% 0, 60% 0, 60% 60%, 100% 60%, 50% 100%, 0 60%, 40% 60%);
+  }
+}
+
+/* Cycle: stages on a ring, a list on a narrow card. */
+.md-visual-ring {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 520px;
+  aspect-ratio: 1;
+  margin: 0 auto;
+}
+
+.md-visual-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.md-visual-ring path {
+  fill: none;
+  stroke: var(--text-3);
+  stroke-width: 0.8;
+}
+
+.md-visual-ring marker path {
+  fill: var(--text-3);
+  stroke: none;
+}
+
+.md-visual-stage {
+  position: absolute;
+  width: 30%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.md-visual-cycle-list {
+  display: none;
+}
+
+.md-visual-repeat {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.9em;
+  color: var(--text-3);
+  text-align: center;
+}
+
+@container (max-width: 340px) {
+  .md-visual-ring {
+    display: none;
+  }
+
+  .md-visual-cycle-list {
+    display: block;
+  }
+}
+
+/* Timeline: a line with a dot per event. */
+.md-visual-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 18px;
+  border-left: 2px solid var(--border-strong);
+  margin-left: 6px;
+}
+
+.md-visual-event {
+  position: relative;
+  display: block;
+}
+
+.md-visual-dot {
+  position: absolute;
+  top: 0.35em;
+  left: -25px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--surface-2);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.md-visual-when {
+  display: block;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* Tree: each level indented under a line from its parent. */
+.md-visual-tree,
+.md-visual-node {
+  display: block;
+}
+
+.md-visual-node > .md-visual-box {
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.md-visual-node.is-root > .md-visual-box {
+  border-color: var(--accent);
+}
+
+.md-visual-children {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 0 12px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border-strong);
+}
+
+.md-visual-children > .md-visual-node {
+  position: relative;
+}
+
+.md-visual-children > .md-visual-node::before {
+  content: '';
+  position: absolute;
+  top: 1em;
+  left: -14px;
+  width: 12px;
+  border-top: 1px solid var(--border-strong);
+}
+
+/* Venn: two ellipses that stretch with what they hold. */
+.md-visual-venn {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40% 20% 40%;
+  min-height: 160px;
+  isolation: isolate;
+}
+
+.md-visual-set {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 60%;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--accent-soft);
+  z-index: -1;
+}
+
+.md-visual-set--left {
+  left: 0;
+}
+
+.md-visual-set--right {
+  right: 0;
+}
+
+.md-visual-region {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 24px 10% 24px 16%;
+  text-align: center;
+}
+
+.md-visual-region:last-child {
+  padding: 24px 16% 24px 10%;
+}
+
+.md-visual-region--both {
+  padding: 24px 2px;
+}
+
+.md-visual-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.md-visual-item {
+  display: block;
+  font-size: 0.9em;
+  color: var(--text-2);
+}
+
+.md-visual-matrix .md-visual-item::before {
+  content: '• ';
+  color: var(--text-3);
+}
+
+/* Matrix: four quadrants, with axes when they are labelled. */
+.md-visual-matrix {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.md-visual-matrix.has-y {
+  grid-template-columns: auto 1fr;
+}
+
+.md-visual-quadrants {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.md-visual-quadrant {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+.md-visual-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8em;
+  color: var(--text-3);
+}
+
+.md-visual-axis--y {
+  /* Read bottom to top; after the turn, row-reverse puts the high end at the top. */
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  flex-direction: row-reverse;
+}
+
+.md-visual-matrix.has-y .md-visual-axis--x {
+  grid-column: 2;
+}
+
+/* A tree has many small nodes: title and detail share a line where they fit. */
+.md-visual-node > .md-visual-box {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+}
+
+/* Graph: functions plotted on a grid; series colours come from the syntax-highlighting tokens. */
+.md-visual-graph {
+  display: block;
+}
+
+.md-visual-graph svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.md-graph-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.md-graph-axis {
+  stroke: var(--text-3);
+  stroke-width: 1.2;
+}
+
+.md-graph-tick {
+  fill: var(--text-3);
+  font-size: 9px;
+}
+
+.md-graph-curve {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.md-graph-vertical {
+  stroke: var(--text-3);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
+}
+
+.md-graph-point {
+  fill: var(--accent);
+  stroke: var(--surface-2);
+  stroke-width: 1.5;
+}
+
+.md-graph-label {
+  fill: var(--text-1);
+  font-size: 10px;
+}
+
+.md-visual-graph .md-graph-series-0 {
+  --series: var(--code-title);
+}
+
+.md-visual-graph .md-graph-series-1 {
+  --series: var(--code-number);
+}
+
+.md-visual-graph .md-graph-series-2 {
+  --series: var(--code-string);
+}
+
+.md-visual-graph .md-graph-series-3 {
+  --series: var(--code-keyword);
+}
+
+.md-graph-curve {
+  stroke: var(--series);
+}
+
+.md-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82em;
+  color: var(--text-2);
+}
+
+.md-graph-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.md-graph-key::before {
+  content: '';
+  width: 14px;
+  border-top: 2.5px solid var(--series, var(--text-3));
+}
+
+.md-graph-key--vertical::before {
+  border-top-style: dashed;
+}
+
+/* Chart: horizontal bars against the largest value. */
+.md-visual-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.md-chart-row {
+  display: grid;
+  grid-template-columns: minmax(60px, 32%) 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9em;
+}
+
+.md-chart-label {
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-chart-track {
+  display: block;
+  height: 12px;
+}
+
+.md-chart-bar {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.md-chart-bar.is-negative {
+  background: var(--code-attr);
+}
+
+.md-chart-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}

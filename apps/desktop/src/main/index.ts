@@ -59,6 +59,8 @@ import { registerModelCatalogIpcHandlers } from './services/model-catalog'
 import { memoryAgentFor, withAutoLoadedMemories } from './memory/tools'
 import { closeRenderWindow, isRenderWindow } from './materials/render'
 import { withMaterials } from './materials/tools'
+import { withCanvasTools } from './canvas-tools'
+import type { CanvasToolOptions } from './canvas-tools'
 
 interface ActiveStream {
   controller: AbortController
@@ -117,7 +119,14 @@ if (!hasSingleInstanceLock) {
             safeSend(sender, 'chat-response', { requestId, text, cancelled: true }),
           failed: (error) => safeSend(sender, 'chat-error', { requestId, error })
         },
-        withMaterials(memoryAgentFor(ASSISTANT_ROLE), modelImageSupport(ASSISTANT_ROLE))
+        withMaterials(
+          request.canvas
+            ? withCanvasTools(memoryAgentFor(ASSISTANT_ROLE), request.canvas, (card) =>
+                safeSend(sender, 'chat-card', { requestId, card })
+              )
+            : memoryAgentFor(ASSISTANT_ROLE),
+          modelImageSupport(ASSISTANT_ROLE)
+        )
       )
     })
 
@@ -346,6 +355,8 @@ const ASSISTANT_ROLE: RoleId = 'chat'
 interface StreamPayload {
   requestId: string
   messages: ProviderMessage[]
+  /** A canvas card's answer, which may add cards beside itself. */
+  canvas?: CanvasToolOptions
 }
 
 function parseStreamPayload(payload: unknown): StreamPayload | null {
@@ -353,7 +364,14 @@ function parseStreamPayload(payload: unknown): StreamPayload | null {
   const raw = payload as Record<string, unknown>
   const messages = parseProviderMessages(raw.messages)
   if (typeof raw.requestId !== 'string' || raw.requestId === '' || !messages) return null
-  return { requestId: raw.requestId, messages }
+  const canvas = raw.canvas as Record<string, unknown> | undefined
+  return {
+    requestId: raw.requestId,
+    messages,
+    ...(typeof canvas === 'object' && canvas !== null
+      ? { canvas: { explore: canvas.explore === true } }
+      : {})
+  }
 }
 
 interface StreamEvents {
