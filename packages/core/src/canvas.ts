@@ -49,6 +49,10 @@ export interface CanvasMessageCard {
   parentId?: string
   /** Cards asked about: their text goes with the request, not their history. */
   sources?: string[]
+  /** Added by the model through a canvas tool, not asked by the user. */
+  spawned?: true
+  /** How its parent's answer relates to it, written on the line from the parent. */
+  relation?: string
   color?: CanvasColor
   /** Shown as its title alone; this is the height to return to. */
   collapsedFrom?: number
@@ -1452,6 +1456,12 @@ function soundCard(card: CanvasCard, ids: ReadonlySet<string>): CanvasCard {
     next = withoutField(next as CanvasExpansionCard & { inset?: unknown }, 'inset')
   }
   if (next.kind !== 'message') return next
+  if (next.spawned !== undefined && next.spawned !== true) next = withoutField(next, 'spawned')
+  if (next.relation !== undefined) {
+    const relation = typeof next.relation === 'string' ? next.relation.trim() : ''
+    if (relation === '') next = withoutField(next, 'relation')
+    else if (relation !== next.relation) next = { ...next, relation }
+  }
   // The session it continued is gone; it stands on its own now.
   if (next.parentId !== undefined && !ids.has(next.parentId)) {
     next = withoutField(next, 'parentId')

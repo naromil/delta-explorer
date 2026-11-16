@@ -38,6 +38,8 @@ import type { CanvasContextLink } from '@delta/core/canvas-context'
 import type { ConversationMeta, ProviderMessage, Turn } from '@delta/core/conversation'
 import { CONVERSATION_TITLE_MAX_LENGTH, buildConversationTitle } from '@delta/core/conversation'
 import { expansionCardRequest, messageCardRequest } from '@delta/core/canvas-request'
+import type { CanvasSpawn } from '@delta/core/canvas-spawn'
+import { soundSpawn, spawnRect } from '@delta/core/canvas-spawn'
 import type { ExpansionRange, ExpansionTarget } from '@delta/core/rich-text'
 import {
   applyExpansionChunk,
@@ -81,6 +83,12 @@ interface CanvasMeta {
 }
 
 type PendingRequest = { kind: 'send'; turnId: number } | { kind: 'expand'; expansionId: number }
+
+/** A card the model added through a canvas tool, rather than one the user asked. */
+export interface CanvasSpawnedForm {
+  relation?: string
+  spawned?: boolean
+}
 
 export interface CanvasCardUpdate {
   id: string
@@ -273,7 +281,8 @@ export function useCanvas(asker?: CanvasAsker | null): {
     question: string,
     parentId: string | undefined,
     sources?: readonly string[],
-    context?: readonly CanvasContextLink[]
+    context?: readonly CanvasContextLink[],
+    spawned?: CanvasSpawnedForm
   ) => string
   /** Puts a page on the canvas as the first context of every session continuing it. */
   addPage: (rect: CanvasRect | undefined, page: CanvasPageInput) => string
@@ -308,6 +317,8 @@ export function useCanvas(asker?: CanvasAsker | null): {
   const askerStopsRef = useRef(new Map<string, () => void>())
   /** The stream listener, which an asker's events go through as the host's do. */
   const listenerRef = useRef<StreamListener | null>(null)
+  /** Exploration cards an answer asked for, held until it finishes so they see all of it. */
+  const pendingExploresRef = useRef(new Map<number, Extract<CanvasSpawn, { kind: 'explore' }>[]>())
   const expansionCounterRef = useRef(1)
   const saveTimerRef = useRef<number | null>(null)
   const loadStartedRef = useRef(false)
@@ -518,8 +529,12 @@ export function useCanvas(asker?: CanvasAsker | null): {
       const requestId = generateRequestId()
       requestsRef.current.set(requestId, { kind: 'send', turnId: card.turnId })
       syncStreaming()
-      if (messages) host.send({ messages, requestId, role: 'chat' })
-      else askElsewhere(requestId, { kind: 'send', cardId: card.id })
+      if (messages) {
+        // A card the model added may still draw, but does not branch further on its own.
+        host.send({ messages, requestId, role: 'chat', canvas: { explore: !card.spawned } })
+      } else {
+        askElsewhere(requestId, { kind: 'send', cardId: card.id })
+      }
     },
     [askElsewhere, host, syncStreaming]
   )
@@ -675,7 +690,8 @@ export function useCanvas(asker?: CanvasAsker | null): {
       question: string,
       parentId: string | undefined,
       sources: readonly string[] = [],
-      context: readonly CanvasContextLink[] = []
+      context: readonly CanvasContextLink[] = [],
+      spawned: CanvasSpawnedForm = {}
     ): string => {
       const userTurnId = nextTurnId++
       const turnId = nextTurnId++
@@ -686,7 +702,9 @@ export function useCanvas(asker?: CanvasAsker | null): {
         userTurnId,
         turnId,
         ...(parentId !== undefined ? { parentId } : {}),
-        ...(sources.length > 0 ? { sources: [...sources] } : {})
+        ...(sources.length > 0 ? { sources: [...sources] } : {}),
+        ...(spawned.spawned ? { spawned: true as const } : {}),
+        ...(spawned.relation ? { relation: spawned.relation } : {})
       }
       if (metaRef.current.title === UNTITLED) nameCanvas(question)
       updateDoc((prev) => ({
@@ -714,6 +732,11 @@ export function useCanvas(asker?: CanvasAsker | null): {
     },
     [nameCanvas, requestSave, sendCard, updateDoc]
   )
+  // The stream listener asks exploration cards; it reads `ask` through this.
+  const askRef = useRef(ask)
+  useEffect(() => {
+    askRef.current = ask
+  }, [ask])
 
   const addPage = useCallback(
     (rect: CanvasRect | undefined, page: CanvasPageInput): string => {
@@ -1353,6 +1376,53 @@ export function useCanvas(asker?: CanvasAsker | null): {
       const card = docRef.current.layout.cards.find(matches)
       if (card) requestFit(card.id)
     }
+    const answeringCard = (turnId: number): CanvasCard | undefined =>
+      docRef.current.layout.cards.find((card) => card.kind === 'message' && card.turnId === turnId)
+    /** A visual card holds what the model wrote, so it stands finished the moment it arrives. */
+    const addVisual = (
+      parent: CanvasCard,
+      spawn: Extract<CanvasSpawn, { kind: 'visual' }>
+    ): void => {
+      const rect = spawnRect(docRef.current.layout.cards, parent.id, 'visual')
+      if (!rect) return
+      const userTurnId = nextTurnId++
+      const turnId = nextTurnId++
+      const card: CanvasCard = {
+        kind: 'message',
+        id: crypto.randomUUID(),
+        rect,
+        userTurnId,
+        turnId,
+        parentId: parent.id,
+        spawned: true,
+        ...(spawn.relation ? { relation: spawn.relation } : {})
+      }
+      updateDoc((prev) => ({
+        turns: [
+          ...prev.turns,
+          { id: userTurnId, role: 'user', content: spawn.title, expansions: [] },
+          { id: turnId, role: 'assistant', content: spawn.content, expansions: [] }
+        ],
+        layout: { ...prev.layout, cards: [...prev.layout.cards, card] }
+      }))
+      requestFit(card.id)
+      requestSave(true)
+    }
+    /** Once the answer is whole, each exploration it asked for gets its card and its question. */
+    const growExplores = (turnId: number): void => {
+      const explores = pendingExploresRef.current.get(turnId) ?? []
+      pendingExploresRef.current.delete(turnId)
+      const parent = answeringCard(turnId)
+      if (!parent) return
+      for (const spawn of explores) {
+        const rect = spawnRect(docRef.current.layout.cards, parent.id, 'explore')
+        if (!rect) return
+        askRef.current(rect, spawn.question, parent.id, [], [], {
+          spawned: true,
+          ...(spawn.relation ? { relation: spawn.relation } : {})
+        })
+      }
+    }
     const editTurn = (turnId: number, change: (turn: Turn) => Turn): void => {
       updateDoc((prev) => ({
         ...prev,
@@ -1374,13 +1444,30 @@ export function useCanvas(asker?: CanvasAsker | null): {
         // A stopped answer is not what the rectangle was for, so it keeps its size.
         if (!cancelled && text.trim() !== '') {
           fitAnswered((card) => card.kind === 'message' && card.turnId === request.turnId)
+          growExplores(request.turnId)
+        } else {
+          pendingExploresRef.current.delete(request.turnId)
         }
       },
       error: ({ requestId, error }) => {
         const request = requestsRef.current.get(requestId)
         if (request?.kind !== 'send') return
         editTurn(request.turnId, (turn) => ({ ...turn, content: error, error: true }))
+        pendingExploresRef.current.delete(request.turnId)
         settle(requestId)
+      },
+      card: ({ requestId, card: raw }) => {
+        const request = requestsRef.current.get(requestId)
+        if (request?.kind !== 'send') return
+        const spawn = soundSpawn(raw)
+        const parent = answeringCard(request.turnId)
+        if (!spawn || !parent) return
+        if (spawn.kind === 'visual') {
+          addVisual(parent, spawn)
+          return
+        }
+        const held = pendingExploresRef.current.get(request.turnId) ?? []
+        pendingExploresRef.current.set(request.turnId, [...held, spawn])
       },
       expandChunk: (data) => {
         const request = requestsRef.current.get(data.requestId)

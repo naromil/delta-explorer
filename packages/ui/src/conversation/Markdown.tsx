@@ -23,8 +23,10 @@ import { isSameRange } from '@delta/core/rich-text'
 import { highlightCode } from '../lib/highlight'
 import { renderMath } from '../lib/math'
 import { safeHref } from '../lib/safe-url'
+import { isVisualLanguage } from '../lib/visuals'
 import { EXPANSION_NODE, SOURCED_TEXT, isDisplayMath, prepareMarkdownTree } from '../lib/markdown'
 import type { MarkdownNode } from '../lib/markdown'
+import VisualBlock from './VisualBlock'
 
 const EXPANSION_ELEMENT = 'expansion-frame'
 const MATH_ELEMENT = 'math-formula'
@@ -174,9 +176,13 @@ function CodeBlock({ children }: CodeBlockProps): React.JSX.Element {
   )
 }
 
+/** A fenced block in a diagram language, drawn by `VisualBlock` instead of shown as code. */
+const VISUAL_ELEMENT = 'delta-visual'
+
 const INLINE_COMPONENTS: Record<string, React.ComponentType<never>> = {
   [EXPANSION_ELEMENT]: ExpansionSlot as React.ComponentType<never>,
   [MATH_ELEMENT]: MathFormula as React.ComponentType<never>,
+  [VISUAL_ELEMENT]: VisualBlock as React.ComponentType<never>,
   p: inlineElement('md-p') as React.ComponentType<never>,
   h1: inlineElement('md-h1') as React.ComponentType<never>,
   h2: inlineElement('md-h2') as React.ComponentType<never>,
@@ -205,6 +211,7 @@ const INLINE_COMPONENTS: Record<string, React.ComponentType<never>> = {
 const BLOCK_COMPONENTS: Record<string, React.ComponentType<never>> = {
   [EXPANSION_ELEMENT]: ExpansionSlot as React.ComponentType<never>,
   [MATH_ELEMENT]: MathFormula as React.ComponentType<never>,
+  [VISUAL_ELEMENT]: VisualBlock as React.ComponentType<never>,
   pre: CodeBlock as React.ComponentType<never>,
   img: ImageFallback as React.ComponentType<never>,
   a: Anchor as React.ComponentType<never>
@@ -253,6 +260,18 @@ function createHandlers(source: string, anchored: boolean): Handlers {
       mathElement(node.value ?? '', true, atomProperties(node, anchored)),
     code: (_state, node: MarkdownNode) => {
       const language = node.lang?.split(/\s+/)[0]
+      if (isVisualLanguage(language)) {
+        return {
+          type: 'element',
+          tagName: VISUAL_ELEMENT,
+          properties: {
+            'data-kind': language,
+            'data-source': node.value ?? '',
+            ...atomProperties(node, anchored)
+          },
+          children: []
+        }
+      }
       return {
         type: 'element',
         tagName: 'pre',

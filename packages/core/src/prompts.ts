@@ -19,7 +19,7 @@ export function getSystemPrompt(role?: 'chat' | 'lookup'): string {
 
 /** A client that serves the memory tools over MCP renames them; this maps the two. */
 export function buildMcpToolNamesNote(prefix: string): string {
-  return `Here the memory_* tools are named with the prefix ${prefix} (for example ${prefix}memory_cat for memory_cat).`
+  return `Here the tools are named with the prefix ${prefix} (for example ${prefix}memory_cat for memory_cat, ${prefix}canvas_add_visual for canvas_add_visual).`
 }
 
 /* ---- Conversation titles ---- */
@@ -223,6 +223,96 @@ export function buildCanvasContextNote(items: CanvasContextExcerpt[]): string {
   return [
     'The user linked this material from elsewhere on their canvas into this conversation: a <note> is their own text, a <card> one question and answer, a <branch> a separate conversation, and a <quote> a passage they selected in a card (its title names the card). It is not part of this conversation, so do not assume it was said here. Use it where it is relevant.',
     ...blocks
+  ].join('\n\n')
+}
+
+/* ---- Visual blocks and card forms ---- */
+
+/**
+ * How to write each diagram the renderer draws (`ui/lib/visuals.ts`). A diagram is a fenced
+ * block whose language names it; one item per line, `Title: detail` where a detail helps.
+ */
+export const VISUAL_BLOCK_SYNTAX = {
+  flow: [
+    'A flow (steps in order, drawn as boxes joined by arrows) is a fenced code block with the language `flow`: one step per line, written as `Short title: one-line detail` or just `Short title`. Example:',
+    '```flow\nLight absorbed: chlorophyll takes in light energy\nWater split: releases oxygen\nSugar built: the Calvin cycle fixes CO2\n```'
+  ].join('\n'),
+  cycle: [
+    'A cycle (stages that repeat, drawn as a ring) is a fenced code block with the language `cycle`: one stage per line in order, `Short title: one-line detail` or `Short title`, 3 to 8 stages. Example:',
+    '```cycle\nEvaporation: water turns to vapour\nCondensation: vapour forms clouds\nPrecipitation: rain or snow falls\nCollection: water gathers in oceans\n```'
+  ].join('\n'),
+  timeline: [
+    'A timeline is a fenced code block with the language `timeline`: one event per line in order, written as `When: what happened`. Example:',
+    '```timeline\n1543: Copernicus puts the Sun at the centre\n1609: Kepler publishes elliptical orbits\n1687: Newton explains them with gravity\n```'
+  ].join('\n'),
+  tree: [
+    'A tree (a whole broken into parts) is a fenced code block with the language `tree`: one node per line, indented two spaces per level below the single root, `Title: detail` or `Title`. Example:',
+    '```tree\nCell\n  Nucleus: holds DNA\n  Cytoplasm\n    Mitochondria: make ATP\n    Ribosomes: build proteins\n  Membrane: controls what enters\n```'
+  ].join('\n'),
+  venn: [
+    'A Venn diagram (two things, what is unique to each and what they share) is a fenced code block with the language `venn`: three sections, each a `[Heading]` line followed by `- item` lines: first the left set, then the right set, then `[Both]`. Example:',
+    '```venn\n[Mitosis]\n- two identical cells\n[Meiosis]\n- four varied cells\n[Both]\n- copy DNA first\n```'
+  ].join('\n'),
+  matrix: [
+    'A 2×2 matrix is a fenced code block with the language `matrix`: optionally `x: low label | high label` and `y: low label | high label` lines for the axes, then four sections, each a `[Heading]` line followed by `- item` lines, in the order top left, top right, bottom left, bottom right. Example:',
+    '```matrix\nx: urgent | not urgent\ny: unimportant | important\n[Do now]\n- deadlines today\n[Schedule]\n- exercise\n[Delegate]\n- some emails\n[Drop]\n- idle scrolling\n```'
+  ].join('\n'),
+  graph: [
+    'A graph of mathematical functions is a fenced code block with the language `graph`: one function of x per line as `name = expression` (for example `y = x^2 - 2` or `f(x) = sin(x)`), up to 4; `x = number` for a vertical line such as an asymptote; optional `x: min | max` and `y: min | max` lines for the visible range (y is fitted to the curves when left out); and `point: (x, y) label` lines to mark points. Expressions use x, numbers, + - * / ^, parentheses, pi, e, and sin cos tan asin acos atan sinh cosh tanh sqrt cbrt abs ln log log2 exp floor ceil sign. Example:',
+    '```graph\ny = x^2 - 2\ny = 2x + 1\nx: -4 | 4\npoint: (0, -2) vertex\n```'
+  ].join('\n'),
+  chart: [
+    'A bar chart of quantities is a fenced code block with the language `chart`: an optional `title: what is measured, with its unit` line, then one bar per line as `Label: number`. Example:',
+    '```chart\ntitle: Planet radius (thousand km)\nMercury: 2.4\nEarth: 6.4\nJupiter: 69.9\n```'
+  ].join('\n')
+} as const
+
+export type VisualBlockKind = keyof typeof VISUAL_BLOCK_SYNTAX
+
+const VISUAL_BLOCK_RULES =
+  'Inside a diagram block, write only what its syntax allows: no markdown, links or $ formulas. Keep each title to a few words and each detail to one short line, and put any explanation outside the block.'
+
+/** Every diagram the renderer draws, with the rules for writing inside one. */
+export function buildVisualBlockGuide(): string {
+  return [...Object.values(VISUAL_BLOCK_SYNTAX), VISUAL_BLOCK_RULES].join('\n\n')
+}
+
+/* ---- Canvas card tools ---- */
+
+/** How many cards one canvas answer may add of each kind; main enforces it. */
+export const CANVAS_SPAWN_LIMITS = { explore: 4, visual: 3 } as const
+
+export const CANVAS_TOOL_DESCRIPTIONS = {
+  explore:
+    'Add a card next to your answer on the canvas that answers a follow-up question in its own space, continuing this conversation. The user sees the card right away and its answer is written after yours finishes.',
+  visual:
+    'Add a card next to your answer on the canvas showing a visual you write now: a graph, chart or diagram, as markdown holding exactly one diagram block, optionally with a short caption line.'
+} as const
+
+export const CANVAS_TOOL_FIELDS = {
+  question:
+    'The follow-up question the new card answers, self-contained, as the user would ask it.',
+  title: 'A short title for the visual card, a few words.',
+  content: 'The card: one diagram block in the syntax described, optionally a one-line caption.',
+  relation:
+    'How your answer relates to the new card, as a 1 to 4 word phrase read from your answer to the card, shown on the line between them (for example "graphed as", "depends on", "is a kind of").'
+} as const
+
+/**
+ * When the canvas tools are offered. Spawned exploration cards get only the visual tool, so
+ * branching stays one level deep unless the user asks again.
+ */
+export function buildCanvasToolInstructions(explore: boolean): string {
+  return [
+    'Your answer appears in a card on an infinite canvas, and you can add cards beside it with the canvas tools. Your own answer is text: never draw a diagram block in it; put every visual in a card instead.',
+    `Use canvas_add_visual when seeing it helps the user learn: a graph when a function or rate is involved, a chart for quantities, a diagram for a process, cycle, timeline, structure, comparison or classification. At most ${CANVAS_SPAWN_LIMITS.visual} per answer; usually zero or one.`,
+    ...(explore
+      ? [
+          `Use canvas_add_explore when something deserves more than your space allows, or a concept the user likely does not know would stop them understanding: name it briefly in your answer and give it its own card instead of cramming it in. At most ${CANVAS_SPAWN_LIMITS.explore} per answer; add none when the answer is complete as it is.`
+        ]
+      : []),
+    'Call the tools before or while writing your answer, and refer to the cards naturally ("see the graph beside this") rather than describing the tool.',
+    buildVisualBlockGuide()
   ].join('\n\n')
 }
 

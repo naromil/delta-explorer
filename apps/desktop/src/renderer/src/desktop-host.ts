@@ -22,7 +22,8 @@ export const desktopHost: UiHost = {
       window.api.chatOnChunk(listener.chunk),
       window.api.chatOnResponse(listener.response),
       window.api.chatOnError(listener.error),
-      window.api.chatOnExpandChunk(listener.expandChunk)
+      window.api.chatOnExpandChunk(listener.expandChunk),
+      ...(listener.card ? [window.api.chatOnCard(listener.card)] : [])
     ]
     return () => {
       for (const unsub of unsubs) unsub()

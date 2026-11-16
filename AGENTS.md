@@ -114,6 +114,7 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 | `conversation-open`                       | Both            | Any window asks main to open `{id, source}`; main raises a live popup or tells the main window     |
 | `conversation-list-unfed` / `-kb-fed`     | Renderer → Main | KB model integration: list unfed; mark fed                                                         |
 | `conversation-export`                     | Renderer → Main | Save a conversation as markdown (`{ok,path}` or `{ok:false,error}`; cancel is `'Canceled.'`)       |
+| `chat-card`                               | Main → Renderer | A card the model added through a canvas tool during a canvas `chat-send` (`{requestId, card}`)     |
 | `conversation-generate-title`             | Renderer → Main | A model-written title from the first message (`string` or `null`, never throws)                    |
 
 | `kb-analyze` / `kb-reanalyze` | Renderer → Main | Manual curator passes over unfed conversations / the last N |
@@ -138,6 +139,7 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 | `canvas-history.ts`    | Undo as patches: `diffCanvas`, `applyCanvasPatch` (leaves what the patch did not touch, refuses a turn that moved on)                                                                                                                                                                                        |
 | `canvas-tidy.ts`       | `tidySelection`: attached blocks stay rigid; parent-child families drawn as trees that keep each child on its side, packed in the order that crosses fewest lines                                                                                                                                            |
 | `canvas-straighten.ts` | `straightenBlocks`: lines up edges inside attached cards without resizing or detaching them; a block with a frame is left alone                                                                                                                                                                              |
+| `canvas-spawn.ts`      | Cards the model adds through the canvas tools: `soundSpawn` (distrusts the tool input), `spawnRect` (a column on the answer's right)                                                                                                                                                                         |
 | `canvas-outline.ts`    | The canvas as a list: `canvasOutline`, `searchCanvasOutline`                                                                                                                                                                                                                                                 |
 | `canvas-context.ts`    | What links send: `sessionContextLinks`, `contextExcerpts` (limits, shared history once, quoted passages), `requestContext`                                                                                                                                                                                   |
 | `canvas-request.ts`    | What a card sends: `messageCardRequest` (session, sources, links, fit) and `expansionCardRequest` (a page's terms get the page as context)                                                                                                                                                                   |
@@ -205,106 +207,109 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 
 ##### Renderer (`src/renderer/src/`)
 
-| Module           | Path                                                                    | Role                                                                                                                                                         |
-| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Entry point      | `main.tsx`                                                              | createRoot, imports CSS, mounts Root                                                                                                                         |
-| Root router      | `Root.tsx`                                                              | Routes App (main window) vs LookupApp (popup) by `?role=lookup`                                                                                              |
-| App shell        | `App.tsx`                                                               | Sidebar + 6-view routing, global Ctrl+N/Ctrl+K, search modal, composer draft                                                                                 |
-| Lookup popup     | `LookupApp.tsx`                                                         | Header, context panel, ask input, paste handling, grow transitions                                                                                           |
-| Chat hook        | `hooks/useChatStreaming.ts`                                             | Owns ConversationState, stop/retry/regenerate/rename, routes requests via `hooks/chat/*`, auto-saves                                                         |
-| Chat requests    | `hooks/chat/{requests,persistence,transport}.ts`                        | Pure request book (pending ids, `activeSendId`, drain helpers), autosave effect, IPC subscriptions + stale-id drops                                          |
-| Canvas state     | `ui/canvas/useCanvas.ts`                                                | Open canvas, its streams and autosave; lives in `App` so answers survive a view change                                                                       |
-| Canvas view      | `ui/canvas/*`                                                           | `CanvasView` (gestures, follow), `CanvasCardView`, `CanvasNoteView`, `CanvasFrames`, `CanvasDraft`, `CanvasLinks`, `CanvasShortcuts`; styles in `canvas.css` |
-| Canvas chrome    | `ui/canvas/*`                                                           | `CanvasToolRail`, `CanvasSelectionBar`, `CanvasOutline`, `CanvasMinimap`, `canvas-menus.ts` (right-click lists)                                              |
-| Canvas input     | `ui/canvas/useCanvasKeyboard.ts`, `useEdgePan.ts`                       | Board-wide keys and paste; panning while a drag is near the edge of the view                                                                                 |
-| Viewport motion  | `ui/lib/viewport-motion.ts`                                             | Eases wheel zoom/pan and paints frames directly; React gets the viewport once it rests                                                                       |
-| Scroll following | `ui/lib/stick-to-bottom.ts`                                             | Pins chat/popup views to the bottom while a response streams; an upward scroll unpins                                                                        |
-| Conversation     | `components/conversation/Conversation.tsx`                              | Message list, composer + Stop button (Esc), toolbar (export/delete), context menu                                                                            |
-| Turn             | `components/conversation/Turn.tsx`                                      | Single message (user/assistant) with avatar, markdown body, retry, inline edit-and-resend                                                                    |
-| Markdown         | `ui/conversation/Markdown.tsx`                                          | remark → mdast → hast → React; block mode for turns, inline mode+`md-*` spans for frames; `data-src` text anchors                                            |
-| Markdown core    | `ui/lib/markdown.ts`                                                    | Pure parse/splice/anchor helpers (`prepareMarkdownTree`, `anchoredRange`, `isAnchoredRange`), math delimiters                                                |
-| Code / math      | `ui/lib/highlight.ts`, `ui/lib/math.ts`                                 | lowlight → hast (text-preserving) and KaTeX → HTML (`trust: false`)                                                                                          |
-| Image attach     | `ui/lib/image-attachments.ts`, `ui/conversation/useImageAttachments.ts` | Decode + scale + re-encode to JPEG; composer add flow (capability check, limits, notices)                                                                    |
-| ExpansionFrame   | `ui/conversation/ExpansionFrame.tsx`                                    | Inline expandable frames, folded pills, nested children                                                                                                      |
-| ContextMenu      | `ui/conversation/ContextMenu.tsx`                                       | Right-click Expand / Expand on… / Copy / Select All; also the list of answers on one range (`items`)                                                         |
-| ExpandPrompt     | `ui/conversation/ExpandPrompt.tsx`                                      | Floating input for a custom question ("Expand on…", "Ask…"), plus the one-click intents                                                                      |
-| Selection bar    | `ui/conversation/ExpandSelectionBar.tsx`                                | Floats over a selection in an answer: Expand, Ask…, Highlight, Link… (canvas), intents under More                                                            |
-| Search           | `components/conversation/ConversationSearch.tsx`                        | Ctrl/Cmd+K modal: search titles + messages, snippet, load/delete, errors                                                                                     |
-| Settings         | `views/settings/Settings.tsx`                                           | 3-tab settings orchestrator                                                                                                                                  |
-| Memory indicator | `components/MemoryIndicator.tsx`                                        | Transient "Memory updated" pill in both windows, driven by `memory-updated`                                                                                  |
-| Views            | `views/home/`, `views/knowledge/`, `views/lookup-guide/`                | Dashboard (recent conversations) and placeholder views                                                                                                       |
+| Module           | Path                                                                                                                                            | Role                                                                                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Entry point      | `main.tsx`                                                                                                                                      | createRoot, imports CSS, mounts Root                                                                                                                         |
+| Root router      | `Root.tsx`                                                                                                                                      | Routes App (main window) vs LookupApp (popup) by `?role=lookup`                                                                                              |
+| App shell        | `App.tsx`                                                                                                                                       | Sidebar + 6-view routing, global Ctrl+N/Ctrl+K, search modal, composer draft                                                                                 |
+| Lookup popup     | `LookupApp.tsx`                                                                                                                                 | Header, context panel, ask input, paste handling, grow transitions                                                                                           |
+| Chat hook        | `hooks/useChatStreaming.ts`                                                                                                                     | Owns ConversationState, stop/retry/regenerate/rename, routes requests via `hooks/chat/*`, auto-saves                                                         |
+| Chat requests    | `hooks/chat/{requests,persistence,transport}.ts`                                                                                                | Pure request book (pending ids, `activeSendId`, drain helpers), autosave effect, IPC subscriptions + stale-id drops                                          |
+| Canvas state     | `ui/canvas/useCanvas.ts`                                                                                                                        | Open canvas, its streams and autosave; lives in `App` so answers survive a view change                                                                       |
+| Canvas view      | `ui/canvas/*`                                                                                                                                   | `CanvasView` (gestures, follow), `CanvasCardView`, `CanvasNoteView`, `CanvasFrames`, `CanvasDraft`, `CanvasLinks`, `CanvasShortcuts`; styles in `canvas.css` |
+| Canvas chrome    | `ui/canvas/*`                                                                                                                                   | `CanvasToolRail`, `CanvasSelectionBar`, `CanvasOutline`, `CanvasMinimap`, `canvas-menus.ts` (right-click lists)                                              |
+| Canvas input     | `ui/canvas/useCanvasKeyboard.ts`, `useEdgePan.ts`                                                                                               | Board-wide keys and paste; panning while a drag is near the edge of the view                                                                                 |
+| Viewport motion  | `ui/lib/viewport-motion.ts`                                                                                                                     | Eases wheel zoom/pan and paints frames directly; React gets the viewport once it rests                                                                       |
+| Scroll following | `ui/lib/stick-to-bottom.ts`                                                                                                                     | Pins chat/popup views to the bottom while a response streams; an upward scroll unpins                                                                        |
+| Conversation     | `components/conversation/Conversation.tsx`                                                                                                      | Message list, composer + Stop button (Esc), toolbar (export/delete), context menu                                                                            |
+| Turn             | `components/conversation/Turn.tsx`                                                                                                              | Single message (user/assistant) with avatar, markdown body, retry, inline edit-and-resend                                                                    |
+| Markdown         | `ui/conversation/Markdown.tsx`                                                                                                                  | remark → mdast → hast → React; block mode for turns, inline mode+`md-*` spans for frames; `data-src` text anchors                                            |
+| Markdown core    | `ui/lib/markdown.ts`                                                                                                                            | Pure parse/splice/anchor helpers (`prepareMarkdownTree`, `anchoredRange`, `isAnchoredRange`), math delimiters                                                |
+| Code / math      | `ui/lib/highlight.ts`, `ui/lib/math.ts`                                                                                                         | lowlight → hast (text-preserving) and KaTeX → HTML (`trust: false`)                                                                                          |
+| Visuals          | `ui/lib/visuals.ts` (pure parser), `ui/lib/math-expression.ts`, `ui/conversation/VisualBlock.tsx`, `.md-visual*`/`.md-graph*` in `markdown.css` | Fenced `graph`/`chart`/`flow`/`cycle`/`timeline`/`tree`/`venn`/`matrix` blocks drawn as visuals; one selection atom each                                     |
+| Image attach     | `ui/lib/image-attachments.ts`, `ui/conversation/useImageAttachments.ts`                                                                         | Decode + scale + re-encode to JPEG; composer add flow (capability check, limits, notices)                                                                    |
+| ExpansionFrame   | `ui/conversation/ExpansionFrame.tsx`                                                                                                            | Inline expandable frames, folded pills, nested children                                                                                                      |
+| ContextMenu      | `ui/conversation/ContextMenu.tsx`                                                                                                               | Right-click Expand / Expand on… / Copy / Select All; also the list of answers on one range (`items`)                                                         |
+| ExpandPrompt     | `ui/conversation/ExpandPrompt.tsx`                                                                                                              | Floating input for a custom question ("Expand on…", "Ask…"), plus the one-click intents                                                                      |
+| Selection bar    | `ui/conversation/ExpandSelectionBar.tsx`                                                                                                        | Floats over a selection in an answer: Expand, Ask…, Highlight, Link… (canvas), intents under More                                                            |
+| Search           | `components/conversation/ConversationSearch.tsx`                                                                                                | Ctrl/Cmd+K modal: search titles + messages, snippet, load/delete, errors                                                                                     |
+| Settings         | `views/settings/Settings.tsx`                                                                                                                   | 3-tab settings orchestrator                                                                                                                                  |
+| Memory indicator | `components/MemoryIndicator.tsx`                                                                                                                | Transient "Memory updated" pill in both windows, driven by `memory-updated`                                                                                  |
+| Views            | `views/home/`, `views/knowledge/`, `views/lookup-guide/`                                                                                        | Dashboard (recent conversations) and placeholder views                                                                                                       |
 
 #### What to touch when
 
-| Task                                   | File(s)                                                                                                                        |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Share logic with the extension         | `packages/core/src/*` + a one-line re-export in `apps/extension/src/shared/` (pure code only)                                  |
-| Add an AI provider                     | `shared/models.ts` (`providerRegistry`) + `provider.ts` (`ROUTES` row) + `CATALOG_PROVIDER_IDS` if models.dev lists it         |
-| Change the OCR/capture pipeline        | `lookup/capture.ts`                                                                                                            |
-| Change the hotkey response flow        | `lookup/lookup.ts` (`handleHotkeyPressed`)                                                                                     |
-| Change the look-up context source      | `lookup/lookup.ts` (`handleHotkeyPressed`) + `config.ts` + `shared/conversation.ts`                                            |
-| Reposition / restyle the lookup popup  | `lookup/window.ts` + CSS in `lookup.css`, `LookupApp.tsx`                                                                      |
-| Change what an expansion request sends | `shared/expand-prompt.ts` (`buildExpandRequest`)                                                                               |
-| Change the one-click expand questions  | `shared/prompts.ts` (`EXPAND_INTENTS`)                                                                                         |
-| Change the expand selection bar/keys   | `ui/conversation/useExpansionContextMenu.ts` + `ExpandSelectionBar.tsx`                                                        |
-| Change frame actions                   | `ExpansionFrame.tsx` + `useChatStreaming.ts` (`retryExpansion`/`editExpansion`/`dismissExpansion`)                             |
-| Change the expand instruction text     | `shared/prompts.ts` (`buildExpandUserInstruction`, `buildExpandPromptedInstruction`)                                           |
-| Change the Expand Prompt UI            | `ui/conversation/ExpandPrompt.tsx`                                                                                             |
-| Change frame fold/unfold behaviour     | `shared/rich-text.ts` (`setExpansionFolded`) + `ExpansionFrame.tsx`                                                            |
-| Change the expansion targeting logic   | `ui/conversation/useExpansionContextMenu.ts` (DOM→offset mapping) + `shared/rich-text.ts` (`validateInsertion`)                |
-| Change the expand data model/anchors   | `shared/rich-text.ts` (+ `ui/lib/markdown.ts` splice, `Markdown.tsx` render)                                                   |
-| Add / change markdown rendering        | `ui/conversation/Markdown.tsx`, `ui/lib/markdown.ts`, `ui/styles/markdown.css`                                                 |
-| Syntax highlighting                    | `ui/lib/highlight.ts` + `hljs-*` rules in `ui/styles/markdown.css` + `--code-*` tokens                                         |
-| Math rendering / delimiters            | `ui/lib/markdown.ts` (`parseMarkdown`), `ui/lib/math.ts`, `Markdown.tsx` (`MathFormula`)                                       |
-| Light/dark theme or palette            | `config.ts` (`theme`) + light `:root` block in `assets/base.css`                                                               |
-| Image attachments                      | `shared/attachments.ts`, `main/image-support.ts`, `provider.ts` (`toModelMessage`), `Conversation.tsx`                         |
-| Persist or load user config/settings   | `config.ts`                                                                                                                    |
-| Wayland global-shortcut binding        | `services/global-shortcut.ts`                                                                                                  |
-| KDE Wayland silent screenshot          | `services/screen-capture.ts`                                                                                                   |
-| Add a new IPC channel                  | preload `index.ts` + `.d.ts`, then main `index.ts`                                                                             |
-| Change the chat streaming hook         | `hooks/useChatStreaming.ts` + `hooks/chat/{requests,persistence,transport}.ts`                                                 |
-| Persist or load conversations          | `conversations.ts` (main) + `useChatStreaming.ts` (renderer)                                                                   |
-| Add a property only one type uses      | `shared/conversation.ts` (record type, `migrateConversationRecord`) + `hasOwnTypeProperties` in `main/streaming.ts`            |
-| Conversation history lists             | `ConversationSearch.tsx`, `HomeView.tsx`, `showHistoryMenu` in `CanvasView.tsx`; opening goes through `conversation-open`      |
-| Search conversations                   | `conversations.ts` (`searchConversations`) + `ConversationSearch.tsx`                                                          |
-| Rename / regenerate a conversation     | `useChatStreaming.ts` (`renameConversation`/`regenerate`) + `Conversation.tsx`, `Turn.tsx`                                     |
-| Export a conversation                  | `conversation-export.ts` + `Conversation.tsx` (button states), preload `exportConversation`                                    |
-| Trim chats to the model context window | `shared/context-budget.ts` (pure) + `main/context-budget.ts` (catalog lookup, fail-open)                                       |
-| KB view / fed flags                    | `kb/handlers.ts` + `conversations.ts` (`markConversationKbFed`) + `KnowledgeView.tsx`                                          |
-| Automatic learning pacing              | `kb/schedule.ts` (pure) + `kb/maintenance.ts` (timers, queue, status)                                                          |
-| What the curator is given              | `kb/run.ts` (`runKbAnalysis`) + `kb/analysis.ts` (material/messages)                                                           |
-| Stop/retry generation                  | `useChatStreaming.ts` (`stop`/`retry`) + `Conversation.tsx`, `Turn.tsx`                                                        |
-| Edit and resend a user message         | `useChatStreaming.ts` (`editMessage` → `truncateAndResend`) + `Turn.tsx`, `Conversation.tsx`                                   |
-| Delete the open conversation           | `useChatStreaming.ts` (`deleteConversation`) + `Conversation.tsx` toolbar                                                      |
-| App-wide shortcuts / search modal      | `App.tsx` (Ctrl/Cmd+N/K/,, `ConversationSearch` mount)                                                                         |
-| Change chat auto-scroll                | `ui/lib/stick-to-bottom.ts`                                                                                                    |
-| Renderer chat UI                       | `App.tsx`, `Conversation.tsx`, `Turn.tsx`, `ConversationSearch.tsx`                                                            |
-| Agent memory tools / document base     | `memory/store.ts` (ops + confinement), `memory/tools.ts` (tool set), `shared/prompts.ts` (rules)                               |
-| What the curator saves                 | `shared/prompts.ts` (`KB_MEMORY_SYSTEM_PROMPT`), `kb/run.ts` (`updateMemories`)                                                |
-| Memory updated indicator               | `components/MemoryIndicator.tsx`, `memory/tools.ts` (`broadcastMemoryUpdated`)                                                 |
-| Canvas geometry, sessions, word fit    | `shared/canvas.ts` (+ `estimateWords` constants mirror `ui/styles/canvas.css`)                                                 |
-| Canvas gestures, tools, expansion flow | `ui/canvas/CanvasView.tsx`                                                                                                     |
-| Canvas card height and pushing         | `shared/canvas.ts` (`resizeCard`, `resizeCardKeepingClear`, `fitCardHeight`), measured in `CanvasView.tsx`                     |
-| Canvas stacking (which card is on top) | `shared/canvas.ts` (`cardStackRanks`, `raisedStack`), `raiseCards` in `ui/canvas/useCanvas.ts`, z-index scale in `canvas.css`  |
-| Canvas card buttons                    | `ui/canvas/CanvasCardView.tsx`, `ui/canvas/useCanvas.ts` (`regenerateCard`, `editCard`)                                        |
-| Canvas streaming and saving            | `ui/canvas/useCanvas.ts`                                                                                                       |
-| Canvas sizing instruction              | `shared/prompts.ts` (`buildCanvasFitNote`)                                                                                     |
-| Canvas composer, follow, links         | `ui/canvas/CanvasView.tsx` (+ `nearestCardInDirection` in `canvas.ts`)                                                         |
-| Canvas session links and seams         | `shared/canvas.ts` (`canvasContinuations`) + `ui/canvas/CanvasLinks.tsx`                                                       |
-| Canvas keys                            | `ui/canvas/useCanvasKeyboard.ts` + `CanvasShortcuts.tsx` (the list); a focused card's own keys in `handleCardKeyDown`          |
-| Canvas tools                           | `ui/canvas/CanvasToolRail.tsx` (+ `handleSurfaceDown` and `finishDraw` in `CanvasView.tsx`)                                    |
-| Canvas selection and what it moves     | `shared/canvas-selection.ts`, `handleDragStart` in `CanvasView.tsx`                                                            |
-| Canvas align, duplicate                | `shared/canvas-arrange.ts`, `CanvasSelectionBar.tsx`                                                                           |
-| Canvas tidy layout                     | `shared/canvas-tidy.ts` (`tidySelection`)                                                                                      |
-| Canvas undo                            | `shared/canvas-history.ts`, `recorded` in `ui/canvas/useCanvas.ts`                                                             |
-| Canvas notes, frames, connections      | `shared/canvas.ts` (types, `normalizeCanvasLayout`), `ui/canvas/useCanvas.ts`, `CanvasNoteView`, `CanvasFrames`, `CanvasLinks` |
-| Asking about selected cards            | `shared/canvas-selection.ts` (`sourceExcerpts`), `shared/prompts.ts` (`buildCanvasSourcesNote`), `askAboutSelection`           |
-| Canvas map, outline and search         | `CanvasMinimap.tsx`, `CanvasOutline.tsx`, `shared/canvas-outline.ts`                                                           |
-| Context links, composer attachments    | `shared/canvas-context.ts`, `shared/prompts.ts` (`buildCanvasContextNote`), `CanvasDraft.tsx`, `linkMenuItems`                 |
-| Resizing a draft                       | `shared/canvas.ts` (`resizeDraftRect`), `draftResize` gesture in `CanvasView.tsx`                                              |
-| Provider config form                   | `components/settings/models/ModelsTab.tsx` (+ `RoleRow.tsx`, `ConnectionCard.tsx`)                                             |
-| Model picker / catalog                 | `shared/model-catalog.ts` (pure), `services/model-catalog.ts` (fetch+cache)                                                    |
-| Change the model-config schema         | `models/config-schema.ts` — add a vN→vN+1 step, bump `MODEL_CONFIG_VERSION`                                                    |
+| Task                                     | File(s)                                                                                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Share logic with the extension           | `packages/core/src/*` + a one-line re-export in `apps/extension/src/shared/` (pure code only)                                  |
+| Add an AI provider                       | `shared/models.ts` (`providerRegistry`) + `provider.ts` (`ROUTES` row) + `CATALOG_PROVIDER_IDS` if models.dev lists it         |
+| Change the OCR/capture pipeline          | `lookup/capture.ts`                                                                                                            |
+| Change the hotkey response flow          | `lookup/lookup.ts` (`handleHotkeyPressed`)                                                                                     |
+| Change the look-up context source        | `lookup/lookup.ts` (`handleHotkeyPressed`) + `config.ts` + `shared/conversation.ts`                                            |
+| Reposition / restyle the lookup popup    | `lookup/window.ts` + CSS in `lookup.css`, `LookupApp.tsx`                                                                      |
+| Change what an expansion request sends   | `shared/expand-prompt.ts` (`buildExpandRequest`)                                                                               |
+| Change the one-click expand questions    | `shared/prompts.ts` (`EXPAND_INTENTS`)                                                                                         |
+| Change the expand selection bar/keys     | `ui/conversation/useExpansionContextMenu.ts` + `ExpandSelectionBar.tsx`                                                        |
+| Change frame actions                     | `ExpansionFrame.tsx` + `useChatStreaming.ts` (`retryExpansion`/`editExpansion`/`dismissExpansion`)                             |
+| Change the expand instruction text       | `shared/prompts.ts` (`buildExpandUserInstruction`, `buildExpandPromptedInstruction`)                                           |
+| Change the Expand Prompt UI              | `ui/conversation/ExpandPrompt.tsx`                                                                                             |
+| Change frame fold/unfold behaviour       | `shared/rich-text.ts` (`setExpansionFolded`) + `ExpansionFrame.tsx`                                                            |
+| Change the expansion targeting logic     | `ui/conversation/useExpansionContextMenu.ts` (DOM→offset mapping) + `shared/rich-text.ts` (`validateInsertion`)                |
+| Change the expand data model/anchors     | `shared/rich-text.ts` (+ `ui/lib/markdown.ts` splice, `Markdown.tsx` render)                                                   |
+| Add / change markdown rendering          | `ui/conversation/Markdown.tsx`, `ui/lib/markdown.ts`, `ui/styles/markdown.css`                                                 |
+| Syntax highlighting                      | `ui/lib/highlight.ts` + `hljs-*` rules in `ui/styles/markdown.css` + `--code-*` tokens                                         |
+| Math rendering / delimiters              | `ui/lib/markdown.ts` (`parseMarkdown`), `ui/lib/math.ts`, `Markdown.tsx` (`MathFormula`)                                       |
+| Light/dark theme or palette              | `config.ts` (`theme`) + light `:root` block in `assets/base.css`                                                               |
+| Image attachments                        | `shared/attachments.ts`, `main/image-support.ts`, `provider.ts` (`toModelMessage`), `Conversation.tsx`                         |
+| Persist or load user config/settings     | `config.ts`                                                                                                                    |
+| Wayland global-shortcut binding          | `services/global-shortcut.ts`                                                                                                  |
+| KDE Wayland silent screenshot            | `services/screen-capture.ts`                                                                                                   |
+| Add a new IPC channel                    | preload `index.ts` + `.d.ts`, then main `index.ts`                                                                             |
+| Change the chat streaming hook           | `hooks/useChatStreaming.ts` + `hooks/chat/{requests,persistence,transport}.ts`                                                 |
+| Persist or load conversations            | `conversations.ts` (main) + `useChatStreaming.ts` (renderer)                                                                   |
+| Add a property only one type uses        | `shared/conversation.ts` (record type, `migrateConversationRecord`) + `hasOwnTypeProperties` in `main/streaming.ts`            |
+| Conversation history lists               | `ConversationSearch.tsx`, `HomeView.tsx`, `showHistoryMenu` in `CanvasView.tsx`; opening goes through `conversation-open`      |
+| Search conversations                     | `conversations.ts` (`searchConversations`) + `ConversationSearch.tsx`                                                          |
+| Rename / regenerate a conversation       | `useChatStreaming.ts` (`renameConversation`/`regenerate`) + `Conversation.tsx`, `Turn.tsx`                                     |
+| Export a conversation                    | `conversation-export.ts` + `Conversation.tsx` (button states), preload `exportConversation`                                    |
+| Trim chats to the model context window   | `shared/context-budget.ts` (pure) + `main/context-budget.ts` (catalog lookup, fail-open)                                       |
+| KB view / fed flags                      | `kb/handlers.ts` + `conversations.ts` (`markConversationKbFed`) + `KnowledgeView.tsx`                                          |
+| Automatic learning pacing                | `kb/schedule.ts` (pure) + `kb/maintenance.ts` (timers, queue, status)                                                          |
+| What the curator is given                | `kb/run.ts` (`runKbAnalysis`) + `kb/analysis.ts` (material/messages)                                                           |
+| Stop/retry generation                    | `useChatStreaming.ts` (`stop`/`retry`) + `Conversation.tsx`, `Turn.tsx`                                                        |
+| Edit and resend a user message           | `useChatStreaming.ts` (`editMessage` → `truncateAndResend`) + `Turn.tsx`, `Conversation.tsx`                                   |
+| Delete the open conversation             | `useChatStreaming.ts` (`deleteConversation`) + `Conversation.tsx` toolbar                                                      |
+| App-wide shortcuts / search modal        | `App.tsx` (Ctrl/Cmd+N/K/,, `ConversationSearch` mount)                                                                         |
+| Change chat auto-scroll                  | `ui/lib/stick-to-bottom.ts`                                                                                                    |
+| Renderer chat UI                         | `App.tsx`, `Conversation.tsx`, `Turn.tsx`, `ConversationSearch.tsx`                                                            |
+| Agent memory tools / document base       | `memory/store.ts` (ops + confinement), `memory/tools.ts` (tool set), `shared/prompts.ts` (rules)                               |
+| What the curator saves                   | `shared/prompts.ts` (`KB_MEMORY_SYSTEM_PROMPT`), `kb/run.ts` (`updateMemories`)                                                |
+| Memory updated indicator                 | `components/MemoryIndicator.tsx`, `memory/tools.ts` (`broadcastMemoryUpdated`)                                                 |
+| Canvas geometry, sessions, word fit      | `shared/canvas.ts` (+ `estimateWords` constants mirror `ui/styles/canvas.css`)                                                 |
+| Canvas gestures, tools, expansion flow   | `ui/canvas/CanvasView.tsx`                                                                                                     |
+| Canvas card height and pushing           | `shared/canvas.ts` (`resizeCard`, `resizeCardKeepingClear`, `fitCardHeight`), measured in `CanvasView.tsx`                     |
+| Canvas stacking (which card is on top)   | `shared/canvas.ts` (`cardStackRanks`, `raisedStack`), `raiseCards` in `ui/canvas/useCanvas.ts`, z-index scale in `canvas.css`  |
+| Canvas card buttons                      | `ui/canvas/CanvasCardView.tsx`, `ui/canvas/useCanvas.ts` (`regenerateCard`, `editCard`)                                        |
+| Canvas streaming and saving              | `ui/canvas/useCanvas.ts`                                                                                                       |
+| Visual blocks (graphs, charts, diagrams) | `shared/prompts.ts` (`VISUAL_BLOCK_SYNTAX`) + `ui/lib/visuals.ts` (keep the two in step) + `VisualBlock.tsx`                   |
+| Cards the model adds (canvas tools)      | `main/canvas-tools.ts`, `shared/canvas-spawn.ts`, `card` in `useCanvas.ts`'s listener, `buildCanvasToolInstructions`           |
+| Canvas sizing instruction                | `shared/prompts.ts` (`buildCanvasFitNote`)                                                                                     |
+| Canvas composer, follow, links           | `ui/canvas/CanvasView.tsx` (+ `nearestCardInDirection` in `canvas.ts`)                                                         |
+| Canvas session links and seams           | `shared/canvas.ts` (`canvasContinuations`) + `ui/canvas/CanvasLinks.tsx`                                                       |
+| Canvas keys                              | `ui/canvas/useCanvasKeyboard.ts` + `CanvasShortcuts.tsx` (the list); a focused card's own keys in `handleCardKeyDown`          |
+| Canvas tools                             | `ui/canvas/CanvasToolRail.tsx` (+ `handleSurfaceDown` and `finishDraw` in `CanvasView.tsx`)                                    |
+| Canvas selection and what it moves       | `shared/canvas-selection.ts`, `handleDragStart` in `CanvasView.tsx`                                                            |
+| Canvas align, duplicate                  | `shared/canvas-arrange.ts`, `CanvasSelectionBar.tsx`                                                                           |
+| Canvas tidy layout                       | `shared/canvas-tidy.ts` (`tidySelection`)                                                                                      |
+| Canvas undo                              | `shared/canvas-history.ts`, `recorded` in `ui/canvas/useCanvas.ts`                                                             |
+| Canvas notes, frames, connections        | `shared/canvas.ts` (types, `normalizeCanvasLayout`), `ui/canvas/useCanvas.ts`, `CanvasNoteView`, `CanvasFrames`, `CanvasLinks` |
+| Asking about selected cards              | `shared/canvas-selection.ts` (`sourceExcerpts`), `shared/prompts.ts` (`buildCanvasSourcesNote`), `askAboutSelection`           |
+| Canvas map, outline and search           | `CanvasMinimap.tsx`, `CanvasOutline.tsx`, `shared/canvas-outline.ts`                                                           |
+| Context links, composer attachments      | `shared/canvas-context.ts`, `shared/prompts.ts` (`buildCanvasContextNote`), `CanvasDraft.tsx`, `linkMenuItems`                 |
+| Resizing a draft                         | `shared/canvas.ts` (`resizeDraftRect`), `draftResize` gesture in `CanvasView.tsx`                                              |
+| Provider config form                     | `components/settings/models/ModelsTab.tsx` (+ `RoleRow.tsx`, `ConnectionCard.tsx`)                                             |
+| Model picker / catalog                   | `shared/model-catalog.ts` (pure), `services/model-catalog.ts` (fetch+cache)                                                    |
+| Change the model-config schema           | `models/config-schema.ts` — add a vN→vN+1 step, bump `MODEL_CONFIG_VERSION`                                                    |
 
 #### Important conventions
 
@@ -554,6 +559,29 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   transform and grid are never React style props (`paintViewport`), and `--canvas-zoom` changes only
   at rest because every card inherits it. A `glideTo` eases by CSS instead, so the surface transitions
   its dots (`is-animating`) with the same timing as the world, or they would jump ahead of the cards.
+- **Visuals are fenced blocks the renderer draws.** A block whose language is a `VisualBlockKind`
+  (`graph`, `chart`, `flow`, `cycle`, `timeline`, `tree`, `venn`, `matrix`) goes to `VisualBlock`
+  instead of the code block, in every view. `graph` plots functions of x through
+  `ui/lib/math-expression.ts`, a recursive-descent parser over a fixed grammar (never `eval`, which
+  also keeps model text from running as code); y fits the curves between their 2nd and 98th
+  percentiles, and the pen lifts at asymptotes. The syntax the model is taught (`VISUAL_BLOCK_SYNTAX`)
+  and the parser must agree; a test parses every taught example. Lines that do not read are skipped,
+  so a block still streaming draws what has arrived. A visual is all spans (an expansion frame's host
+  is one), falls back to a column on narrow cards with container queries, takes its colours from
+  tokens (graph series use the `--code-*` ones), and is one selection atom, like a code block.
+- **A canvas answer can add cards beside itself.** A canvas card's `chat-send` carries
+  `canvas: { explore }`, and main adds `canvas_add_visual` and (when `explore`) `canvas_add_explore`
+  to the memory tools (`withCanvasTools`, more steps, limits in `CANVAS_SPAWN_LIMITS`), with
+  `buildCanvasToolInstructions`: the answer stays text, and visuals go in cards. The tools only
+  report: each call sends `chat-card` to the asking window, and `useCanvas` builds the card. A visual
+  card is a finished message card (the title as its question, the model's markdown as its answer); an
+  exploration waits until its answer completes (dropped if stopped or failed), then is asked as a
+  continuation. Both continue the answering card (`parentId`), are marked `spawned`, and carry
+  `relation`, which `CanvasLinks` writes on their session line; `spawnRect` stacks them on the answer's
+  right, where its own growth cannot reach. A spawned card gets only the visual tool, so branching
+  stays one level deep per question. Regenerating the answer drops them as it drops any continuation.
+  No tools means no cards: a tool-less model, an expand, or the extension's host (which ignores the
+  flag) answer as before. Claude Code reaches the tools over MCP like the memory tools.
 - **A rectangle decides the answer's length.** `estimateWords(rect, captionChars, charWidth)` mirrors
   the card typography in `canvas.css`; change them together. It counts paragraphs, whose last lines
   and gaps use up more of a wide card, and `bodyCharWidth` (`ui/lib/char-width.ts`) measures the font. `withCanvasFit` appends the size to the newest

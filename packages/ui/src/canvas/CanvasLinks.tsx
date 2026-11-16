@@ -372,6 +372,21 @@ function CanvasLinks({
           </g>
         ))}
       </svg>
+      {sessionLinks.map(({ id, start, end }) => {
+        const card = cards.find((item) => item.id === id)
+        const relation = card?.kind === 'message' ? card.relation : undefined
+        if (!relation) return null
+        const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+        return (
+          <div
+            key={`relation-${id}`}
+            className="canvas-connector-label canvas-relation-label"
+            style={{ transform: `translate(${mid.x}px, ${mid.y}px) translate(-50%, -50%)` }}
+          >
+            {relation}
+          </div>
+        )
+      })}
       {connectors.map(({ link, mid }) => {
         const editing = editingLinkId === link.id
         if (!editing && !link.label) return null

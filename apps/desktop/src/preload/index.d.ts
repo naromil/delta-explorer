@@ -61,6 +61,7 @@ declare global {
         }>
         requestId: string
         role?: string
+        canvas?: { explore: boolean }
       }) => void
       chatImageSupport: (role: string) => Promise<'yes' | 'no' | 'unknown'>
       chatExpand: (payload: {
@@ -71,6 +72,8 @@ declare global {
       chatCancel: (requestId: string) => void
       /** Terms in a finished answer worth underlining; empty when off or unavailable. */
       chatOnChunk: (cb: (data: { requestId: string; delta: string }) => void) => () => void
+      /** A card the model added beside a canvas answer through a canvas tool. */
+      chatOnCard: (cb: (data: { requestId: string; card: unknown }) => void) => () => void
       chatOnResponse: (
         cb: (data: { requestId: string; text: string; cancelled?: boolean }) => void
       ) => () => void

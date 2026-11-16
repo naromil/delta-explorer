@@ -67,6 +67,7 @@ const api = {
     }>
     requestId: string
     role?: string
+    canvas?: { explore: boolean }
   }) => ipcRenderer.send('chat-send', payload),
   chatImageSupport: (role: string): Promise<'yes' | 'no' | 'unknown'> =>
     ipcRenderer.invoke('chat-image-support', role),
@@ -76,6 +77,14 @@ const api = {
     role?: string
   }) => ipcRenderer.send('chat-expand', payload),
   chatCancel: (requestId: string) => ipcRenderer.send('chat-cancel', requestId),
+  chatOnCard: (cb: (data: { requestId: string; card: unknown }) => void) => {
+    const handler = (
+      _e: Electron.IpcRendererEvent,
+      data: { requestId: string; card: unknown }
+    ): void => cb(data)
+    ipcRenderer.on('chat-card', handler)
+    return () => ipcRenderer.removeListener('chat-card', handler)
+  },
   chatOnChunk: (cb: (data: { requestId: string; delta: string }) => void) => {
     const handler = (
       _e: Electron.IpcRendererEvent,
