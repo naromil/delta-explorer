@@ -4,8 +4,9 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { resolveRole, RoleUnassignedError } from './config'
 import type { Connection } from './models/registries'
 import type { ProviderMessage, ProviderType, RoleId } from './models/registries'
+import type { ImageInput } from '@delta/core/messages'
 import { withInstructions } from './streaming'
-import { buildMcpToolNamesNote } from '@delta/core/prompts'
+import { buildMcpToolNamesNote, TOOL_IMAGES_NOTE } from '@delta/core/prompts'
 import { claudeCodeToolName, streamClaudeCode } from './services/claude-code'
 export type { ProviderMessage }
 export { RoleUnassignedError }
@@ -30,6 +31,11 @@ export interface AgentTools {
   maxSteps: number
   /** The request is pointless without its tools: fail on rejection instead of answering plainly. */
   toolsRequired?: boolean
+  /**
+   * Pictures a tool call produced, by tool call id. A tool fills this while it runs, and the
+   * next step shows them to the model; see `withToolImages`.
+   */
+  toolImages?: Map<string, ImageInput[]>
 }
 
 const REJECTED_REQUEST_STATUSES = new Set([400, 404, 422])
@@ -128,6 +134,40 @@ function toModelMessage(message: ProviderMessage): ModelMessage {
   }
 }
 
+function isToolImagesMessage(message: ModelMessage | undefined): boolean {
+  if (message?.role !== 'user' || typeof message.content === 'string') return false
+  const first = message.content[0]
+  return first?.type === 'text' && first.text === TOOL_IMAGES_NOTE
+}
+
+/**
+ * A tool result can only be text on the OpenAI-compatible route, so the pictures a tool call
+ * produced follow its results as a user message. Rebuilt from the same map on every step, and
+ * a message already followed by its pictures is left alone, so each step sends the same prefix.
+ */
+export function withToolImages(
+  messages: ModelMessage[],
+  toolImages: Map<string, ImageInput[]>
+): ModelMessage[] {
+  const result: ModelMessage[] = []
+  for (const [index, message] of messages.entries()) {
+    result.push(message)
+    if (message.role !== 'tool') continue
+    const images = message.content.flatMap((part) =>
+      part.type === 'tool-result' ? (toolImages.get(part.toolCallId) ?? []) : []
+    )
+    if (images.length === 0 || isToolImagesMessage(messages[index + 1])) continue
+    result.push({
+      role: 'user',
+      content: [
+        { type: 'text', text: TOOL_IMAGES_NOTE },
+        ...images.map(({ mediaType, data }) => ({ type: 'file' as const, data, mediaType }))
+      ]
+    })
+  }
+  return result
+}
+
 function splitPrompt(messages: ProviderMessage[]): {
   instructions: Array<{ role: 'system'; content: string }> | undefined
   messages: ModelMessage[]
@@ -205,8 +245,18 @@ async function* streamModel(
       ...(agent && {
         tools: agent.tools,
         stopWhen: isStepCount(agent.maxSteps),
-        prepareStep: ({ stepNumber }: { stepNumber: number }) =>
-          stepNumber === agent.maxSteps - 1 ? { toolChoice: 'none' as const } : {}
+        prepareStep: ({
+          stepNumber,
+          messages: stepMessages
+        }: {
+          stepNumber: number
+          messages: ModelMessage[]
+        }) => ({
+          ...(stepNumber === agent.maxSteps - 1 && { toolChoice: 'none' as const }),
+          ...(agent.toolImages?.size && {
+            messages: withToolImages(stepMessages, agent.toolImages)
+          })
+        })
       })
     })
 

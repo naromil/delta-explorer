@@ -23,6 +23,17 @@ const MAX_GREP_FILES = 3_000
 const MAX_GREP_FILE_BYTES = 2 * 1024 * 1024
 const MAX_GREP_TOTAL_BYTES = 64 * 1024 * 1024
 const BINARY_SNIFF_BYTES = 8_192
+const MAX_FOUND_ENTRIES = 200
+const MAX_FIND_PATTERN_CHARS = 200
+/** A PDF or image is handed whole to the render window, so it has a ceiling. */
+const MAX_VIEWABLE_BYTES = 64 * 1024 * 1024
+const IMAGE_MEDIA_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif'
+}
 const SKIPPED_DIRECTORIES = new Set(['node_modules', '__pycache__'])
 
 /** A refusal worded for the model; anything else is an unexpected filesystem failure. */
@@ -149,32 +160,62 @@ async function sniffBinary(absolute: string): Promise<boolean> {
   }
 }
 
-/** Reads a text file from `startLine` (1-based), a page of at most `MAX_READ_CHARS`. */
-export async function readMaterial(root: string, path: string, startLine = 1): Promise<string> {
+/** What `materials_view` can show, by extension; everything else is text or unreadable. */
+function viewableKind(
+  relative: string
+): { kind: 'pdf' } | { kind: 'image'; mediaType: string } | null {
+  const extension = relative.slice(relative.lastIndexOf('.') + 1).toLowerCase()
+  if (extension === 'pdf') return { kind: 'pdf' }
+  const mediaType = IMAGE_MEDIA_TYPES[extension]
+  return mediaType ? { kind: 'image', mediaType } : null
+}
+
+async function readTextLines(
+  root: string,
+  path: string
+): Promise<{ relative: string; lines: string[] }> {
   const target = locate(root, path)
   const stats = statOrThrow(target)
   if (!stats.isFile()) throw new MaterialsError(`Not a file: ${target.relative || '.'}`)
+  if (viewableKind(target.relative)) {
+    throw new MaterialsError(
+      `${target.relative} is not a text file; look at it with materials_view.`
+    )
+  }
   if (stats.size > MAX_READABLE_BYTES) {
     throw new MaterialsError(
       `${target.relative} is ${formatSize(stats.size)}, too large to read; search it with materials_grep instead.`
     )
   }
   if (await sniffBinary(target.absolute)) {
-    throw new MaterialsError(
-      `${target.relative} is not a text file (for example a PDF or an image) and cannot be read.`
-    )
+    throw new MaterialsError(`${target.relative} is not a text file and cannot be read.`)
   }
+  return {
+    relative: target.relative,
+    lines: (await readFile(target.absolute, 'utf-8')).split('\n')
+  }
+}
 
-  const lines = (await readFile(target.absolute, 'utf-8')).split('\n')
+/**
+ * Reads a text file from `startLine` (1-based): at most `lineCount` lines and `MAX_READ_CHARS`.
+ */
+export async function readMaterial(
+  root: string,
+  path: string,
+  startLine = 1,
+  lineCount = Number.POSITIVE_INFINITY
+): Promise<string> {
+  const { relative, lines } = await readTextLines(root, path)
+  const wanted = Math.max(Math.trunc(lineCount) || 1, 1)
   const first = Math.max(Math.trunc(startLine) || 1, 1)
   if (first > lines.length) {
-    throw new MaterialsError(`${target.relative} has only ${lines.length} lines.`)
+    throw new MaterialsError(`${relative} has only ${lines.length} lines.`)
   }
   const page: string[] = []
   let used = 0
   for (let index = first - 1; index < lines.length; index++) {
     const line = lines[index]
-    if (page.length > 0 && used + line.length > MAX_READ_CHARS) break
+    if (page.length === wanted || (page.length > 0 && used + line.length > MAX_READ_CHARS)) break
     // A single line longer than a page (minified text) is cut rather than refused.
     page.push(line.length > MAX_READ_CHARS ? `${line.slice(0, MAX_READ_CHARS)}…` : line)
     used += line.length + 1
@@ -183,6 +224,75 @@ export async function readMaterial(root: string, path: string, startLine = 1): P
   if (first === 1 && last === lines.length) return page.join('\n')
   const more = last < lines.length ? `; continue with start_line ${last + 1}` : ''
   return `${page.join('\n')}\n… lines ${first}-${last} of ${lines.length}${more}`
+}
+
+/** `wc`: how much a text file holds, so the model can decide how to read it. */
+export async function countMaterial(root: string, path: string): Promise<string> {
+  const { relative, lines } = await readTextLines(root, path)
+  const text = lines.join('\n')
+  const words = text.split(/\s+/).filter((word) => word !== '').length
+  return `${relative}: ${lines.length} lines, ${words} words, ${text.length} characters`
+}
+
+/** A glob as a regular expression: `*` and `?` stay inside a name, `**` crosses directories. */
+function globToRegExp(pattern: string): RegExp {
+  const source = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*{2,}/g, '\u0000')
+    .replace(/\*/g, '[^/]*')
+    .replace(/\?/g, '[^/]')
+    .replaceAll('\u0000', '.*')
+  return new RegExp(`^${source}$`, 'i')
+}
+
+/** `find -iname`: entries below `path` whose name, or whose path when the glob has a `/`, matches. */
+export function findMaterials(root: string, pattern: string, path = '.'): string {
+  const glob = pattern.trim().replaceAll('\\', '/')
+  if (glob === '') throw new MaterialsError('The pattern must not be empty.')
+  if (glob.length > MAX_FIND_PATTERN_CHARS) throw new MaterialsError('The pattern is too long.')
+  const target = locate(root, path)
+  if (!statOrThrow(target).isDirectory()) throw new MaterialsError(`Not a directory: ${path}`)
+  const matcher = globToRegExp(glob)
+  const byPath = glob.includes('/')
+
+  const lines: string[] = []
+  for (const entry of walk(target, Number.POSITIVE_INFINITY)) {
+    const name = entry.relative.slice(entry.relative.lastIndexOf('/') + 1)
+    if (!matcher.test(byPath ? entry.relative : name)) continue
+    if (lines.length === MAX_FOUND_ENTRIES) {
+      lines.push(
+        `… results truncated at ${MAX_FOUND_ENTRIES} entries; narrow the pattern or the path`
+      )
+      break
+    }
+    lines.push(
+      entry.isDirectory
+        ? `${entry.relative}/`
+        : `${entry.relative} (${formatSize(lstatOrNull(entry.absolute)?.size ?? 0)})`
+    )
+  }
+  return lines.length > 0 ? lines.join('\n') : '(no matches)'
+}
+
+export type ViewableMaterial = { relative: string; data: Buffer } & (
+  { kind: 'pdf' } | { kind: 'image'; mediaType: string }
+)
+
+/** The bytes of a PDF or image, for the render window; nothing else is handed out raw. */
+export async function readViewableMaterial(root: string, path: string): Promise<ViewableMaterial> {
+  const target = locate(root, path)
+  const stats = statOrThrow(target)
+  if (!stats.isFile()) throw new MaterialsError(`Not a file: ${target.relative || '.'}`)
+  const kind = viewableKind(target.relative)
+  if (!kind) {
+    throw new MaterialsError(
+      `${target.relative} is not a PDF or a PNG, JPEG, WebP or GIF image; read text files with materials_cat.`
+    )
+  }
+  if (stats.size > MAX_VIEWABLE_BYTES) {
+    throw new MaterialsError(`${target.relative} is ${formatSize(stats.size)}, too large to open.`)
+  }
+  return { relative: target.relative, data: await readFile(target.absolute), ...kind }
 }
 
 function clipLine(line: string): string {

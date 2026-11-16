@@ -1,13 +1,5 @@
-import 'katex/dist/katex.min.css'
-import './assets/base.css'
-import './assets/lookup.css'
+import { isRenderWindow, startMaterialsRenderer } from './materials-render'
 
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import Root from './Root'
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <Root />
-  </StrictMode>
-)
+// The hidden render window draws PDFs and images for the main process and shows no UI.
+if (isRenderWindow()) startMaterialsRenderer()
+else void import('./app-entry')

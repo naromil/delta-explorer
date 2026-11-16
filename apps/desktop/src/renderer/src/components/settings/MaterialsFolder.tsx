@@ -59,10 +59,11 @@ function MaterialsFolder(): React.JSX.Element {
       </div>
       {error && <p className="settings-hint settings-hint--notice">{error}</p>}
       <p className="settings-hint">
-        The assistant can list, search and read the text files in this folder (notes, course files,
-        code) to answer from your own materials. It can never change them, and it reads nothing
-        outside the folder. Hidden files are skipped; PDFs and other non-text files are listed but
-        not read. Requires a model that supports tool calling.
+        The assistant can list, search and read the files in this folder to answer from your own
+        materials: text files (notes, code) as text, and PDFs and images by looking at the pages,
+        which needs a model that reads images; other models get only a PDF&apos;s text. It can never
+        change the folder and reads nothing outside it. Hidden files are skipped. Requires a model
+        that supports tool calling.
       </p>
     </div>
   )

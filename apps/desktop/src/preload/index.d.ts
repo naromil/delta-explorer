@@ -9,6 +9,7 @@ import type { Connection } from '../shared/models'
 import type { KbMaintenanceStatus, KbRunResult } from '../shared/kb'
 import type { ModelCatalogState } from '../shared/model-catalog'
 import type { ConnectionTestResult, DiscoveredModels } from '../main/services/model-discovery'
+import type { MaterialsRenderJob, MaterialsRenderResult } from '../shared/materials-render'
 
 declare global {
   interface Window {
@@ -122,6 +123,11 @@ declare global {
       kbGetStatus: () => Promise<KbMaintenanceStatus>
       kbOnStatus: (cb: (status: KbMaintenanceStatus) => void) => () => void
       onMemoryUpdated: (cb: () => void) => () => void
+
+      /* The hidden render window only */
+      onMaterialsRender: (cb: (job: MaterialsRenderJob) => void) => void
+      materialsRenderReady: () => void
+      materialsRenderResult: (result: MaterialsRenderResult) => void
     }
   }
 }
