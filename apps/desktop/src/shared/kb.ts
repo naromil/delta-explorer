@@ -17,10 +17,42 @@ export interface KbMaintenanceStatus {
   /** Conversations curated into the document base by the last successful run. */
   lastAnalyzed: number
   lastError: string | null
+  /** What the curator said it changed in the last pass that learned something. */
+  lastChanges: KbChange[]
+}
+
+/** The curator's one-line reply for one conversation. */
+export interface KbChange {
+  title: string
+  summary: string
+}
+
+export const KB_CHANGES_LIMIT = 8
+const KB_CHANGE_TITLE_LIMIT = 120
+const KB_CHANGE_SUMMARY_LIMIT = 400
+
+function clip(text: string, limit: number): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return flat.length > limit ? `${flat.slice(0, limit - 1)}…` : flat
+}
+
+/** A reply is model text: flattened, cut, and dropped when blank. */
+export function normalizeKbChanges(raw: unknown): KbChange[] {
+  if (!Array.isArray(raw)) return []
+  const changes: KbChange[] = []
+  for (const item of raw) {
+    if (changes.length === KB_CHANGES_LIMIT) break
+    const { title, summary } = (item ?? {}) as Partial<KbChange>
+    if (typeof title !== 'string' || typeof summary !== 'string') continue
+    const cut = clip(summary, KB_CHANGE_SUMMARY_LIMIT)
+    if (cut) changes.push({ title: clip(title, KB_CHANGE_TITLE_LIMIT), summary: cut })
+  }
+  return changes
 }
 
 export interface KbRunResult {
   conversationsAnalyzed: number
+  changes: KbChange[]
 }
 
 /**
@@ -34,6 +66,7 @@ export interface KbPersistedState {
   lastAnalyzed: number
   lastError: string | null
   failedAttempts: number
+  lastChanges: KbChange[]
 }
 
 export function emptyKbState(): KbPersistedState {
@@ -42,7 +75,8 @@ export function emptyKbState(): KbPersistedState {
     lastLearnedAt: null,
     lastAnalyzed: 0,
     lastError: null,
-    failedAttempts: 0
+    failedAttempts: 0,
+    lastChanges: []
   }
 }
 
@@ -59,6 +93,7 @@ export function normalizeKbState(raw: unknown): KbPersistedState {
     lastLearnedAt: isoOrNull(record.lastLearnedAt),
     lastAnalyzed: count(record.lastAnalyzed),
     lastError: isoOrNull(record.lastError),
-    failedAttempts: count(record.failedAttempts)
+    failedAttempts: count(record.failedAttempts),
+    lastChanges: normalizeKbChanges(record.lastChanges)
   }
 }

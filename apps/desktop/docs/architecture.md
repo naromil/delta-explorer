@@ -262,6 +262,7 @@ surfaces a failed save inline (`role="alert"`) instead of a native `alert()`.
 {userData}/
   config/providers.json     ModelConfig (schemaVersion 2)
   config/settings.json      { hotkey, closeToTray, lookupContextMode, kbAutoMaintain, theme }
+  config/window-state.json  { width, height, x?, y?, maximized } of the main window
   cache/models-dev.json     models.dev snapshot (24h TTL, offline fallback)
   conversations/{id}.json   ConversationRecord (image attachments inline, base64)
   conversations/{id}.meta.json  ConversationMeta (list/search sidecar)

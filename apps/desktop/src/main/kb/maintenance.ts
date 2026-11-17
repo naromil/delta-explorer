@@ -72,7 +72,8 @@ function buildStatus(): KbMaintenanceStatus {
     pending: pendingCount,
     lastLearnedAt: state.lastLearnedAt,
     lastAnalyzed: state.lastAnalyzed,
-    lastError: state.lastError
+    lastError: state.lastError,
+    lastChanges: state.lastChanges
   }
 }
 
@@ -168,7 +169,8 @@ async function runAutoPass(): Promise<void> {
       lastLearnedAt: result.conversationsAnalyzed > 0 ? now : state.lastLearnedAt,
       lastAnalyzed: result.conversationsAnalyzed,
       lastError: null,
-      failedAttempts: 0
+      failedAttempts: 0,
+      lastChanges: result.conversationsAnalyzed > 0 ? result.changes : state.lastChanges
     })
     if (pendingCount > 0) schedule(AUTO_BACKLOG_INTERVAL_MS)
   } catch (err) {
@@ -276,7 +278,10 @@ export function runKbAnalysisExclusive(
 }
 
 /** Records a manual pass as a learning event so pacing and the UI stay truthful. */
-export async function recordManualKbRun(conversationsAnalyzed: number): Promise<void> {
+export async function recordManualKbRun({
+  conversationsAnalyzed,
+  changes
+}: KbRunResult): Promise<void> {
   if (conversationsAnalyzed > 0) {
     const now = new Date().toISOString()
     saveKbState({
@@ -284,7 +289,8 @@ export async function recordManualKbRun(conversationsAnalyzed: number): Promise<
       lastLearnedAt: now,
       lastAnalyzed: conversationsAnalyzed,
       lastError: null,
-      failedAttempts: 0
+      failedAttempts: 0,
+      lastChanges: changes
     })
   }
   await refreshStatus()

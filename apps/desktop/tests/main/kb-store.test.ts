@@ -31,14 +31,16 @@ describe('KB store', () => {
       lastLearnedAt: '2026-10-24T11:00:00.000Z',
       lastAnalyzed: 4,
       lastError: null,
-      failedAttempts: 0
+      failedAttempts: 0,
+      lastChanges: [{ title: 'Recursion', summary: 'Noted that base cases are shaky.' }]
     })
     expect(loadKbState()).toEqual({
       lastRunAt: '2026-10-24T12:00:00.000Z',
       lastLearnedAt: '2026-10-24T11:00:00.000Z',
       lastAnalyzed: 4,
       lastError: null,
-      failedAttempts: 0
+      failedAttempts: 0,
+      lastChanges: [{ title: 'Recursion', summary: 'Noted that base cases are shaky.' }]
     })
   })
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { KbMaintenanceStatus } from '../../../../shared/kb'
+import MemoryBrowser from './MemoryBrowser'
 
 const MINUTE_MS = 60_000
 
@@ -150,14 +151,19 @@ function KnowledgeView(): React.JSX.Element {
     <div className="view-shell">
       <div className="view-shell-header">
         <h1>Knowledge Base</h1>
+        <p className="view-shell-subtitle">
+          Delta Explorer keeps private markdown notes about how you learn and uses them to fit its
+          answers to you. They stay on this computer, and you can read and correct every one.
+        </p>
       </div>
-      <div className="view-shell-content">
+      <div className="view-shell-content kb-content">
         <div className="kb-status-bar">
           <span className="kb-status-text">{describeStatus(status)}</span>
           <div className="kb-buttons">
             <button
               className="btn btn--primary"
               disabled={busy || autoRunning || pendingCount === 0}
+              title="Review the conversations still in the queue"
               onClick={handleAnalyze}
             >
               {loadingAnalyze ? 'Analyzing...' : 'Analyze now'}
@@ -165,6 +171,7 @@ function KnowledgeView(): React.JSX.Element {
             <button
               className="btn"
               disabled={busy || autoRunning || totalCount === 0}
+              title="Review recent conversations again"
               onClick={startReanalyze}
             >
               {loadingReanalyze ? 'Re-analyzing...' : 'Re-Analyze'}
@@ -215,11 +222,24 @@ function KnowledgeView(): React.JSX.Element {
         )}
         {lastResult && <p className="kb-result">{lastResult}</p>}
 
-        <p className="kb-section-desc">
-          Delta Explorer keeps private markdown notes about you and uses them to personalize chats
-          and look-ups. Analyze now curates chats still in the queue; Re-Analyze goes over recent
-          chats again.
-        </p>
+        {status && status.lastChanges.length > 0 && !autoRunning && (
+          <details className="kb-changes">
+            <summary>
+              What the last review changed
+              {status.lastLearnedAt ? ` · ${formatElapsed(status.lastLearnedAt)}` : ''}
+            </summary>
+            <ul>
+              {status.lastChanges.map((change, index) => (
+                <li key={index}>
+                  <span className="kb-change-title">{change.title}</span>
+                  <span className="kb-change-summary">{change.summary}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
+        <MemoryBrowser />
       </div>
     </div>
   )

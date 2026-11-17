@@ -24,6 +24,7 @@ import {
   makeMemoryDirectory,
   MAX_MEMORY_FILE_CHARS,
   memoriesDir,
+  memoryFiles,
   MemoryError,
   moveMemory,
   readMemory,
@@ -190,5 +191,21 @@ describe('mv and rm', () => {
     removeMemory(root, 'dir', true)
     expect(listMemories(root)).toBe('(empty)')
     expect(() => removeMemory(root, 'dir')).toThrow(/No such/)
+  })
+})
+
+describe('memoryFiles', () => {
+  it('lists every markdown file and marks the ones sent with each request', () => {
+    writeMemory(root, 'index-learning.md', 'prefers worked examples')
+    writeMemory(root, 'inbox.md', 'a quick note')
+    writeMemory(root, 'topics/index.md', 'nested indexes are read on demand')
+    writeFileSync(join(root, 'notes.txt'), 'not a memory')
+    symlinkSync(join(root, 'inbox.md'), join(root, 'link.md'))
+
+    expect(memoryFiles(root)).toEqual([
+      { path: 'inbox.md', autoLoaded: false },
+      { path: 'index-learning.md', autoLoaded: true },
+      { path: 'topics/index.md', autoLoaded: false }
+    ])
   })
 })

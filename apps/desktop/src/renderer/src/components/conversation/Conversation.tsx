@@ -14,6 +14,7 @@ import type { ExpandRequest, HighlightRequest } from '@delta/ui/conversation'
 import { useStickToBottom } from '@delta/ui/lib/stick-to-bottom'
 import { attachmentSrc } from '@delta/ui/lib/image-attachments'
 import Turn from './Turn'
+import FindBar from './FindBar'
 
 interface ConversationProps {
   state: ConversationState
@@ -94,6 +95,10 @@ function Conversation({
   const [exporting, setExporting] = useState(false)
   const [exported, setExported] = useState(false)
   const [toolbarError, setToolbarError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const copiedTimerRef = useRef<number | null>(null)
+  /** Find in conversation: `null` while closed, otherwise how often Ctrl/Cmd+F asked for it. */
+  const [findKey, setFindKey] = useState<number | null>(null)
   const exportSavedTimerRef = useRef<number | null>(null)
   const [editingTitle, setEditingTitle] = useState(false)
   /** Up in an empty composer: which message to edit, and a key so a repeat opens it again. */
@@ -137,7 +142,24 @@ function Conversation({
   useEffect(() => {
     return () => {
       if (exportSavedTimerRef.current !== null) window.clearTimeout(exportSavedTimerRef.current)
+      if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current)
     }
+  }, [])
+
+  useEffect(() => {
+    const handleFind = (e: KeyboardEvent): void => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.defaultPrevented) return
+      if (e.key.toLowerCase() !== 'f' || searchOpen) return
+      e.preventDefault()
+      setFindKey((key) => (key ?? 0) + 1)
+    }
+    window.addEventListener('keydown', handleFind)
+    return () => window.removeEventListener('keydown', handleFind)
+  }, [searchOpen])
+
+  const closeFind = useCallback((): void => {
+    setFindKey(null)
+    textareaRef.current?.focus()
   }, [])
 
   const fillComposer = (text: string): void => {
@@ -248,6 +270,26 @@ function Conversation({
       setToolbarError(err instanceof Error ? err.message : String(err))
     } finally {
       setExporting(false)
+    }
+  }
+
+  const handleCopy = async (): Promise<void> => {
+    if (!conversationId) return
+    setToolbarError(null)
+    try {
+      const result = await window.api.copyConversation(conversationId)
+      if (!result.ok) {
+        setToolbarError(result.error)
+        return
+      }
+      setCopied(true)
+      if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current)
+      copiedTimerRef.current = window.setTimeout(() => {
+        copiedTimerRef.current = null
+        setCopied(false)
+      }, 2000)
+    } catch (err) {
+      setToolbarError(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -377,6 +419,26 @@ function Conversation({
               {exporting ? 'Exporting…' : exported ? 'Saved' : 'Export'}
             </button>
           )}
+          {conversationId && (
+            <button
+              className="new-chat-button"
+              onClick={() => void handleCopy()}
+              aria-label="Copy conversation as markdown"
+              title="Copy the whole conversation as markdown"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M9 9h10a1 1 0 011 1v10a1 1 0 01-1 1H9a1 1 0 01-1-1V10a1 1 0 011-1zM16 9V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </svg>
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          )}
           {conversationId && onDelete && (
             <button
               className="new-chat-button"
@@ -442,6 +504,9 @@ function Conversation({
       <div className="sr-only" role="status" aria-live="polite">
         {loading ? 'Delta Explorer is responding' : ''}
       </div>
+      {findKey !== null && (
+        <FindBar rootRef={scrollRef} signal={state.turns} focusKey={findKey} onClose={closeFind} />
+      )}
       <div className="chat-scroll" ref={scrollRef}>
         {state.context && (
           <details className="chat-screen-context">

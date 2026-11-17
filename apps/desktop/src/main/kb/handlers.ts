@@ -13,14 +13,14 @@ export function registerKbIpcHandlers(): void {
   ipcMain.handle('kb-analyze', async () => {
     const unfed = await listUnfedConversations()
     const result = await runKbAnalysisExclusive(unfed, { markFed: true })
-    await recordManualKbRun(result.conversationsAnalyzed)
+    await recordManualKbRun(result)
     return result
   })
 
   ipcMain.handle('kb-reanalyze', async (_event, n: number) => {
     const all = await listConversations()
     const result = await runKbAnalysisExclusive(all.slice(0, n), { markFed: false })
-    await recordManualKbRun(result.conversationsAnalyzed)
+    await recordManualKbRun(result)
     return result
   })
 }

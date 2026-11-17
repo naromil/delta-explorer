@@ -7,6 +7,8 @@ import type {
 } from '@delta/core/conversation'
 import type { Connection } from '../shared/models'
 import type { KbMaintenanceStatus, KbRunResult } from '../shared/kb'
+import type { MemoryResult } from '../main/memory/handlers'
+import type { MemoryFile } from '../main/memory/store'
 import type { ModelCatalogState } from '../shared/model-catalog'
 import type { ConnectionTestResult, DiscoveredModels } from '../main/services/model-discovery'
 import type { MaterialsRenderJob, MaterialsRenderResult } from '../shared/materials-render'
@@ -192,6 +194,8 @@ const api = {
     id: string
   ): Promise<{ ok: true; path: string } | { ok: false; error: string }> =>
     ipcRenderer.invoke('conversation-export', id),
+  copyConversation: (id: string): Promise<{ ok: true } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('conversation-copy', id),
   generateConversationTitle: (firstMessage: string): Promise<string | null> =>
     ipcRenderer.invoke('conversation-generate-title', firstMessage),
 
@@ -208,6 +212,14 @@ const api = {
     ipcRenderer.on('memory-updated', handler)
     return () => ipcRenderer.removeListener('memory-updated', handler)
   },
+  memoryList: (): Promise<MemoryResult<{ files: MemoryFile[] }>> =>
+    ipcRenderer.invoke('memory-list'),
+  memoryRead: (path: string): Promise<MemoryResult<{ content: string; truncated: boolean }>> =>
+    ipcRenderer.invoke('memory-read', path),
+  memoryWrite: (path: string, content: string): Promise<MemoryResult> =>
+    ipcRenderer.invoke('memory-write', path, content),
+  memoryRemove: (path: string): Promise<MemoryResult> => ipcRenderer.invoke('memory-remove', path),
+  memoryOpenFolder: (): Promise<MemoryResult> => ipcRenderer.invoke('memory-open-folder'),
 
   /* The hidden render window only: main ignores these from any other window */
   onMaterialsRender: (cb: (job: MaterialsRenderJob) => void) =>

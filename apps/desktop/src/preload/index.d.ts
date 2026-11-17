@@ -7,6 +7,8 @@ import type {
 } from '@delta/core/conversation'
 import type { Connection } from '../shared/models'
 import type { KbMaintenanceStatus, KbRunResult } from '../shared/kb'
+import type { MemoryResult } from '../main/memory/handlers'
+import type { MemoryFile } from '../main/memory/store'
 import type { ModelCatalogState } from '../shared/model-catalog'
 import type { ConnectionTestResult, DiscoveredModels } from '../main/services/model-discovery'
 import type { MaterialsRenderJob, MaterialsRenderResult } from '../shared/materials-render'
@@ -119,6 +121,8 @@ declare global {
       exportConversation: (
         id: string
       ) => Promise<{ ok: true; path: string } | { ok: false; error: string }>
+      /** Puts the conversation on the clipboard as the markdown Export would write. */
+      copyConversation: (id: string) => Promise<{ ok: true } | { ok: false; error: string }>
       /** A model-written title from the first message; `null` when none could be made. */
       generateConversationTitle: (firstMessage: string) => Promise<string | null>
 
@@ -127,6 +131,13 @@ declare global {
       kbGetStatus: () => Promise<KbMaintenanceStatus>
       kbOnStatus: (cb: (status: KbMaintenanceStatus) => void) => () => void
       onMemoryUpdated: (cb: () => void) => () => void
+
+      /* The document base, for the Knowledge view; paths are relative to its root. */
+      memoryList: () => Promise<MemoryResult<{ files: MemoryFile[] }>>
+      memoryRead: (path: string) => Promise<MemoryResult<{ content: string; truncated: boolean }>>
+      memoryWrite: (path: string, content: string) => Promise<MemoryResult>
+      memoryRemove: (path: string) => Promise<MemoryResult>
+      memoryOpenFolder: () => Promise<MemoryResult>
 
       /* The hidden render window only */
       onMaterialsRender: (cb: (job: MaterialsRenderJob) => void) => void

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, globalShortcut, Tray, Menu } from 'electron'
 import type { WebContents } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -30,7 +30,8 @@ import { sendToSession } from './lookup/state'
 import type { LookupSession } from './lookup/state'
 import { setMainWindow, getMainWindow, clearMainWindow } from './main-window'
 import { applyContextBudget } from './context-budget'
-import { exportConversationToFile } from './conversation-export'
+import { exportConversationToFile, renderConversationMarkdown } from './conversation-export'
+import { loadWindowState, trackWindowState } from './window-state'
 import { generateConversationTitle } from './conversation-title'
 import type { ChatRecord, ConversationState, ConversationTarget } from '@delta/core/conversation'
 import { buildConversationTitle } from '@delta/core/conversation'
@@ -53,6 +54,7 @@ import {
   searchConversations
 } from './conversations'
 import { registerKbIpcHandlers } from './kb/handlers'
+import { registerMemoryIpcHandlers } from './memory/handlers'
 import { startKbAutoMaintenance, stopKbAutoMaintenance } from './kb/maintenance'
 import { migrateLegacyKbPrompt } from './kb/store'
 import { registerModelCatalogIpcHandlers } from './services/model-catalog'
@@ -282,10 +284,19 @@ if (!hasSingleInstanceLock) {
       return await exportConversationToFile(id)
     })
 
+    /* The whole conversation as markdown on the clipboard, as Export would write it. */
+    ipcMain.handle('conversation-copy', async (_event, id: unknown) => {
+      const record = typeof id === 'string' && id.length > 0 ? await loadConversation(id) : null
+      if (!record) return { ok: false, error: 'Conversation not found.' }
+      clipboard.writeText(renderConversationMarkdown(record))
+      return { ok: true }
+    })
+
     registerConfigIpcHandlers() // includes provider-models and provider-test
     registerLookupIpcHandlers()
     migrateLegacyKbPrompt()
     registerKbIpcHandlers()
+    registerMemoryIpcHandlers()
     registerModelCatalogIpcHandlers()
 
     const settings = loadAppSettings()
@@ -483,9 +494,11 @@ function showMainWindow(): void {
 
 /* ---- Main window ---- */
 function createWindow(): BrowserWindow {
+  const windowState = loadWindowState()
   const mainWindow = new BrowserWindow({
-    width: 960,
-    height: 640,
+    width: windowState.width,
+    height: windowState.height,
+    ...(windowState.x !== undefined ? { x: windowState.x, y: windowState.y } : {}),
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
@@ -497,12 +510,15 @@ function createWindow(): BrowserWindow {
   })
 
   setMainWindow(mainWindow)
+  trackWindowState(mainWindow, windowState)
 
   // In-app fallback for the look-up key: fires while this window has focus,
   // which is the only thing a terminal-launched dev run can offer.
   installLocalShortcut(mainWindow, handleHotkeyPressed)
 
   mainWindow.on('ready-to-show', () => {
+    // Maximizing shows the window, so it waits until there is something to paint.
+    if (windowState.maximized) mainWindow.maximize()
     mainWindow.show()
   })
 

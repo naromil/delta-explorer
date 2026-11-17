@@ -54,6 +54,7 @@ const GUIDE_SECTIONS = [
 const SHORTCUTS: ReadonlyArray<{ keys: string[]; action: string }> = [
   { keys: ['Ctrl/Cmd', 'N'], action: 'Start a new chat from any view' },
   { keys: ['Ctrl/Cmd', 'K'], action: 'Search conversations' },
+  { keys: ['Ctrl/Cmd', 'F'], action: 'Find in the open chat' },
   { keys: ['Ctrl/Cmd', ','], action: 'Open Settings' },
   { keys: ['Ctrl/Cmd', 'E'], action: 'Expand the selected text' },
   {

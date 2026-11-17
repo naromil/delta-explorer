@@ -28,7 +28,9 @@ body {
 .chat-toolbar .new-chat-button {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 6px;
+  white-space: nowrap;
   height: 32px;
   padding: 0 12px;
   border-radius: var(--radius-sm);
@@ -890,4 +892,97 @@ body {
   margin: 0 0 8px;
   color: var(--error);
   font-size: 13px;
+}
+
+/* ---- Find in conversation ---- */
+
+.find-anchor {
+  position: relative;
+  height: 0;
+  flex-shrink: 0;
+  z-index: 5;
+}
+
+.find-bar {
+  position: absolute;
+  top: 6px;
+  right: 22px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 6px 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-2);
+}
+
+.find-input {
+  width: 190px;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+}
+
+.find-input::placeholder {
+  color: var(--text-3);
+}
+
+.find-count {
+  min-width: 68px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.find-step {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.find-step svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.find-step:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--text-1);
+}
+
+.find-step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.find-step:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring-inset);
+}
+
+::highlight(delta-find) {
+  background-color: var(--highlight-bg);
+}
+
+::highlight(delta-find-current) {
+  background-color: var(--accent);
+  color: var(--accent-contrast);
 }

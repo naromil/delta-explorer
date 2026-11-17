@@ -114,6 +114,7 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 | `conversation-open`                       | Both            | Any window asks main to open `{id, source}`; main raises a live popup or tells the main window     |
 | `conversation-list-unfed` / `-kb-fed`     | Renderer → Main | KB model integration: list unfed; mark fed                                                         |
 | `conversation-export`                     | Renderer → Main | Save a conversation as markdown (`{ok,path}` or `{ok:false,error}`; cancel is `'Canceled.'`)       |
+| `conversation-copy`                       | Renderer → Main | The conversation as markdown on the clipboard, as Export writes it (`{ok}` or `{ok:false,error}`)  |
 | `chat-card`                               | Main → Renderer | A card the model added through a canvas tool during a canvas `chat-send` (`{requestId, card}`)     |
 | `chat-activity`                           | Main → Renderer | A tool call began during a `chat-send`/`chat-expand` (`{requestId, label}`); shown until text      |
 | `conversation-generate-title`             | Renderer → Main | A model-written title from the first message (`string` or `null`, never throws)                    |
@@ -122,6 +123,7 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 | `materials-render` / `-render-ready` / `-render-result` | Main ↔ render window | A PDF or image to draw, the hidden window's ready handshake, and its pages (JPEG + text) |
 | `kb-analyze` / `kb-reanalyze` | Renderer → Main | Manual curator passes over unfed conversations / the last N |
 | `kb-get-status` / `kb-status` | Renderer ↔ Main | Automatic learning status: invoke a snapshot; main pushes every change |
+| `memory-list` / `-read` / `-write` / `-remove` / `-open-folder` | Renderer → Main | The Knowledge view's browser over the document base (`{ok, …}` or `{ok:false,error}`) |
 | `memory-updated` | Main → Renderer | The document base changed (any writer); every window shows a transient indicator |
 
 #### Module map
@@ -180,6 +182,8 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | Conversation export | `conversation-export.ts`      | `renderConversationMarkdown` (expansions quoted inline) + `exportConversationToFile` (save dialog, atomic write)                                                                                                                      |
 | Memory store        | `memory/store.ts`             | Shell-like ops confined to `{userData}/memories/` (`listMemories`, `readMemory`, `readAutoLoadedMemories`, `grepMemories`, `writeMemory`, `editMemory`, `moveMemory`, `removeMemory`)                                                 |
 | Memory tools        | `memory/tools.ts`             | `memory_*` AI SDK tools + `memoryAgentFor(role)` (assistant vs curator prompt, catalog gate, fail-open) + `memory-updated` broadcast                                                                                                  |
+| Memory browser IPC  | `memory/handlers.ts`          | `memory-*` handlers for the Knowledge view: list, read, write, remove and open the folder, through the store's path rules                                                                                                             |
+| Window state        | `window-state.ts`             | `loadWindowState` / `trackWindowState`: the main window's size, position and maximized flag in `config/window-state.json`; `fitWindowState` distrusts it                                                                              |
 | Materials store     | `materials/store.ts`          | Read-only ops confined to the user's chosen folder (`listMaterials`, `findMaterials`, `readMaterial` paged by line, `countMaterial`, `grepMaterials` with a scan budget, `readViewableMaterial`); hidden entries and symlinks are out |
 | Materials tools     | `materials/tools.ts`          | `materials_*` AI SDK tools (ls, find, cat, wc, grep, view) + `withMaterials(agent, imageSupport)`, which adds them and the folder's top levels to the assistant's `AgentTools`                                                        |
 | Materials renderer  | `materials/render.ts`         | `renderMaterial`: hidden sandboxed window (`?role=render`) that turns PDF pages and images into JPEGs plus page text; job types in `shared/materials-render.ts`                                                                       |
@@ -241,6 +245,8 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | ContextMenu      | `ui/conversation/ContextMenu.tsx`                                                                                                               | Right-click Expand / Expand on… / Copy / Select All; also the list of answers on one range (`items`)                                                         |
 | ExpandPrompt     | `ui/conversation/ExpandPrompt.tsx`                                                                                                              | Floating input for a custom question ("Expand on…", "Ask…"), plus the one-click intents                                                                      |
 | Selection bar    | `ui/conversation/ExpandSelectionBar.tsx`                                                                                                        | Floats over a selection in an answer: Expand, Ask…, Highlight, Link… (canvas), intents under More                                                            |
+| Find in chat     | `components/conversation/FindBar.tsx`, `find-text.ts`                                                                                           | Ctrl/Cmd+F bar; matches across text nodes (`findTextMatches`, pure) painted with the CSS Custom Highlight API                                                |
+| Memory browser   | `views/knowledge/MemoryBrowser.tsx`                                                                                                             | The notes as a tree with a rendered viewer, an editor and delete; follows `memory-updated`                                                                   |
 | Search           | `components/conversation/ConversationSearch.tsx`                                                                                                | Ctrl/Cmd+K modal: search titles + messages, snippet, load/delete, errors                                                                                     |
 | Settings         | `views/settings/Settings.tsx`                                                                                                                   | 3-tab settings orchestrator                                                                                                                                  |
 | Memory indicator | `components/MemoryIndicator.tsx`                                                                                                                | Transient "Memory updated" pill in both windows, driven by `memory-updated`                                                                                  |
@@ -296,6 +302,10 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | How PDFs and images reach the model      | `materials/render.ts` + renderer `materials-render.ts` (drawing), `provider.ts` (`withToolImages`)                             |
 | What the curator saves                   | `shared/prompts.ts` (`KB_MEMORY_SYSTEM_PROMPT`), `kb/run.ts` (`updateMemories`)                                                |
 | What the window shows during tool calls  | `main/tool-activity.ts` (labels), `ui/lib/tool-activity.ts` (state + context), `ToolActivityLine.tsx`                          |
+| Memory browser in the Knowledge view     | `MemoryBrowser.tsx`, `memory/handlers.ts`, `memoryFiles` in `memory/store.ts`                                                  |
+| What the last review changed             | `kb/run.ts` (the curator's replies), `shared/kb.ts` (`normalizeKbChanges`), `KnowledgeView.tsx`                                |
+| Find in conversation                     | `components/conversation/FindBar.tsx` + `find-text.ts`, `::highlight` rules in `chat.css`                                      |
+| Main window size and position            | `main/window-state.ts`, `createWindow` in `index.ts`                                                                           |
 | Memory updated indicator                 | `components/MemoryIndicator.tsx`, `memory/tools.ts` (`broadcastMemoryUpdated`)                                                 |
 | Canvas geometry, sessions, word fit      | `shared/canvas.ts` (+ `estimateWords` constants mirror `ui/styles/canvas.css`)                                                 |
 | Canvas gestures, tools, expansion flow   | `ui/canvas/CanvasView.tsx`                                                                                                     |
@@ -469,6 +479,16 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
     as tool-less gets no tools; for an unknown model, a 400/404/422 before any output retries once
     without tools or their instructions. The curator sets `toolsRequired` instead: either case fails
     the pass and surfaces in `kb-status`, so a conversation is never marked fed with nothing written.
+  - **The user can read and correct it.** The Knowledge view's `MemoryBrowser` lists every file
+    (`memoryFiles`, marking the auto-loaded ones "always read"), renders the open one and can edit or
+    delete it. `memory/handlers.ts` goes through the same store functions as the tools, so a renderer
+    payload meets the same path rules, and a write or delete broadcasts `memory-updated`. The browser
+    follows that event; an open editor keeps its text and warns when the file changed under it. A file
+    over the per-file limit reads cut, so it cannot be edited there (Open folder instead).
+  - **A review says what it changed.** The curator's one-line reply per conversation is kept:
+    `KbRunResult.changes` → `kb/state.json` `lastChanges` (`normalizeKbChanges`: one line each, cut, at
+    most `KB_CHANGES_LIMIT`) → `KbMaintenanceStatus.lastChanges`, shown under the status bar. A pass
+    that learned nothing keeps the previous list.
   - **Indicator.** A successful mutation broadcasts `memory-updated` to every window, and
     `MemoryIndicator` shows a transient pill. It is not on a turn because curator writes happen with
     no reply on screen.
@@ -839,6 +859,16 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   (`hasNoConnections` in `shared/models.ts`) opens Settings on the Models tab instead of Home, unless
   the user has already left Home. Deleting the open conversation goes through
   its own toolbar (`deleteConversation` in the hook detaches the meta first so no autosave follows).
+- **Find in conversation never touches the DOM.** Ctrl/Cmd+F opens `FindBar` in the chat view. It reads
+  the text nodes under `.chat-scroll` (formulas and editors skipped), matches across node boundaries
+  (`findTextMatches`), and paints `Range`s through `CSS.highlights` (`::highlight(delta-find)`), so
+  React's nodes and the `data-src` offsets stay as they are and the input keeps the focus, which
+  `webContents.findInPage` does not allow. Matches are read again as text streams in, but the view
+  scrolls only when the query or the step changes. Escape is claimed by the bar, so it does not stop an answer.
+- **The main window opens where it was left.** `window-state.ts` saves size, position and the maximized
+  flag to `config/window-state.json` (its own file, since a settings write announces a config change),
+  debounced and once more on close. `fitWindowState` clamps the size to the displays present and drops
+  a position that is off screen; a Wayland session reports no position, so only the size is kept there.
 - **Rename is metadata-only.** `renameConversation(title)` trims to the title limit, updates the
   in-memory meta and saves with `touchContent: false`: the body's `title` changes but
   `updatedAt` does not, so the recents list keeps its order. Inline editing in
@@ -847,6 +877,8 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   (expansions quoted one level deeper per reply, failed/blank assistant turns skipped) and writes
   it atomically to the path chosen in the system save dialog. The UI shows
   idle → `Exporting…` → `Saved` (2s) or an inline error; the `'Canceled.'` error is a no-op.
+  Copy puts the same markdown on the clipboard through `conversation-copy` (main writes it, as the
+  record is read from disk there).
 - **KB maintenance is automatic.** `kb/maintenance.ts` subscribes to `onConversationSaved`
   (`conversations.ts`) and `onAppConfigChanged` (`config.ts`). A save starts a 3-minute-debounced
   pass (so the review follows a session rather than each answer; a config change waits 20s) that curates at most 4 newest unfed conversations into the document base through the

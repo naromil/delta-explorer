@@ -17,6 +17,7 @@ import { AUTO_LOADED_MEMORY_PREFIX, type AutoLoadedMemory } from '@delta/core/pr
 export const MAX_MEMORY_FILE_CHARS = 32_000
 const MAX_LISTED_ENTRIES = 200
 const MAX_GREP_MATCHES = 100
+const MAX_BROWSED_FILES = 1000
 const MAX_GREP_LINE_CHARS = 200
 /** These go into every system prompt, so they are held well below the per-file limit. */
 const MAX_AUTO_LOADED_FILE_CHARS = 8_000
@@ -114,15 +115,34 @@ export function readMemory(root: string, path: string): string {
   return `${content.slice(0, MAX_MEMORY_FILE_CHARS)}\n… file truncated at ${MAX_MEMORY_FILE_CHARS} characters`
 }
 
+export interface MemoryFile {
+  path: string
+  /** Sent with every request; every other file is read on demand. */
+  autoLoaded: boolean
+}
+
+function isAutoLoadedName(name: string): boolean {
+  return isMarkdownName(name) && name.toLowerCase().startsWith(AUTO_LOADED_MEMORY_PREFIX)
+}
+
+/** Every markdown file, for the Knowledge view. The same walk the model's `ls` sees. */
+export function memoryFiles(root: string): MemoryFile[] {
+  const files: MemoryFile[] = []
+  for (const entry of walk({ absolute: root, relative: '' })) {
+    if (entry.isDirectory) continue
+    if (files.length === MAX_BROWSED_FILES) break
+    files.push({
+      path: entry.relative,
+      autoLoaded: !entry.relative.includes('/') && isAutoLoadedName(entry.relative)
+    })
+  }
+  return files
+}
+
 /** Every file named `index*` directly in the root, for the system prompt. Symlinks are skipped. */
 export function readAutoLoadedMemories(root: string): AutoLoadedMemory[] {
   const paths = readdirSync(root, { withFileTypes: true })
-    .filter(
-      (entry) =>
-        entry.isFile() &&
-        isMarkdownName(entry.name) &&
-        entry.name.toLowerCase().startsWith(AUTO_LOADED_MEMORY_PREFIX)
-    )
+    .filter((entry) => entry.isFile() && isAutoLoadedName(entry.name))
     .map((entry) => entry.name)
     .sort((a, b) => a.localeCompare(b))
 

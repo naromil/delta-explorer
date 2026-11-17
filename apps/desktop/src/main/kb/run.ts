@@ -1,5 +1,6 @@
 import type { ConversationMeta, ConversationRecord } from '@delta/core/conversation'
-import type { KbRunResult } from '../../shared/kb'
+import { normalizeKbChanges } from '../../shared/kb'
+import type { KbChange, KbRunResult } from '../../shared/kb'
 import { callProvider } from '../provider'
 import { loadConversation, markConversationKbFed } from '../conversations'
 import { memoryAgentFor } from '../memory/tools'
@@ -25,13 +26,14 @@ function hasLearningMaterial(record: ConversationRecord): boolean {
 }
 
 /**
- * The model's reply is only a status line; what matters is what its tools wrote.
- * Without tools nothing can be saved, so this throws and the conversation stays unfed.
+ * What matters is what the model's tools wrote; its reply is one line saying so, kept
+ * for the Knowledge view. Without tools nothing can be saved, so this throws and the
+ * conversation stays unfed.
  */
-async function updateMemories(material: string, signal?: AbortSignal): Promise<void> {
+async function updateMemories(material: string, signal?: AbortSignal): Promise<string> {
   const agent = memoryAgentFor('kb-maintenance')
   if (!agent) throw new Error(CURATOR_UNAVAILABLE_ERROR)
-  await callProvider(buildKbMemoryMessages(material), 'kb-maintenance', signal, agent)
+  return await callProvider(buildKbMemoryMessages(material), 'kb-maintenance', signal, agent)
 }
 
 /**
@@ -46,6 +48,7 @@ export async function runKbAnalysis(
   options: KbAnalysisOptions
 ): Promise<KbRunResult> {
   let analyzed = 0
+  const changes: KbChange[] = []
 
   for (const meta of metas) {
     if (options.signal?.aborted) break
@@ -60,10 +63,12 @@ export async function runKbAnalysis(
       continue
     }
 
-    await updateMemories(buildSingleMaterial(record), options.signal)
+    const summary = await updateMemories(buildSingleMaterial(record), options.signal)
+    changes.push({ title: record.title, summary })
     if (options.markFed) await markConversationKbFed(meta.id, record.updatedAt)
     analyzed++
   }
 
-  return { conversationsAnalyzed: options.signal?.aborted ? 0 : analyzed }
+  if (options.signal?.aborted) return { conversationsAnalyzed: 0, changes: [] }
+  return { conversationsAnalyzed: analyzed, changes: normalizeKbChanges(changes) }
 }

@@ -54,7 +54,13 @@ describe('runKbAnalysis', () => {
 
     const result = await runKbAnalysis([{ id: 'chat_a' }, { id: 'chat_b' }], { markFed: true })
 
-    expect(result).toEqual({ conversationsAnalyzed: 2 })
+    expect(result).toEqual({
+      conversationsAnalyzed: 2,
+      changes: [
+        { title: 'Conversation chat_a', summary: 'wrote profile.md' },
+        { title: 'Conversation chat_b', summary: 'wrote profile.md' }
+      ]
+    })
     expect(memoryAgentFor).toHaveBeenCalledWith('kb-maintenance')
     expect(callProvider).toHaveBeenCalledTimes(2)
     const [messages, role, , usedAgent] = callProvider.mock.calls[0]

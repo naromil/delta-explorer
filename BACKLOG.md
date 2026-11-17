@@ -2,7 +2,7 @@
 
 ## Routine (Claude may build these without asking)
 
-- [ ] Let the user see and correct the memory — the Knowledge view shows only status and the analyze buttons, and the preload has no way to list or read memory files. Add a read-only tree with a viewer, an "open folder" button, and show the curator's one-line "what I changed" reply after each pass
+- [x] Let the user see and correct the memory — the Knowledge view shows only status and the analyze buttons, and the preload has no way to list or read memory files. Add a read-only tree with a viewer, an "open folder" button, and show the curator's one-line "what I changed" reply after each pass
 - [ ] Show something while memory tools run — `provider.ts` forwards only text deltas, so tool steps are silent, and `MEMORY_ASSISTANT_WRITE_RULES` tells the model to finish its notes before answering, which delays the first token. Either show a "checking notes…" state, or leave writing to the curator and keep only reads in session
 - [ ] Expansion: map of what you've explored — a view of every expanded term across conversations, showing repeats and how they connect, with a jump back to the source. First step: tell the user "you expanded this term before" and offer the earlier answer
 - [ ] Split `CanvasView.tsx` (2,991 lines) and `useCanvas.ts` (1,432 lines), and move the canvas conventions out of the root `AGENTS.md` (876 lines, loaded into every agent session) into `packages/ui/AGENTS.md`
@@ -14,9 +14,9 @@
 - [ ] Unit-test `straightenBlocks` in `canvas-straighten.ts` — the only canvas layout module with no tests, and tidy relies on it never resizing or detaching cards
 - [x] Display what tool calls are in process when the agent calls tools instead of responding directly, so the user knows what is going on.
 - [ ] Jump to the matching message when opening a search result — `conversation-search` results would need a turn id (IPC contract change)
-- [ ] Copy a whole conversation as markdown to the clipboard — needs a new IPC channel or moving the export renderer into `shared/`
-- [ ] Remember the main window's size and position — adds a field to the `settings.json` schema
-- [ ] Find in conversation (Ctrl/Cmd+F) — Electron shows no find bar; needs `webContents.findInPage` behind a new IPC channel
+- [x] Copy a whole conversation as markdown to the clipboard — needs a new IPC channel or moving the export renderer into `shared/`
+- [x] Remember the main window's size and position — adds a field to the `settings.json` schema
+- [x] Find in conversation (Ctrl/Cmd+F) — Electron shows no find bar; needs `webContents.findInPage` behind a new IPC channel
 
 ## Proposed (needs the owner's OK — move to Routine to approve)
 

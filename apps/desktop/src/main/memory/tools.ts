@@ -105,7 +105,7 @@ function catalogSaysNoTools(role: RoleId): boolean {
 }
 
 /** Every window shows the indicator: the curator writes with no reply on screen to attach it to. */
-function broadcastMemoryUpdated(): void {
+export function broadcastMemoryUpdated(): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed() || win.webContents.isDestroyed()) continue
     try {
