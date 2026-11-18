@@ -11,7 +11,7 @@
 - [x] List the Up-arrow "edit last message" shortcut in the Look-up Guide's Keyboard Shortcuts — it shipped last week but the in-app list still omits it
 - [x] Unit-test `generateConversationTitle` in `main/conversation-title.ts` — its "`null` on any failure, never throws" contract guards every first send and has no test
 - [x] Test that `safeHref` (`ui/lib/safe-url.ts`) agrees with `isSafeExternalUrl` (`window-guards.ts`) — AGENTS.md requires the two allowlists to match and nothing enforces it
-- [ ] Unit-test `straightenBlocks` in `canvas-straighten.ts` — the only canvas layout module with no tests, and tidy relies on it never resizing or detaching cards
+- [x] Unit-test `straightenBlocks` in `canvas-straighten.ts` — the only canvas layout module with no tests, and tidy relies on it never resizing or detaching cards
 - [x] Display what tool calls are in process when the agent calls tools instead of responding directly, so the user knows what is going on.
 - [ ] Jump to the matching message when opening a search result — `conversation-search` results would need a turn id (IPC contract change)
 - [x] Copy a whole conversation as markdown to the clipboard — needs a new IPC channel or moving the export renderer into `shared/`
