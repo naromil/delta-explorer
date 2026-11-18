@@ -80,7 +80,10 @@ export function canvasOutline(
   }
 
   const rows: CanvasOutlineRow[] = []
+  const listed = new Set<string>()
   const visit = (card: CanvasCard, depth: number): void => {
+    if (listed.has(card.id)) return
+    listed.add(card.id)
     rows.push(cardRow(card, turns, depth))
     for (const child of (children.get(card.id) ?? []).sort(byPosition)) visit(child, depth + 1)
   }
@@ -99,6 +102,10 @@ export function canvasOutline(
     for (const card of (held.get(frame.id) ?? []).sort(byPosition)) visit(card, 1)
   }
   for (const card of roots.filter((item) => !placed.has(item.id)).sort(byPosition)) visit(card, 0)
+  // Cards that only lead back to each other have no root; they are listed all the same.
+  for (const card of layout.cards.filter((item) => !listed.has(item.id)).sort(byPosition)) {
+    visit(card, 0)
+  }
   return rows
 }
 

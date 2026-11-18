@@ -1081,32 +1081,6 @@ export function turnOwnerCard(
 }
 
 /**
- * The linear conversation leading up to and including a card. Session history
- * follows `parentId`, so a canvas can branch without its branches seeing each other.
- */
-export function turnsThroughCard(cards: CanvasCard[], turns: Turn[], id: string): Turn[] {
-  const card = cardById(cards, id)
-  if (!card) return []
-  if (card.kind === 'note') return []
-  if (card.kind === 'page') {
-    const turn = turns.find((item) => item.id === card.turnId)
-    if (!turn) return []
-    const page = { title: card.title, url: card.url }
-    return [{ ...turn, content: buildPageCanvasContextMessage(turn.content, page), expansions: [] }]
-  }
-  if (card.kind === 'message') {
-    const before = card.parentId === undefined ? [] : turnsThroughCard(cards, turns, card.parentId)
-    const own = turns.filter((turn) => turn.id === card.userTurnId || turn.id === card.turnId)
-    return [...before, ...own]
-  }
-  const message = turnOwnerCard(cards, card.turnId)
-  return [
-    ...(message ? turnsThroughCard(cards, turns, message.id) : []),
-    ...expansionHistory(turns, card)
-  ]
-}
-
-/**
  * The cards whose conversation a card follows, itself first: the same walk as
  * `turnsThroughCard`, as cards. A note has no conversation but still receives nothing else.
  */
@@ -1120,6 +1094,34 @@ export function sessionCardIds(cards: CanvasCard[], id: string | undefined): str
       card.kind === 'message' ? cardById(cards, card.parentId) : turnOwnerCard(cards, card.turnId)
   }
   return path
+}
+
+/** What one card adds to the conversation: its own turns, or the question and answer of a term. */
+function ownTurns(card: CanvasCard, turns: Turn[]): Turn[] {
+  if (card.kind === 'note') return []
+  if (card.kind === 'page') {
+    const turn = turns.find((item) => item.id === card.turnId)
+    if (!turn) return []
+    const page = { title: card.title, url: card.url }
+    return [{ ...turn, content: buildPageCanvasContextMessage(turn.content, page), expansions: [] }]
+  }
+  if (card.kind === 'message') {
+    return turns.filter((turn) => turn.id === card.userTurnId || turn.id === card.turnId)
+  }
+  return expansionHistory(turns, card)
+}
+
+/**
+ * The linear conversation leading up to and including a card. Session history
+ * follows `parentId`, so a canvas can branch without its branches seeing each other.
+ */
+export function turnsThroughCard(cards: CanvasCard[], turns: Turn[], id: string): Turn[] {
+  return sessionCardIds(cards, id)
+    .reverse()
+    .flatMap((cardId) => {
+      const card = cardById(cards, cardId)
+      return card ? ownTurns(card, turns) : []
+    })
 }
 
 /* ---- Links ---- */
@@ -1578,11 +1580,23 @@ function soundWebChat(raw: unknown, ids: ReadonlySet<string>): CanvasWebChat | u
   }
 }
 
+/** The first card holding each id; every lookup by id would find only that one. */
+function firstOfEachId(cards: CanvasCard[]): CanvasCard[] {
+  const seen = new Set<string>()
+  return cards.filter((card) => {
+    if (seen.has(card.id)) return false
+    seen.add(card.id)
+    return true
+  })
+}
+
 /** A stored layout is never trusted: a card that lost its turn or host is left out. */
 export function normalizeCanvasLayout(raw: unknown, turns: Turn[]): CanvasLayout {
   const value = (typeof raw === 'object' && raw !== null ? raw : {}) as Partial<CanvasLayout>
   const cards = dropOrphans(
-    (Array.isArray(value.cards) ? value.cards : []).filter((card) => isCardSound(card, turns))
+    firstOfEachId(
+      (Array.isArray(value.cards) ? value.cards : []).filter((card) => isCardSound(card, turns))
+    )
   )
   const ids = new Set(cards.map((card) => card.id))
   const viewport = value.viewport

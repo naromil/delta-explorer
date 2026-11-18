@@ -456,6 +456,29 @@ describe('load boundary', () => {
     expect((layout.cards[2] as CanvasMessageCard).parentId).toBeUndefined()
   })
 
+  it('keeps only the first card of each id', () => {
+    const first = message('a', 1, rect(0, 0))
+    const layout = normalizeCanvasLayout(
+      { cards: [first, { ...first, rect: rect(500, 0) }] },
+      turns
+    )
+    expect(layout.cards).toEqual([first])
+  })
+
+  it('walks a session whose cards lead back to each other once, without overflowing', () => {
+    const looped = [
+      { ...message('a', 1, rect(0, 0)), parentId: 'b' },
+      message('b', 1, rect(0, 100), 'a')
+    ]
+    const layout = normalizeCanvasLayout({ cards: looped }, turns)
+    expect(turnsThroughCard(layout.cards, turns, 'a').map((t) => t.content)).toEqual([
+      'q',
+      'a',
+      'q',
+      'a'
+    ])
+  })
+
   it('checks containment', () => {
     expect(containsRect(rect(0, 0), rect(10, 10, 50, 50))).toBe(true)
     expect(containsRect(rect(0, 0), rect(60, 60, 50, 50))).toBe(false)

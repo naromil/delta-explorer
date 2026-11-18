@@ -1042,6 +1042,16 @@ describe('the outline', () => {
     expect(inNote[0].snippet).toBeUndefined()
     expect(searchCanvasOutline(rows, '   ')).toEqual([])
   })
+
+  it('lists cards that lead back to each other once each', () => {
+    const cards = [
+      message('a', 1, rect(0, 0), 'b'),
+      message('b', 3, rect(0, 100), 'a'),
+      message('c', 1, rect(500, 0), 'c')
+    ]
+    const rows = canvasOutline({ cards, frames: [] }, turns)
+    expect(rows.map((row) => row.id).sort()).toEqual(['a', 'b', 'c'])
+  })
 })
 
 describe('copying as markdown', () => {
