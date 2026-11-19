@@ -1,5 +1,11 @@
 import type { CanvasCard, CanvasLinkContext } from '@delta/core/canvas'
+import type { ConversationMeta, ConversationTarget } from '@delta/core/conversation'
+import { CONVERSATION_SOURCE_LABELS } from '@delta/core/conversation'
 import type { ContextMenuItem } from '../conversation/ContextMenu'
+import { formatRelativeTime } from '../lib/format'
+
+/** Chats and look-ups in the history menu; search reaches the rest. */
+const HISTORY_OTHERS_LIMIT = 8
 
 /** Right-click menus, one list per thing on the plane. Each names the key that does the same. */
 
@@ -105,5 +111,46 @@ export function linkMenuItems(actions: {
     { label: 'Go to the start', onSelect: actions.goToStart },
     { label: 'Go to the end', onSelect: actions.goToEnd },
     { label: 'Delete', shortcut: 'Del', onSelect: actions.remove }
+  ]
+}
+
+/**
+ * The title bar's history: a new canvas, the app's extras, the other canvases, the newest chats
+ * and look-ups (opened through the host), search when there are more, and deleting this canvas.
+ */
+export function historyMenuItems(
+  sessions: ConversationMeta[],
+  options: {
+    canvasId: string
+    extras: ContextMenuItem[]
+    deletable: boolean
+    newCanvas: () => void
+    openCanvas: (id: string) => void
+    openConversation: (target: ConversationTarget) => void
+    openSearch?: () => void
+    deleteCanvas: () => void
+  }
+): ContextMenuItem[] {
+  const others = sessions.filter((item) => item.source !== 'canvas')
+  const { openSearch } = options
+  return [
+    { label: 'New canvas', onSelect: options.newCanvas },
+    ...options.extras,
+    ...sessions
+      .filter((item) => item.source === 'canvas' && item.id !== options.canvasId)
+      .map((item) => ({
+        label: item.title,
+        detail: formatRelativeTime(item.updatedAt),
+        onSelect: () => options.openCanvas(item.id)
+      })),
+    ...others.slice(0, HISTORY_OTHERS_LIMIT).map((item) => ({
+      label: item.title,
+      detail: `${CONVERSATION_SOURCE_LABELS[item.source]} · ${formatRelativeTime(item.updatedAt)}`,
+      onSelect: () => options.openConversation({ id: item.id, source: item.source })
+    })),
+    ...(openSearch && others.length > HISTORY_OTHERS_LIMIT
+      ? [{ label: 'Search all conversations…', onSelect: openSearch }]
+      : []),
+    ...(options.deletable ? [{ label: 'Delete this canvas', onSelect: options.deleteCanvas }] : [])
   ]
 }
