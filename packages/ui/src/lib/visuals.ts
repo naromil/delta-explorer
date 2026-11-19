@@ -326,7 +326,8 @@ function parseChart(source: string): Visual | null {
  */
 function parseTraceRow(line: string): TraceCell[] {
   const text = line.replace(/`/g, '').trim()
-  if (/^[\s|:-]+$/.test(text) && text.includes('-')) return []
+  // A table rule has pipes and `---`; `- - -` or `| - | - |` is a row of empty cells.
+  if (/^[\s|:-]+$/.test(text) && text.includes('|') && text.includes('--')) return []
   // Only a row fenced on both sides is a markdown row; `| R | r` starts with an empty cell.
   const fenced = text.length > 1 && text.startsWith('|') && text.endsWith('|')
   const parts = text.includes('|')

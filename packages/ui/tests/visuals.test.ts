@@ -175,6 +175,24 @@ describe('diagram blocks', () => {
     expect(table.frames[0].rows[0][1].marked).toBe(true)
   })
 
+  it('keeps a trace row of dashes standing for empty cells', () => {
+    const filling = parseVisual('trace', '[Start: nothing filled]\n- - -\n[Fill the first]\n1* - -')
+    if (filling?.kind !== 'trace') throw new Error('not a trace')
+    expect(filling.frames.map((frame) => frame.caption)).toEqual([
+      'Start: nothing filled',
+      'Fill the first'
+    ])
+    expect(filling.frames[0].rows.map((row) => row.map((cell) => cell.text))).toEqual([
+      ['-', '-', '-']
+    ])
+    const piped = parseVisual('trace', '| a | b |\n|:--|--:|\n| - | - |')
+    if (piped?.kind !== 'trace') throw new Error('not a trace')
+    expect(piped.frames[0].rows.map((row) => row.map((cell) => cell.text))).toEqual([
+      ['a', 'b'],
+      ['-', '-']
+    ])
+  })
+
   it('read a network: links, chains, directions and a label that holds a dash', () => {
     const visual = parseVisual(
       'network',
