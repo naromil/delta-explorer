@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
+import { MATERIALS_TOOL_DESCRIPTIONS, MEMORY_TOOL_DESCRIPTIONS } from '@delta/core/prompts'
+import { createCanvasTools } from '../../src/main/canvas-tools'
 import { toolActivityLabel, withToolActivity } from '../../src/main/tool-activity'
 
 function run(tools: ToolSet, name: string, input: unknown): unknown {
@@ -23,6 +25,25 @@ describe('toolActivityLabel', () => {
     )
     expect(toolActivityLabel('canvas_add_visual', { title: 'Parabola' })).toBe(
       'Drawing a visual: Parabola'
+    )
+  })
+
+  it('gives every tool the app hands a model its own line, so no step runs silently', () => {
+    const names = [
+      ...Object.keys(MEMORY_TOOL_DESCRIPTIONS).map((command) => `memory_${command}`),
+      ...Object.keys(MATERIALS_TOOL_DESCRIPTIONS).map((command) => `materials_${command}`),
+      ...Object.keys(createCanvasTools({ explore: true }, () => undefined))
+    ]
+    expect(names).toContain('memory_write')
+    for (const name of names) {
+      expect(toolActivityLabel(name, {}), name).not.toBe('Using a tool')
+    }
+  })
+
+  it('says when the model is taking notes', () => {
+    expect(toolActivityLabel('memory_edit', { path: 'inbox.md' })).toBe('Updating a note: inbox.md')
+    expect(toolActivityLabel('memory_write', { path: 'topics/calculus.md' })).toBe(
+      'Writing a note: topics/calculus.md'
     )
   })
 
