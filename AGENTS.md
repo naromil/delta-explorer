@@ -137,6 +137,7 @@ Renderer (React 19) → Preload (contextBridge) → Main process (Node)
 | `context-budget.ts`    | Pure token budgeting: `estimateTokens` (4 chars/token), `budgetFor` (85% of the window minus the output reserve), `trimMessages` (drops oldest non-system messages, never the last)                                                                                                                          |
 | `rich-text.ts`         | Pure rich-text model: `ExpansionNode`, `validateInsertion` / `insertExpansion(InTurns)` / `updateExpansion` / `setExpansionFolded` / `findExpansionIn*` / `maxExpansionId`, `flattenMarkdown`, highlights (`TextHighlight`, `toggleHighlightInTurns`, `highlightedPassages`), legacy `migrateLegacySegments` |
 | `expand-prompt.ts`     | `buildExpandRequest(state, turn, parentId, range, role, prompt?, attachments?)` — a follow-up's messages at that turn, ancestor chain, instruction; `buildExpandMessages` assembles the branch                                                                                                               |
+| `expansion-terms.ts`   | Terms expanded before: `expansionTermKey` (one spelling per term, passages excluded), `expansionsOfTerm`, `earlierExpansionOfTerm` (same conversation, not the frame's own range)                                                                                                                            |
 | `attachments.ts`       | `ImageAttachment`, per-message/size limits, `isImageInput` / `isImageAttachment` validation, `scaledImageSize`                                                                                                                                                                                               |
 | `canvas.ts`            | Pure canvas model: card types (incl. the extension's `page`; `layout.webChat` binds the extension's web chat canvas), rectangles, snapping, `estimateWords`, `withCanvasFit`, `resolveMove`, session walks (`turnsThroughCard`), `linkPath`, viewport math, `normalizeCanvasLayout`                          |
 | `canvas-selection.ts`  | What a selection covers: `marqueeHits`, `movingForSelection` (frames bring contents, cards bring what is joined), `sessionAncestorIds`, `cardAtPoint`, `selectionMarkdown`, `sourceExcerpts`                                                                                                                 |
@@ -306,6 +307,7 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | What the last review changed             | `kb/run.ts` (the curator's replies), `shared/kb.ts` (`normalizeKbChanges`), `KnowledgeView.tsx`                                |
 | Find in conversation                     | `components/conversation/FindBar.tsx` + `find-text.ts`, `::highlight` rules in `chat.css`                                      |
 | Main window size and position            | `main/window-state.ts`, `createWindow` in `index.ts`                                                                           |
+| "You expanded this before" in a frame    | `shared/expansion-terms.ts`, `ui/lib/expansion-history.ts`, `hooks/useExpansionHistory.ts`, `ExpansionFrame.tsx`               |
 | Memory updated indicator                 | `components/MemoryIndicator.tsx`, `memory/tools.ts` (`broadcastMemoryUpdated`)                                                 |
 | Canvas geometry, sessions, word fit      | `shared/canvas.ts` (+ `estimateWords` constants mirror `ui/styles/canvas.css`)                                                 |
 | Canvas gestures, tools, expansion flow   | `ui/canvas/CanvasView.tsx`                                                                                                     |
@@ -957,6 +959,14 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   `memoryAgentFor`, `applyContextBudget`. Being a branch, it never enters the history of later turns or of
   sibling expansions. Its own features are the anchor, the define/explain instruction
   (`isTermSelection`) and the short default length. Anything added to follow-ups should reach it as well.
+- **A frame says when its term was expanded before.** An open `ExpansionFrame` asks the optional
+  `ExpansionHistoryContext` (`useEarlierExpansion`) once per id and term; only the desktop chat view
+  provides it (`useExpansionHistory` in `App`), so the look-up popup, the canvas and the extension show
+  nothing extra. Terms compare by `expansionTermKey`. It looks earlier in the open conversation first
+  (`earlierExpansionOfTerm`, never another answer on the frame's own range, which "N answers" lists),
+  then through `conversation-search` and `conversation-load`, reading at most 8 results and caching per
+  term while the conversation is open. The earlier answer shows display-only (`anchored={false}`),
+  with Open for another conversation. Nothing is stored.
 - **Expanding has several entry points, all through `submit`.** The context menu, the selection
   bar, Ctrl/Cmd+E (Expand) and Ctrl/Cmd+Shift+E (Expand on…) resolve and validate the same way.
   `EXPAND_INTENTS` store their text in `prompt`, so frames, export and the curator treat them as a

@@ -107,6 +107,36 @@
   color: var(--text-1);
 }
 
+/* An earlier answer to the same term, offered under the new one. */
+.frame-earlier {
+  display: block;
+  margin-top: 0.4em;
+  padding-top: 0.3em;
+  border-top: 1px solid var(--border-strong);
+}
+
+.frame-earlier-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  user-select: none;
+}
+
+.frame-earlier-note {
+  color: var(--text-2);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.frame-earlier-answer {
+  display: block;
+  margin-top: 0.3em;
+  padding-left: 8px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-2);
+}
+
 /* A slice with bold or code renders through markdown, but a pill or term stays one line. */
 .queried .md-p,
 .frame-term .md-p {
