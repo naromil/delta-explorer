@@ -9,30 +9,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   CanvasCard,
-  CanvasColor,
-  CanvasFrame,
-  CanvasLayout,
   CanvasLink,
-  CanvasLinkContext,
   CanvasMessageCard,
   CanvasRect,
-  CanvasViewport,
   CanvasWebChat
 } from '@delta/core/canvas'
 import {
   DEFAULT_PAGE_SIZE,
-  DEFAULT_VIEWPORT,
-  QUOTE_TEXT_LIMIT,
   cascadeCardIds,
   fitCardHeight,
-  raisedStack,
   normalizeCanvasLayout,
-  setCardCollapsed,
   withoutField
 } from '@delta/core/canvas'
-import type { CanvasFrameUpdate } from '@delta/core/canvas-arrange'
-import { duplicateSelection } from '@delta/core/canvas-arrange'
-import type { CanvasPatch, CanvasPatchDirection, CanvasSnapshot } from '@delta/core/canvas-history'
+import type { CanvasPatch, CanvasPatchDirection } from '@delta/core/canvas-history'
 import { applyCanvasPatch, diffCanvas } from '@delta/core/canvas-history'
 import type { CanvasContextLink } from '@delta/core/canvas-context'
 import type { ConversationMeta, ProviderMessage, Turn } from '@delta/core/conversation'
@@ -62,6 +51,33 @@ import { useUiHost } from '../host'
 import type { ExportResult, StreamListener } from '../host'
 import type { ActivityLabels, ToolActivity } from '../lib/tool-activity'
 import {
+  HISTORY_LIMIT,
+  PAGE_TEXT_LIMIT,
+  SAVE_DELAY_MS,
+  UNTITLED,
+  allocateTurnId,
+  emptyDoc,
+  newMeta,
+  requestBelongsTo,
+  snapshotOf
+} from './canvas-state'
+import type {
+  CanvasAskRequest,
+  CanvasAsker,
+  CanvasDoc,
+  CanvasDocView,
+  CanvasExpandPlacement,
+  CanvasHistoryStep,
+  CanvasImport,
+  CanvasMeta,
+  CanvasOpening,
+  CanvasPageInput,
+  CanvasSpawnedForm,
+  CanvasState,
+  PendingRequest
+} from './canvas-state'
+import { useCanvasLayout } from './useCanvasLayout'
+import {
   NO_ACTIVITY_LABELS,
   liveActivityLabels,
   resolveToolActivity,
@@ -69,245 +85,7 @@ import {
   withoutActivityLabel
 } from '../lib/tool-activity'
 
-const SAVE_DELAY_MS = 300
-const UNTITLED = 'Untitled canvas'
-const HISTORY_LIMIT = 100
-/** Page text kept on a page card; every session that continues it sends this much. */
-const PAGE_TEXT_LIMIT = 21_000
-
-interface CanvasDoc {
-  turns: Turn[]
-  layout: CanvasLayout
-}
-
-interface CanvasMeta {
-  id: string
-  title: string
-  createdAt: string
-  updatedAt: string
-  kbFed: boolean
-  /** A record exists on disk, so an emptied canvas must be removed from there. */
-  persisted: boolean
-}
-
-type PendingRequest = { kind: 'send'; turnId: number } | { kind: 'expand'; expansionId: number }
-
-/** A card the model added through a canvas tool, rather than one the user asked. */
-export interface CanvasSpawnedForm {
-  relation?: string
-  spawned?: boolean
-}
-
-export interface CanvasCardUpdate {
-  id: string
-  rect: CanvasRect
-}
-
-/** What undo or redo did, with the reason when it could not. */
-export type CanvasHistoryStep = { ok: true; label: string } | { ok: false; reason: string }
-
-/** A web page to put on the canvas as a card (the extension's page canvas). */
-export interface CanvasPageInput {
-  text: string
-  title: string
-  url: string
-}
-
-export interface CanvasExpandPlacement {
-  hostId: string
-  rect: CanvasRect
-}
-
-/** A question for a `CanvasAsker`, which builds what it sends from the canvas when it is free. */
-export type CanvasAskRequest =
-  | { kind: 'send'; cardId: string }
-  | {
-      kind: 'expand'
-      cardId: string
-      turnId: number
-      target: ExpansionTarget
-      prompt: string | undefined
-      rect: CanvasRect
-      caption: string
-    }
-
-/** How an asker reports back; anything after the request was dropped is ignored. */
-export interface CanvasAskEvents {
-  /** Whether the canvas still waits for this answer. */
-  live: () => boolean
-  /** The whole answer so far. */
-  text: (full: string) => void
-  done: (text: string, cancelled: boolean) => void
-  error: (message: string, partial: string) => void
-}
-
-/**
- * Another assistant that answers a canvas instead of the host's model, such as the web chat
- * the extension's canvas mirrors. `handles` decides per canvas; `ask` returns a stop handle,
- * and a stopped question still ends with `done(partial, true)` or `error`.
- */
-export interface CanvasAsker {
-  handles: (layout: CanvasLayout) => boolean
-  ask: (
-    request: CanvasAskRequest,
-    read: () => CanvasDocView,
-    events: CanvasAskEvents
-  ) => { stop: () => void }
-}
-
-export interface CanvasDocView {
-  turns: Turn[]
-  layout: CanvasLayout
-}
-
-export interface CanvasImport {
-  turns: Turn[]
-  cards: CanvasCard[]
-  webChat?: CanvasWebChat
-}
-
-/** What the board does once a canvas opens: fit everything, say something, open the composer. */
-export interface CanvasOpening {
-  fit?: boolean
-  notice?: string
-  /** Continue this card, or start a new session for null; undefined opens no composer. */
-  continueId?: string | null
-}
-
-let nextTurnId = Date.now()
-
-/** A turn id no other turn in this window holds, for turns made outside the hook. */
-export function allocateTurnId(): number {
-  return nextTurnId++
-}
-
-const emptyDoc = (): CanvasDoc => ({
-  turns: [],
-  layout: { cards: [], frames: [], links: [], stack: [], viewport: DEFAULT_VIEWPORT }
-})
-
-function snapshotOf({ turns, layout }: CanvasDoc): CanvasSnapshot {
-  return { turns, cards: layout.cards, frames: layout.frames, links: layout.links }
-}
-
-function newMeta(): CanvasMeta {
-  const now = new Date().toISOString()
-  return {
-    id: crypto.randomUUID(),
-    title: UNTITLED,
-    createdAt: now,
-    updatedAt: now,
-    kbFed: false,
-    persisted: false
-  }
-}
-
-function requestBelongsTo(request: PendingRequest, card: CanvasCard): boolean {
-  if (card.kind === 'note' || card.kind === 'page') return false
-  return card.kind === 'message'
-    ? request.kind === 'send' && request.turnId === card.turnId
-    : request.kind === 'expand' && request.expansionId === card.expansionId
-}
-
-export function useCanvas(asker?: CanvasAsker | null): {
-  loaded: boolean
-  /** Every conversation, of every type, newest first. */
-  sessions: ConversationMeta[]
-  canvasId: string
-  title: string
-  turns: Turn[]
-  cards: CanvasCard[]
-  frames: CanvasFrame[]
-  links: CanvasLink[]
-  /** Which cards are on top where they overlap: see `cardStackRanks`. */
-  stack: string[]
-  viewport: CanvasViewport
-  /** What undo and redo would do next; null when there is nothing. */
-  undoLabel: string | null
-  redoLabel: string | null
-  /** Assistant turns with a request in flight. */
-  streamingTurnIds: ReadonlySet<number>
-  /** What each streaming card's model is doing with its tools, until it answers. */
-  toolActivity: ToolActivity
-  /** Cards whose height should be fitted to their answer the next time they are on screen. */
-  fitCardIds: ReadonlySet<string>
-  /** The page `startFromPage` just put down, until the board has opened a question beside it. */
-  startedPageId: string | null
-  /** What `beginAt` asked of the board, until the board has done it. */
-  opening: CanvasOpening | null
-  /** The web chat this canvas mirrors, if any (the extension's). */
-  webChat: CanvasWebChat | undefined
-  ensureLoaded: () => void
-  refreshSessions: () => Promise<ConversationMeta[]>
-  newCanvas: () => void
-  /** A fresh canvas holding a web page; the board then opens a question beside it. */
-  startFromPage: (page: CanvasPageInput) => void
-  clearStartedPage: () => void
-  beginAt: (opening: CanvasOpening) => void
-  clearOpening: () => void
-  /** Rebinds the mirrored web chat; a layout change only. */
-  setWebChat: (change: (prev: CanvasWebChat | undefined) => CanvasWebChat | undefined) => void
-  /**
-   * Adds answered cards made elsewhere (a mirrored chat's exchanges), built from the canvas as
-   * it stands and fitted once on screen; a `webChat` given replaces the binding.
-   */
-  addImported: (build: (current: CanvasDocView) => CanvasImport) => CanvasImport
-  /** Resolves false when there is no such canvas, which leaves the open one as it was. */
-  openCanvas: (id: string) => Promise<boolean>
-  /** Writes pending changes now, before something else reads the stored record. */
-  flushSave: () => Promise<void>
-  deleteCanvas: () => void
-  rename: (title: string) => void
-  setViewport: (viewport: CanvasViewport) => void
-  /** Moves cards and frames as one undoable step. */
-  moveItems: (label: string, cards: CanvasCardUpdate[], frames?: CanvasFrameUpdate[]) => void
-  /** Puts cards on top of what they overlap. */
-  raiseCards: (ids: Iterable<string>) => void
-  undo: () => CanvasHistoryStep | null
-  redo: () => CanvasHistoryStep | null
-  addNote: (rect: CanvasRect, text: string) => string
-  updateNote: (id: string, text: string) => void
-  addFrame: (rect: CanvasRect, title: string) => string
-  renameFrame: (id: string, title: string) => void
-  /** A `quote` makes it a context link that sends only that passage of `from`. */
-  addLink: (from: string, to: string, quote?: string) => string | null
-  /** Toggles a highlight on a passage of a turn, or of an expansion's answer. */
-  toggleHighlight: (turnId: number, range: ExpansionRange, parentExpansionId?: number) => void
-  labelLink: (id: string, label: string) => void
-  reverseLink: (id: string) => void
-  /** What this link sends to the branch it points at; undefined makes it a plain arrow again. */
-  setLinkContext: (id: string, context: CanvasLinkContext | undefined) => void
-  setColor: (ids: ReadonlySet<string>, color: CanvasColor | undefined) => void
-  setCollapsed: (ids: ReadonlySet<string>, collapsed: boolean) => void
-  /** Returns the new items' ids; empty when nothing could be copied. */
-  duplicate: (ids: ReadonlySet<string>) => string[]
-  requestFit: (id: string) => void
-  /** `null` means there was nothing to measure, so the card stays as it is. */
-  fitCard: (id: string, contentHeight: number | null) => void
-  exportCanvas: () => Promise<ExportResult>
-  /** Returns the new card's id. */
-  ask: (
-    rect: CanvasRect,
-    question: string,
-    parentId: string | undefined,
-    sources?: readonly string[],
-    context?: readonly CanvasContextLink[],
-    spawned?: CanvasSpawnedForm
-  ) => string
-  /** Puts a page on the canvas as the first context of every session continuing it. */
-  addPage: (rect: CanvasRect | undefined, page: CanvasPageInput) => string
-  expand: (
-    turnId: number,
-    target: ExpansionTarget,
-    prompt: string | undefined,
-    placement: CanvasExpandPlacement
-  ) => ExpandOutcome
-  stopCard: (id: string) => void
-  regenerateCard: (id: string) => void
-  editCard: (id: string, question: string) => void
-  /** Removes cards with what depends on them, frames (not what they hold) and links. */
-  removeItems: (ids: ReadonlySet<string>) => void
-} {
+export function useCanvas(asker?: CanvasAsker | null): CanvasState {
   const host = useUiHost()
   const [doc, setDoc] = useState<CanvasDoc>(emptyDoc)
   const [loaded, setLoaded] = useState(false)
@@ -712,8 +490,8 @@ export function useCanvas(asker?: CanvasAsker | null): {
       context: readonly CanvasContextLink[] = [],
       spawned: CanvasSpawnedForm = {}
     ): string => {
-      const userTurnId = nextTurnId++
-      const turnId = nextTurnId++
+      const userTurnId = allocateTurnId()
+      const turnId = allocateTurnId()
       const card: CanvasCard = {
         kind: 'message',
         id: crypto.randomUUID(),
@@ -759,7 +537,7 @@ export function useCanvas(asker?: CanvasAsker | null): {
 
   const addPage = useCallback(
     (rect: CanvasRect | undefined, page: CanvasPageInput): string => {
-      const turnId = nextTurnId++
+      const turnId = allocateTurnId()
       const card: CanvasCard = {
         kind: 'page',
         id: crypto.randomUUID(),
@@ -967,240 +745,23 @@ export function useCanvas(asker?: CanvasAsker | null): {
 
   /* ---- Layout ---- */
 
-  const setViewport = useCallback(
-    (viewport: CanvasViewport): void => {
-      updateDoc((prev) => ({ ...prev, layout: { ...prev.layout, viewport } }))
-      requestSave(false)
-    },
-    [requestSave, updateDoc]
-  )
-
-  const updateCards = useCallback(
-    (updates: CanvasCardUpdate[]): void => {
-      const byId = new Map(updates.map((update) => [update.id, update]))
-      updateDoc((prev) => ({
-        ...prev,
-        layout: {
-          ...prev.layout,
-          cards: prev.layout.cards.map((card) => {
-            const update = byId.get(card.id)
-            return update ? { ...card, rect: update.rect } : card
-          })
-        }
-      }))
-      requestSave(false)
-    },
-    [requestSave, updateDoc]
-  )
-
-  /** Going on top is not an edit: it joins no undo step and leaves the recents order alone. */
-  const raiseCards = useCallback(
-    (ids: Iterable<string>): void => {
-      const { cards, stack } = docRef.current.layout
-      const next = raisedStack(cards, stack, ids)
-      if (next === stack) return
-      updateDoc((prev) => ({ ...prev, layout: { ...prev.layout, stack: next } }))
-      requestSave(false)
-    },
-    [requestSave, updateDoc]
-  )
-
-  const moveItems = useCallback(
-    (label: string, cards: CanvasCardUpdate[], frames: CanvasFrameUpdate[] = []): void => {
-      const rects = new Map(frames.map((frame) => [frame.id, frame.rect]))
-      recorded(label, () => {
-        updateCards(cards)
-        if (rects.size === 0) return
-        updateDoc((prev) => ({
-          ...prev,
-          layout: {
-            ...prev.layout,
-            frames: prev.layout.frames.map((frame) => {
-              const rect = rects.get(frame.id)
-              return rect ? { ...frame, rect } : frame
-            })
-          }
-        }))
-      })
-      raiseCards(cards.map((card) => card.id))
-    },
-    [raiseCards, recorded, updateCards, updateDoc]
-  )
-
-  /** A change to the layout alone: never a change of content, so recents keep their order. */
-  const editLayout = useCallback(
-    (label: string, change: (layout: CanvasLayout) => CanvasLayout): void => {
-      recorded(label, () => {
-        updateDoc((prev) => ({ ...prev, layout: change(prev.layout) }))
-      })
-      requestSave(false)
-    },
-    [recorded, requestSave, updateDoc]
-  )
-
-  const addNote = useCallback(
-    (rect: CanvasRect, text: string): string => {
-      const id = crypto.randomUUID()
-      editLayout('Add note', (layout) => ({
-        ...layout,
-        cards: [...layout.cards, { kind: 'note', id, rect, text }]
-      }))
-      return id
-    },
-    [editLayout]
-  )
-
-  const updateNote = useCallback(
-    (id: string, text: string): void => {
-      editLayout('Edit note', (layout) => ({
-        ...layout,
-        cards: layout.cards.map((card) =>
-          card.id === id && card.kind === 'note' && card.text !== text ? { ...card, text } : card
-        )
-      }))
-    },
-    [editLayout]
-  )
-
-  const addFrame = useCallback(
-    (rect: CanvasRect, title: string): string => {
-      const id = crypto.randomUUID()
-      editLayout('Add frame', (layout) => ({
-        ...layout,
-        frames: [...layout.frames, { id, rect, title }]
-      }))
-      return id
-    },
-    [editLayout]
-  )
-
-  const renameFrame = useCallback(
-    (id: string, title: string): void => {
-      editLayout('Rename frame', (layout) => ({
-        ...layout,
-        frames: layout.frames.map((frame) =>
-          frame.id === id && frame.title !== title ? { ...frame, title } : frame
-        )
-      }))
-    },
-    [editLayout]
-  )
-
-  const addLink = useCallback(
-    (from: string, to: string, quote?: string): string | null => {
-      const { cards, links } = docRef.current.layout
-      const known = (id: string): boolean => cards.some((card) => card.id === id)
-      if (from === to || !known(from) || !known(to)) return null
-      const passage = quote?.trim().slice(0, QUOTE_TEXT_LIMIT)
-      const existing = links.find(
-        (link) => link.from === from && link.to === to && link.quote === (passage || undefined)
-      )
-      if (existing) return existing.id
-      const id = crypto.randomUUID()
-      const link: CanvasLink = passage
-        ? { id, from, to, context: 'card', quote: passage }
-        : { id, from, to }
-      editLayout(passage ? 'Link passage' : 'Connect', (layout) => ({
-        ...layout,
-        links: [...layout.links, link]
-      }))
-      return id
-    },
-    [editLayout]
-  )
-
-  const editLink = useCallback(
-    (label: string, id: string, change: (link: CanvasLink) => CanvasLink): void => {
-      editLayout(label, (layout) => ({
-        ...layout,
-        links: layout.links.map((link) => (link.id === id ? change(link) : link))
-      }))
-    },
-    [editLayout]
-  )
-
-  const labelLink = useCallback(
-    (id: string, label: string): void => {
-      const text = label.trim()
-      editLink('Label connection', id, (link) => {
-        if ((link.label ?? '') === text) return link
-        return text === '' ? withoutField(link, 'label') : { ...link, label: text }
-      })
-    },
-    [editLink]
-  )
-
-  const reverseLink = useCallback(
-    (id: string): void => {
-      editLink('Reverse connection', id, (link) => ({ ...link, from: link.to, to: link.from }))
-    },
-    [editLink]
-  )
-
-  const setLinkContext = useCallback(
-    (id: string, context: CanvasLinkContext | undefined): void => {
-      editLink(context ? 'Send context' : 'Stop sending context', id, (link) => {
-        if (link.context === context) return link
-        return context ? { ...link, context } : withoutField(link, 'context')
-      })
-    },
-    [editLink]
-  )
-
-  const setColor = useCallback(
-    (ids: ReadonlySet<string>, color: CanvasColor | undefined): void => {
-      const paint = <T extends { id: string; color?: CanvasColor }>(item: T): T => {
-        if (!ids.has(item.id) || item.color === color) return item
-        return color === undefined ? withoutField(item, 'color') : { ...item, color }
-      }
-      editLayout('Colour', (layout) => ({
-        ...layout,
-        cards: layout.cards.map(paint),
-        frames: layout.frames.map(paint)
-      }))
-    },
-    [editLayout]
-  )
-
-  const setCollapsed = useCallback(
-    (ids: ReadonlySet<string>, collapsed: boolean): void => {
-      editLayout(collapsed ? 'Collapse' : 'Expand', (layout) => ({
-        ...layout,
-        cards: [...ids].reduce((cards, id) => setCardCollapsed(cards, id, collapsed), layout.cards)
-      }))
-    },
-    [editLayout]
-  )
-
-  const duplicate = useCallback(
-    (ids: ReadonlySet<string>): string[] => {
-      const { turns, layout } = docRef.current
-      const copy = duplicateSelection(layout, turns, ids, {
-        newId: () => crypto.randomUUID(),
-        newTurnId: () => nextTurnId++,
-        streamingTurnIds: new Set(
-          [...requestsRef.current.values()].flatMap((request) =>
-            request.kind === 'send' ? [request.turnId] : []
-          )
-        )
-      })
-      if (!copy) return []
-      recorded('Duplicate', () => {
-        updateDoc((prev) => ({
-          turns: [...prev.turns, ...copy.turns],
-          layout: {
-            ...prev.layout,
-            cards: [...prev.layout.cards, ...copy.cards],
-            frames: [...prev.layout.frames, ...copy.frames],
-            links: [...prev.layout.links, ...copy.links]
-          }
-        }))
-      })
-      requestSave(copy.turns.length > 0)
-      return copy.ids
-    },
-    [recorded, requestSave, updateDoc]
-  )
+  const {
+    setViewport,
+    updateCards,
+    raiseCards,
+    moveItems,
+    addNote,
+    updateNote,
+    addFrame,
+    renameFrame,
+    addLink,
+    labelLink,
+    reverseLink,
+    setLinkContext,
+    setColor,
+    setCollapsed,
+    duplicate
+  } = useCanvasLayout({ docRef, requestsRef, updateDoc, requestSave, recorded })
 
   const requestFit = useCallback((id: string): void => {
     setFitCardIds((prev) => new Set(prev).add(id))
@@ -1404,8 +965,8 @@ export function useCanvas(asker?: CanvasAsker | null): {
     ): void => {
       const rect = spawnRect(docRef.current.layout.cards, parent.id, 'visual')
       if (!rect) return
-      const userTurnId = nextTurnId++
-      const turnId = nextTurnId++
+      const userTurnId = allocateTurnId()
+      const turnId = allocateTurnId()
       const card: CanvasCard = {
         kind: 'message',
         id: crypto.randomUUID(),

@@ -6,7 +6,7 @@
 - [x] Show something while memory tools run — `provider.ts` forwards only text deltas, so tool steps are silent, and `MEMORY_ASSISTANT_WRITE_RULES` tells the model to finish its notes before answering, which delays the first token. Either show a "checking notes…" state, or leave writing to the curator and keep only reads in session
 - [x] Expansion: map of what you've explored — first step: tell the user "you expanded this term before" and offer the earlier answer
 - [ ] Expansion: map of what you've explored — a view of every expanded term across conversations, showing repeats and how they connect, with a jump back to the source
-- [ ] Split `CanvasView.tsx` (2,991 lines) and `useCanvas.ts` (1,432 lines), and move the canvas conventions out of the root `AGENTS.md` (876 lines, loaded into every agent session) into `packages/ui/AGENTS.md`
+- [x] Split `CanvasView.tsx` (2,991 lines) and `useCanvas.ts` (1,432 lines), and move the canvas conventions out of the root `AGENTS.md` (876 lines, loaded into every agent session) into `packages/ui/AGENTS.md`
 - [x] First-run path — a new install with no API key should land on "add a connection" instead of an empty Home
 - [ ] Update check — show a "new version available" notice (no auto-install) before other people install the packages
 - [x] List the Up-arrow "edit last message" shortcut in the Look-up Guide's Keyboard Shortcuts — it shipped last week but the in-app list still omits it

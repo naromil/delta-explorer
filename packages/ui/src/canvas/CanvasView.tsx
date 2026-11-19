@@ -22,7 +22,6 @@ import {
   cardRects,
   cardStackRanks,
   cascadeCardIds,
-  clampPointInside,
   containsPoint,
   continuationCandidates,
   continueHandleBlocked,
@@ -45,14 +44,11 @@ import {
   resolveMove,
   sessionCardIds,
   turnsThroughCard,
-  revealRect,
   screenToWorld,
   snapEdges,
   snapMove,
-  sourceCardId,
   unionRect,
   visibleWorldRect,
-  wheelZoomFactor,
   zoomAt,
   QUOTE_TEXT_LIMIT
 } from '@delta/core/canvas'
@@ -86,21 +82,19 @@ import type { ContextMenuItem, ContextMenuState } from '../conversation/ContextM
 import ExpandPrompt from '../conversation/ExpandPrompt'
 import ExpandSelectionBar from '../conversation/ExpandSelectionBar'
 import { ToolActivityContext } from '../lib/tool-activity'
-import type { useCanvas } from './useCanvas'
 import { useExpansionContextMenu } from '../conversation/useExpansionContextMenu'
 import type { SelectedPassage } from '../conversation/useExpansionContextMenu'
 import { isEditableTarget } from '../lib/editable'
-import { formatRelativeTime } from '../lib/format'
 import type { ConversationMeta, Turn } from '@delta/core/conversation'
-import { CONVERSATION_SOURCE_LABELS } from '@delta/core/conversation'
 import type { ViewportMotion } from '../lib/viewport-motion'
 import { createViewportMotion } from '../lib/viewport-motion'
 import CanvasCardView from './CanvasCardView'
+import { CanvasEmpty, CanvasHint, CanvasTitleBar, CanvasZoomBar } from './CanvasChrome'
+import type { CanvasExportState } from './CanvasChrome'
 import type { CanvasCardActions } from './CanvasCardView'
 import type { CanvasDraftContext } from './CanvasDraft'
 import CanvasDraft from './CanvasDraft'
 import CanvasFrameView from './CanvasFrames'
-import CanvasIcon from './CanvasIcons'
 import CanvasLinks from './CanvasLinks'
 import type { CanvasMinimapHandle } from './CanvasMinimap'
 import CanvasMinimap from './CanvasMinimap'
@@ -111,187 +105,72 @@ import CanvasShortcuts from './CanvasShortcuts'
 import type { CanvasTool } from './CanvasToolRail'
 import CanvasToolRail from './CanvasToolRail'
 import {
-  canScrollBy,
   confirmCascade,
   deletedNotice,
   dependentsPhrase,
   measureCardHeight,
   readMinimapPreference,
   releaseFocus,
-  saveMinimapPreference,
-  scrollIntoBody,
-  termPoint,
-  wheelPanDelta
+  saveMinimapPreference
 } from './board-helpers'
 import { cardContent } from './card-content'
 import { bodyCharWidth } from '../lib/char-width'
 import { createRightDrag } from './right-drag'
-import { cardMenuItems, frameMenuItems, linkMenuItems, planeMenuItems } from './canvas-menus'
-import { ZOOM_STEP, useCanvasKeyboard } from './useCanvasKeyboard'
+import {
+  cardMenuItems,
+  frameMenuItems,
+  historyMenuItems,
+  linkMenuItems,
+  planeMenuItems
+} from './canvas-menus'
+import { useFocusOnPlane, useWheelOnPlane } from './useBoardSurface'
+import { useBoardNavigation } from './useBoardNavigation'
+import { useBoardNotice } from './useBoardNotice'
+import { useCanvasKeyboard } from './useCanvasKeyboard'
 import { useEdgePan } from './useEdgePan'
 import { useUiHost } from '../host'
 
-type Canvas = ReturnType<typeof useCanvas>
-type DrawKind = 'answer' | 'note' | 'frame'
-
-type Gesture =
-  | { type: 'pan'; pointer: CanvasPoint; origin: CanvasViewport }
-  | {
-      type: 'draw'
-      what: DrawKind
-      start: CanvasPoint
-      end: CanvasPoint
-      /** The card this rectangle follows, wherever it ends up. */
-      continues?: string
-      /** Sizing after a `+` was dropped: it tracks the pointer until the next click. */
-      unheld?: boolean
-    }
-  | {
-      type: 'marquee'
-      start: CanvasPoint
-      end: CanvasPoint
-      /** What stays selected whatever the box catches: Shift adds to the selection. */
-      base: ReadonlySet<string>
-    }
-  | {
-      type: 'drag'
-      /** The card or frame under the pointer. */
-      id: string
-      ids: Set<string>
-      frameIds: Set<string>
-      /** Snaps the moving bounds rather than one card, since several things were chosen. */
-      group: boolean
-      /** A press that never moves selects just this item. */
-      plainPress: boolean
-      /** Shift+drag carries what is joined, so Shift+click only decides once it is let go. */
-      shiftPress: boolean
-      start: CanvasPoint
-      pointer: CanvasPoint
-    }
-  | { type: 'resize'; id: string; start: CanvasPoint; pointer: CanvasPoint }
-  | { type: 'frameResize'; id: string; start: CanvasPoint; pointer: CanvasPoint }
-  | { type: 'connect'; from: string; pointer: CanvasPoint }
-  /** A card's `+` on its way somewhere: a click continues on its side. */
-  | { type: 'extend'; from: string; side: CanvasSide; start: CanvasPoint; pointer: CanvasPoint }
-  | {
-      type: 'draftResize'
-      side: CanvasSide | undefined
-      rect: CanvasRect
-      start: CanvasPoint
-      pointer: CanvasPoint
-    }
-
-/** A rectangle waiting for its question: the canvas's composer. */
-/** One chip per source, and one per passage quoted from it. */
-function draftLinkKey(link: CanvasContextLink): string {
-  return link.quote ? `${link.from}\u0000${link.quote}` : link.from
-}
-
-interface Draft {
-  /** A fresh draft is a fresh composer, so typed text never carries over. */
-  key: number
-  /** Where it stands, or only its size when it is kept against `side` of its parent. */
-  rect: CanvasRect
-  parentId?: string
-  /** Kept against this side of its parent, so the parent growing or moving carries it along. */
-  side?: CanvasSide
-  /** The cards it could continue, newest first; the user picks one in the draft. */
-  sessions: string[]
-  /** Cards the question is about: their text goes along, not their history. */
-  sourceIds?: string[]
-  /** What it links into its branch; these become context links when it is sent. */
-  context?: CanvasContextLink[]
-}
-
-/** A chosen expansion waiting for the rectangle that decides its size. */
-interface Placing {
-  turnId: number
-  target: ExpansionTarget
-  prompt?: string
-  hostId: string
-  label: string
-}
-
-interface CanvasNotice {
-  text: string
-  /** The notice offers to take back what it reports. */
-  undoable?: boolean
-}
-
-interface DrawOutcome {
-  rect: CanvasRect
-  guidesX: number[]
-  guidesY: number[]
-  /** Why this rectangle cannot be used; null when it can. */
-  refusal: string | null
-}
-
-const SNAP_SCREEN_PX = 10
-const VIEWPORT_TRANSITION_MS = 360
-const PULSE_MS = 900
-const NOTICE_MS = 4000
-/** Below this width the centred selection bar would reach the zoom controls (`canvas.css`). */
-const NARROW_VIEW_PX = 1000
-const EXPORT_SAVED_MS = 2000
-/** Chats and look-ups in the history menu; search reaches the rest. */
-const HISTORY_OTHERS_LIMIT = 8
-
-const REFUSE_TOO_SMALL: Readonly<Record<DrawKind, string>> = {
-  answer: 'That rectangle is too small to hold an answer. Draw a larger one.',
-  note: 'That rectangle is too small to hold a note. Draw a larger one.',
-  frame: 'That frame is too small. Draw a larger one.'
-}
-const REFUSE_ARRANGE = 'Other cards are in the way of that arrangement.'
-const ALREADY_TIDY = 'Already tidy.'
-const NO_CARD_TO_CONNECT = 'Start a connection on a card.'
-const CONNECT_ANOTHER = 'Drag to a different card to connect them.'
-const PASSAGE_PICK_TARGET = 'Click the card that should receive this passage. Esc cancels.'
-const PASSAGE_NO_TARGET = 'No card there, so the passage was not linked.'
-const PASSAGE_ANOTHER = 'Click a different card to send this passage to.'
-const PASSAGE_SOURCE_GONE = 'The card holding this passage is gone.'
-const NO_CONTINUE_FAILED = 'Retry this answer before continuing it.'
-const WAITING_PARENT = 'Waiting for the answer it continues…'
-const FAILED_PARENT = 'The answer it continues failed. Retry it first.'
-const WAITING_CONTEXT = 'Waiting for a linked answer…'
-const LINK_IN_HISTORY = 'That card is already in this conversation.'
-const EXTEND_HINT = 'Let go in open space to place the next message, or on a new message to link.'
-const SIZE_HINT = 'Move to size the next message, then click. A click right away uses the default.'
-
-const TOOL_HINTS: Readonly<Partial<Record<CanvasTool, string>>> = {
-  answer: 'Draw a rectangle for the answer, or click for the default size.',
-  note: 'Draw where the note goes, or click for the default size.',
-  frame: 'Draw a region. Whatever stands inside it moves with it.',
-  connect: 'Drag from one card to another.',
-  hand: 'Drag anywhere to pan.'
-}
-
-/** Below this much pointer travel on screen, a press is a click rather than a drag. */
-const DRAG_START_PX = 3
-const DOUBLE_PRESS_MS = 400
-const NUDGE = 10
-const NUDGE_LARGE = 50
-/** Room left around what a new frame wraps, and the size of one made with a click. */
-const FRAME_PADDING = 32
-const DEFAULT_FRAME_SIZE = { w: 520, h: 360 }
-/** How much of the surface the open outline covers, rail included. */
-const OUTLINE_WIDTH = 344
-/** Where a jump lands if the view is too far out to read what it was looking for. */
-const READING_ZOOM = 0.8
-const VIEW_HISTORY_LIMIT = 50
-
-/** Space kept around a new session opened from the keyboard. */
-const NEW_SESSION_GAP = 48
-/** How much of the plane around a term is brought on screen when returning to it. */
-
-const ARROW_SIDES: Readonly<Record<string, CanvasSide>> = {
-  ArrowRight: 'right',
-  ArrowLeft: 'left',
-  ArrowDown: 'bottom',
-  ArrowUp: 'top'
-}
-
-/** Keeps a run of wheel events on what it started moving as things pass under the pointer. */
-const WHEEL_LATCH_MS = 160
+import type {
+  Canvas,
+  CanvasNotice,
+  Draft,
+  DrawKind,
+  DrawOutcome,
+  Gesture,
+  Placing
+} from './board-model'
+import {
+  ALREADY_TIDY,
+  ARROW_SIDES,
+  CONNECT_ANOTHER,
+  DEFAULT_FRAME_SIZE,
+  DOUBLE_PRESS_MS,
+  draftLinkKey,
+  DRAG_START_PX,
+  EXPORT_SAVED_MS,
+  EXTEND_HINT,
+  FAILED_PARENT,
+  FRAME_PADDING,
+  LINK_IN_HISTORY,
+  NARROW_VIEW_PX,
+  NEW_SESSION_GAP,
+  NO_CARD_TO_CONNECT,
+  NO_CONTINUE_FAILED,
+  NUDGE,
+  NUDGE_LARGE,
+  OUTLINE_WIDTH,
+  PASSAGE_ANOTHER,
+  PASSAGE_NO_TARGET,
+  PASSAGE_SOURCE_GONE,
+  REFUSE_ARRANGE,
+  REFUSE_TOO_SMALL,
+  SIZE_HINT,
+  SNAP_SCREEN_PX,
+  TOOL_HINTS,
+  VIEWPORT_TRANSITION_MS,
+  WAITING_CONTEXT,
+  WAITING_PARENT
+} from './board-model'
 
 export interface CanvasViewProps {
   canvas: Canvas
@@ -326,7 +205,7 @@ function CanvasBoard({
   const [placing, setPlacing] = useState<Placing | null>(null)
   /** A passage chosen with Link…, waiting for a click on the card that receives it. */
   const [linkingPassage, setLinkingPassage] = useState<{ from: string; quote: string } | null>(null)
-  const [notice, setNotice] = useState<CanvasNotice | null>(null)
+  const { notice, showNotice, clearNotice } = useBoardNotice()
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set())
   const [noteDraft, setNoteDraft] = useState<{ key: number; rect: CanvasRect } | null>(null)
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
@@ -341,16 +220,12 @@ function CanvasBoard({
   useEffect(() => {
     outlineOpenRef.current = outlineOpen
   }, [outlineOpen])
-  const [pulseId, setPulseId] = useState<string | null>(null)
   const [animating, setAnimating] = useState(false)
   const [spaceHeld, setSpaceHeld] = useState(false)
   const [listMenu, setListMenu] = useState<ContextMenuState | null>(null)
-  const [exportState, setExportState] = useState<'idle' | 'exporting' | 'saved'>('idle')
+  const [exportState, setExportState] = useState<CanvasExportState>('idle')
   const [helpOpen, setHelpOpen] = useState(false)
-  const [pulseTerm, setPulseTerm] = useState<{ cardId: string; expansionId: number } | null>(null)
   const [surfaceBox, setSurfaceBox] = useState({ width: 0, height: 0 })
-  const noticeTimerRef = useRef<number | null>(null)
-  const pulseTimerRef = useRef<number | null>(null)
   const draftKeyRef = useRef(0)
   /** The card Enter replies to when no card has focus: the last one touched or asked. */
   const currentIdRef = useRef<string | null>(null)
@@ -365,8 +240,6 @@ function CanvasBoard({
   const worldRef = useRef<HTMLDivElement>(null)
   const zoomValueRef = useRef<HTMLSpanElement>(null)
   const minimapRef = useRef<CanvasMinimapHandle>(null)
-  const viewBackRef = useRef<CanvasViewport[]>([])
-  const viewForwardRef = useRef<CanvasViewport[]>([])
   /** Where the pointer last was on the surface: for edge panning and pasting. */
   const lastPointerRef = useRef<{ clientX: number; clientY: number } | null>(null)
   /** Where the gesture under way began: a press that has not moved does not edge-pan. */
@@ -425,16 +298,10 @@ function CanvasBoard({
 
   useEffect(() => {
     return () => {
-      for (const timer of [noticeTimerRef, pulseTimerRef, animationTimerRef, exportTimerRef]) {
+      for (const timer of [animationTimerRef, exportTimerRef]) {
         if (timer.current !== null) window.clearTimeout(timer.current)
       }
     }
-  }, [])
-
-  const showNotice = useCallback((text: string, undoable = false): void => {
-    setNotice({ text, undoable })
-    if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current)
-    noticeTimerRef.current = window.setTimeout(() => setNotice(null), NOTICE_MS)
   }, [])
 
   const surfaceSize = useCallback((): { width: number; height: number } => {
@@ -581,10 +448,10 @@ function CanvasBoard({
         )
         return
       }
-      setNotice(null)
+      clearNotice()
       setLinkingPassage({ from, quote })
     },
-    [passageCardId, showNotice]
+    [clearNotice, passageCardId, showNotice]
   )
 
   const selection = useExpansionContextMenu({
@@ -1106,42 +973,7 @@ function CanvasBoard({
 
   /* ---- Wheel: pan, or zoom with Ctrl/pinch; a card with more text scrolls first ---- */
 
-  useEffect(() => {
-    const surface = surfaceRef.current
-    if (!surface) return
-    let latch: { target: Element | 'plane'; at: number } | null = null
-    const handleWheel = (e: WheelEvent): void => {
-      const held = latch && e.timeStamp - latch.at < WHEEL_LATCH_MS ? latch.target : null
-      const { deltaX, deltaY } = wheelPanDelta(e)
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault()
-        followRef.current = false
-        latch = { target: 'plane', at: e.timeStamp }
-        const box = surface.getBoundingClientRect()
-        const anchor = { x: e.clientX - box.left, y: e.clientY - box.top }
-        const factor = wheelZoomFactor(e.deltaY)
-        motionRef.current?.steer((view) => zoomAt(view, anchor, view.zoom * factor))
-        return
-      }
-      if (held instanceof Element) {
-        // A card scrolled to its end stops there rather than dragging the plane after it.
-        latch = { target: held, at: e.timeStamp }
-        if (!canScrollBy(held, deltaX, deltaY)) e.preventDefault()
-        return
-      }
-      const body = held ? null : (e.target as Element).closest('.canvas-card-body')
-      if (body && canScrollBy(body, deltaX, deltaY)) {
-        latch = { target: body, at: e.timeStamp }
-        return
-      }
-      e.preventDefault()
-      followRef.current = false
-      latch = { target: 'plane', at: e.timeStamp }
-      motionRef.current?.steer((view) => ({ ...view, x: view.x - deltaX, y: view.y - deltaY }))
-    }
-    surface.addEventListener('wheel', handleWheel, { passive: false })
-    return () => surface.removeEventListener('wheel', handleWheel)
-  }, [])
+  useWheelOnPlane(surfaceRef, followRef, motionRef)
 
   /* ---- Fitting heights to finished answers ---- */
 
@@ -1335,247 +1167,36 @@ function CanvasBoard({
 
   /* ---- Moving between cards ---- */
 
-  /** The part of the surface a jump should land in: not behind the outline. */
-  const openArea = useCallback((): { left: number; width: number; height: number } => {
-    const { width, height } = surfaceSize()
-    const left = outlineOpenRef.current ? OUTLINE_WIDTH : 0
-    return { left, width: width - left, height }
-  }, [surfaceSize])
-
-  /** The smallest glide that brings a rectangle on screen; none when it already is. */
-  const revealOnScreen = useCallback(
-    (rect: CanvasRect): void => {
-      const { left, width, height } = openArea()
-      const view = viewportRef.current
-      const moved = revealRect({ ...view, x: view.x - left }, rect, { width, height })
-      const next = { ...moved, x: moved.x + left }
-      if (next.x !== view.x || next.y !== view.y) glideTo(next)
-    },
-    [glideTo, openArea]
-  )
-
-  /** Remembers where the view is, before a jump, for Alt+Left. */
-  const rememberView = useCallback((): void => {
-    viewBackRef.current = [...viewBackRef.current, viewportRef.current].slice(-VIEW_HISTORY_LIMIT)
-    viewForwardRef.current = []
-  }, [])
-
-  const travelViewHistory = useCallback(
-    (direction: 'back' | 'forward'): void => {
-      const [from, to] =
-        direction === 'back' ? [viewBackRef, viewForwardRef] : [viewForwardRef, viewBackRef]
-      const next = from.current.at(-1)
-      if (!next) return
-      from.current = from.current.slice(0, -1)
-      to.current = [...to.current, viewportRef.current]
-      followRef.current = false
-      glideTo(next)
-    },
-    [glideTo]
-  )
-
-  /** Flashes a card, or one expanded term inside it. */
-  const flash = useCallback((cardId: string, expansionId?: number): void => {
-    setPulseId(expansionId === undefined ? cardId : null)
-    setPulseTerm(expansionId === undefined ? null : { cardId, expansionId })
-    if (pulseTimerRef.current !== null) window.clearTimeout(pulseTimerRef.current)
-    pulseTimerRef.current = window.setTimeout(() => {
-      setPulseId(null)
-      setPulseTerm(null)
-    }, PULSE_MS)
-  }, [])
-
-  /** Every keyboard and link jump lands here: the card gets focus and comes on screen. */
-  const focusCard = useCallback(
-    (id: string, pulse = false, extend = false): void => {
-      const card = cardsRef.current.find((item) => item.id === id)
-      if (!card) return
-      unfollow()
-      currentIdRef.current = id
-      select(extend ? [...selectedRef.current, id] : [id])
-      revealOnScreen(card.rect)
-      surfaceRef.current
-        ?.querySelector<HTMLElement>(`[data-canvas-card="${id}"]`)
-        ?.focus({ preventScroll: true })
-      if (pulse) flash(id)
-    },
-    [flash, revealOnScreen, select, unfollow]
-  )
-
-  /**
-   * Brings all of a card on screen, zooming out only when it would not fit otherwise. Past
-   * the zoom where cards become titles its text would be gone, so a card too tall for that
-   * is centred on `focus` instead.
-   */
-  const revealWholeCard = useCallback(
-    (rect: CanvasRect, focus: CanvasPoint): void => {
-      const { left, width, height } = openArea()
-      const { zoom } = viewportRef.current
-      if (zoom >= FAR_ZOOM && fitsOnScreen(rect, zoom, { width, height })) {
-        revealOnScreen(rect)
-        return
-      }
-      const fit = fitViewport([rect], { width, height })
-      glideTo(
-        fit.zoom >= FAR_ZOOM
-          ? { ...fit, x: fit.x + left }
-          : {
-              x: left + width / 2 - focus.x * FAR_ZOOM,
-              y: height / 2 - focus.y * FAR_ZOOM,
-              zoom: FAR_ZOOM
-            }
-      )
-    },
-    [glideTo, openArea, revealOnScreen]
-  )
-
-  /** From an expansion back to the card its term is in: all of it, with the term flashed. */
-  const returnToTerm = useCallback(
-    (id: string): void => {
-      const card = cardsRef.current.find((item) => item.id === id)
-      if (card?.kind !== 'expansion') return
-      const host = cardsRef.current.find((item) => item.id === card.hostId)
-      const hostEl = surfaceRef.current?.querySelector<HTMLElement>(
-        `[data-canvas-card="${card.hostId}"] .canvas-card-surface`
-      )
-      const term = hostEl?.querySelector<HTMLElement>(`[data-canvas-terms~="${card.expansionId}"]`)
-      if (!host || !hostEl || !term) {
-        focusCard(card.hostId, true)
-        return
-      }
-      unfollow()
-      const scale = hostEl.getBoundingClientRect().width / host.rect.w
-      scrollIntoBody(term, scale)
-      const hostBox = hostEl.getBoundingClientRect()
-      const point = termPoint(term)
-      // First: after a key press this focus reveals the card by itself, which must not win.
-      term.focus({ preventScroll: true })
-      revealWholeCard(host.rect, {
-        x: host.rect.x + (point.x - hostBox.left) / scale,
-        y: host.rect.y + (point.y - hostBox.top) / scale
-      })
-      currentIdRef.current = host.id
-      flash(host.id, card.expansionId)
-    },
-    [flash, focusCard, revealWholeCard, unfollow]
-  )
-
-  const goToSource = useCallback(
-    (id: string): void => {
-      const card = cardsRef.current.find((item) => item.id === id)
-      if (!card) return
-      rememberView()
-      if (card.kind === 'expansion') {
-        returnToTerm(id)
-        return
-      }
-      const source = sourceCardId(card)
-      if (source !== undefined) focusCard(source, true)
-    },
-    [focusCard, rememberView, returnToTerm]
-  )
-
-  const handleOpenExpansion = useCallback(
-    (expansionId: number): void => {
-      const card = cardsRef.current.find(
-        (item) => item.kind === 'expansion' && item.expansionId === expansionId
-      )
-      if (!card) return
-      rememberView()
-      focusCard(card.id, true)
-    },
-    [focusCard, rememberView]
-  )
-
-  /** A link click travels to whichever end is farther from where it was clicked. */
-  const handleFollowLink = useCallback(
-    (e: React.MouseEvent, id: string, start: CanvasPoint): void => {
-      const card = cardsRef.current.find((item) => item.id === id)
-      if (!card) return
-      const at = pointerInWorld(e)
-      const onCard = clampPointInside(at, card.rect)
-      const toCard = Math.hypot(at.x - onCard.x, at.y - onCard.y)
-      const toStart = Math.hypot(at.x - start.x, at.y - start.y)
-      if (toStart < toCard) {
-        rememberView()
-        focusCard(id, true)
-      } else goToSource(id)
-    },
-    [focusCard, goToSource, pointerInWorld, rememberView]
-  )
-
-  /** A click on a card asked about's faint line goes to whichever card is farther away. */
-  const handleFollowRelation = useCallback(
-    (e: React.MouseEvent, from: string, to: string): void => {
-      const all = cardsRef.current
-      const start = all.find((card) => card.id === from)
-      const end = all.find((card) => card.id === to)
-      if (!start || !end) return
-      const at = pointerInWorld(e)
-      const distance = (rect: CanvasRect): number => {
-        const edge = clampPointInside(at, rect)
-        return Math.hypot(at.x - edge.x, at.y - edge.y)
-      }
-      rememberView()
-      focusCard(distance(start.rect) > distance(end.rect) ? from : to, true)
-    },
-    [focusCard, pointerInWorld, rememberView]
-  )
-
-  const zoomToRects = useCallback(
-    (rects: CanvasRect[]): void => {
-      if (rects.length === 0) return
-      unfollow()
-      rememberView()
-      const { left, width, height } = openArea()
-      const fit = fitViewport(rects, { width, height })
-      glideTo({ ...fit, x: fit.x + left })
-    },
-    [glideTo, openArea, rememberView, unfollow]
-  )
-
-  const zoomToItem = useCallback(
-    (id: string): void => {
-      const item = [...cardsRef.current, ...framesRef.current].find((other) => other.id === id)
-      if (item) zoomToRects([item.rect])
-    },
-    [zoomToRects]
-  )
-
-  /** From the outline or search: the item is selected and brought somewhere it can be read. */
-  const goToItem = useCallback(
-    (id: string): void => {
-      const frame = framesRef.current.find((item) => item.id === id)
-      if (frame) {
-        select([id])
-        zoomToRects([frame.rect])
-        flash(id)
-        return
-      }
-      const all = cardsRef.current
-      const card = all.find((item) => item.id === id)
-      if (!card) return
-      rememberView()
-      if (viewportRef.current.zoom < FAR_ZOOM) {
-        // Too far out to read it, so the jump also comes in close enough.
-        const { left, width, height } = openArea()
-        const fit = fitViewport([card.rect], { width, height })
-        const zoom = Math.max(Math.min(READING_ZOOM, fit.zoom), FAR_ZOOM)
-        const center = { x: card.rect.x + card.rect.w / 2, y: card.rect.y + card.rect.h / 2 }
-        const close = {
-          x: left + width / 2 - center.x * zoom,
-          y: height / 2 - center.y * zoom,
-          zoom
-        }
-        unfollow()
-        glideTo(close)
-        // React has not painted it yet, and focusCard below reveals from where this lands.
-        viewportRef.current = close
-      }
-      focusCard(id, true)
-    },
-    [flash, focusCard, glideTo, openArea, rememberView, select, unfollow, zoomToRects]
-  )
+  const {
+    pulseId,
+    pulseTerm,
+    openArea,
+    revealOnScreen,
+    rememberView,
+    travelViewHistory,
+    focusCard,
+    goToSource,
+    handleOpenExpansion,
+    handleFollowLink,
+    handleFollowRelation,
+    zoomToRects,
+    zoomToItem,
+    goToItem
+  } = useBoardNavigation({
+    surfaceRef,
+    viewportRef,
+    outlineOpenRef,
+    cardsRef,
+    framesRef,
+    selectedRef,
+    currentIdRef,
+    followRef,
+    surfaceSize,
+    glideTo,
+    unfollow,
+    pointerInWorld,
+    select
+  })
 
   /* ---- The composer: drafts, and the conversation they follow ---- */
 
@@ -2005,34 +1626,14 @@ function CanvasBoard({
 
   /* ---- Focus never scrolls the plane ---- */
 
-  useEffect(() => {
-    const surface = surfaceRef.current
-    if (!surface) return
-    // Focus scrolls the nearest clipped ancestor, but only the viewport may move the plane.
-    const handleScroll = (): void => {
-      if (surface.scrollTop !== 0) surface.scrollTop = 0
-      if (surface.scrollLeft !== 0) surface.scrollLeft = 0
-    }
-    // Tabbing to a card off screen brings it on screen; a click lands where it already is.
-    const handleFocusIn = (e: FocusEvent): void => {
-      const target = e.target as HTMLElement
-      const cardEl = target.closest<HTMLElement>('[data-canvas-card]')
-      if (!cardEl) return
-      const card = cardsRef.current.find((item) => item.id === cardEl.dataset.canvasCard)
-      if (!card) return
-      currentIdRef.current = card.id
-      if (!target.matches(':focus-visible')) return
-      followRef.current = false
-      if (target === cardEl && !selectedRef.current.has(card.id)) select([card.id])
-      revealOnScreen(card.rect)
-    }
-    surface.addEventListener('scroll', handleScroll)
-    surface.addEventListener('focusin', handleFocusIn)
-    return () => {
-      surface.removeEventListener('scroll', handleScroll)
-      surface.removeEventListener('focusin', handleFocusIn)
-    }
-  }, [revealOnScreen, select])
+  useFocusOnPlane(surfaceRef, {
+    cardsRef,
+    selectedRef,
+    currentIdRef,
+    followRef,
+    select,
+    revealOnScreen
+  })
 
   /* ---- Menus ---- */
 
@@ -2189,42 +1790,24 @@ function CanvasBoard({
   }, [zoomToItem])
 
   const showHistoryMenu = (x: number, y: number, sessions: ConversationMeta[]): void => {
-    const others = sessions.filter((item) => item.source !== 'canvas')
     setListMenu({
       x,
       y,
       label: 'History',
-      items: [
-        { label: 'New canvas', onSelect: canvas.newCanvas },
-        ...(historyExtras ?? []),
-        ...sessions
-          .filter((item) => item.source === 'canvas' && item.id !== canvas.canvasId)
-          .map((item) => ({
-            label: item.title,
-            detail: formatRelativeTime(item.updatedAt),
-            onSelect: () => canvas.openCanvas(item.id)
-          })),
-        ...others.slice(0, HISTORY_OTHERS_LIMIT).map((item) => ({
-          label: item.title,
-          detail: `${CONVERSATION_SOURCE_LABELS[item.source]} · ${formatRelativeTime(item.updatedAt)}`,
-          onSelect: () => host.openConversation({ id: item.id, source: item.source })
-        })),
-        ...(onOpenSearch && others.length > HISTORY_OTHERS_LIMIT
-          ? [{ label: 'Search all conversations…', onSelect: onOpenSearch }]
-          : []),
-        ...(cards.length > 0
-          ? [
-              {
-                label: 'Delete this canvas',
-                onSelect: () => {
-                  if (window.confirm(`Delete “${canvas.title}”? This cannot be undone.`)) {
-                    canvas.deleteCanvas()
-                  }
-                }
-              }
-            ]
-          : [])
-      ]
+      items: historyMenuItems(sessions, {
+        canvasId: canvas.canvasId,
+        extras: historyExtras ?? [],
+        deletable: cards.length > 0,
+        newCanvas: canvas.newCanvas,
+        openCanvas: (id) => void canvas.openCanvas(id),
+        openConversation: host.openConversation,
+        openSearch: onOpenSearch,
+        deleteCanvas: () => {
+          if (window.confirm(`Delete “${canvas.title}”? This cannot be undone.`)) {
+            canvas.deleteCanvas()
+          }
+        }
+      })
     })
   }
 
@@ -2844,26 +2427,7 @@ function CanvasBoard({
               />
             ) : null}
           </div>
-          {showEmpty ? (
-            <div className="canvas-empty">
-              <h2>Draw a rectangle</h2>
-              <p>
-                Delta writes an answer sized to fit it. Draw against a side to continue the same
-                conversation, or anywhere else to start a new one.
-              </p>
-              <ul className="canvas-empty-keys">
-                <li>
-                  <kbd>N</kbd> type a question
-                </li>
-                <li>
-                  <kbd>T</kbd> write a note
-                </li>
-                <li>
-                  <kbd>?</kbd> every shortcut
-                </li>
-              </ul>
-            </div>
-          ) : null}
+          {showEmpty ? <CanvasEmpty /> : null}
         </div>
 
         <CanvasToolRail
@@ -2889,60 +2453,16 @@ function CanvasBoard({
           />
         ) : null}
 
-        <div className="canvas-toolbar canvas-toolbar--title">
-          <input
-            key={canvas.title}
-            className="canvas-title"
-            aria-label="Canvas name"
-            defaultValue={canvas.title}
-            title={canvas.title}
-            onBlur={(e) => canvas.rename(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.nativeEvent.isComposing) return
-              if (e.key === 'Enter') e.currentTarget.blur()
-              else if (e.key === 'Escape') {
-                // Put the name back before blur commits it, and keep the key from the board.
-                e.preventDefault()
-                e.stopPropagation()
-                e.currentTarget.value = canvas.title
-                e.currentTarget.blur()
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="canvas-tool"
-            aria-haspopup="menu"
-            aria-label="History"
-            data-tip="History: canvases, chats and look-ups"
-            onClick={openCanvasMenu}
-          >
-            ▾
-          </button>
-          <button
-            type="button"
-            className="canvas-tool"
-            data-tip="Start a new, empty canvas"
-            disabled={cards.length === 0 && frames.length === 0}
-            onClick={canvas.newCanvas}
-          >
-            New
-          </button>
-          <button
-            type="button"
-            className="canvas-tool"
-            data-tip="Save this canvas as markdown"
-            disabled={cards.length === 0 || exportState === 'exporting'}
-            onClick={() => void handleExport()}
-          >
-            {exportState === 'exporting'
-              ? 'Exporting…'
-              : exportState === 'saved'
-                ? 'Saved'
-                : 'Export'}
-          </button>
-          {toolbarExtras}
-        </div>
+        <CanvasTitleBar
+          title={canvas.title}
+          empty={{ cards: cards.length === 0, frames: frames.length === 0 }}
+          exportState={exportState}
+          extras={toolbarExtras}
+          onRename={canvas.rename}
+          onOpenHistory={openCanvasMenu}
+          onNew={canvas.newCanvas}
+          onExport={() => void handleExport()}
+        />
 
         {minimapOpen && cards.length + frames.length > 0 ? (
           <CanvasMinimap
@@ -2956,97 +2476,30 @@ function CanvasBoard({
           />
         ) : null}
 
-        <div className="canvas-toolbar canvas-toolbar--zoom" role="toolbar" aria-label="Zoom">
-          <button
-            type="button"
-            className="canvas-tool"
-            aria-label="Zoom out"
-            data-tip="Zoom out  (−)"
-            onClick={() => zoomBy(1 / ZOOM_STEP)}
-          >
-            −
-          </button>
-          <button
-            type="button"
-            className="canvas-tool canvas-zoom-value"
-            aria-label="Reset zoom to 100%"
-            data-tip="Reset to 100%  (1)"
-            onClick={() => zoomBy(1 / viewportRef.current.zoom)}
-          >
-            <span ref={zoomValueRef} />
-          </button>
-          <button
-            type="button"
-            className="canvas-tool"
-            aria-label="Zoom in"
-            data-tip="Zoom in  (+)"
-            onClick={() => zoomBy(ZOOM_STEP)}
-          >
-            +
-          </button>
-          <button
-            type="button"
-            className="canvas-tool"
-            data-tip="Show everything  (0)"
-            onClick={showEverything}
-          >
-            Fit
-          </button>
-          <button
-            type="button"
-            className={`canvas-tool canvas-tool--icon${minimapOpen ? ' is-toggled' : ''}`}
-            aria-label="Map"
-            aria-pressed={minimapOpen}
-            data-tip="Show or hide the map  (M)"
-            onClick={toggleMinimap}
-          >
-            <CanvasIcon name="map" />
-          </button>
-          <button
-            type="button"
-            className={`canvas-tool${helpOpen ? ' is-toggled' : ''}`}
-            aria-label="Keyboard shortcuts"
-            aria-expanded={helpOpen}
-            data-tip="Keyboard and mouse shortcuts  (?)"
-            onClick={() => setHelpOpen((open) => !open)}
-          >
-            ?
-          </button>
-        </div>
+        <CanvasZoomBar
+          zoomValueRef={zoomValueRef}
+          viewportRef={viewportRef}
+          minimapOpen={minimapOpen}
+          helpOpen={helpOpen}
+          onZoomBy={zoomBy}
+          onShowEverything={showEverything}
+          onToggleMinimap={toggleMinimap}
+          onToggleHelp={() => setHelpOpen((open) => !open)}
+        />
 
         {helpOpen ? <CanvasShortcuts onClose={() => setHelpOpen(false)} /> : null}
 
         <div className="canvas-bottom">
-          {placing || linkingPassage || message || toolHint ? (
-            <div className="canvas-hint" role="status">
-              {message ? (
-                <>
-                  {message.text}
-                  {message.undoable ? (
-                    <button
-                      type="button"
-                      className="canvas-hint-action"
-                      onClick={() => {
-                        setNotice(null)
-                        handleUndo(undo)
-                      }}
-                    >
-                      Undo
-                    </button>
-                  ) : null}
-                </>
-              ) : placing ? (
-                <>
-                  Draw a rectangle to size the answer to “{placing.label}”, or click for the default
-                  size. Esc cancels.
-                </>
-              ) : linkingPassage ? (
-                PASSAGE_PICK_TARGET
-              ) : (
-                toolHint
-              )}
-            </div>
-          ) : null}
+          <CanvasHint
+            message={message}
+            placing={placing}
+            linkingPassage={linkingPassage !== null}
+            toolHint={toolHint}
+            onUndo={() => {
+              clearNotice()
+              handleUndo(undo)
+            }}
+          />
           {draftHidden ? (
             <button
               type="button"
