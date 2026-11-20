@@ -22,6 +22,8 @@ const MAX_GREP_LINE_CHARS = 240
 const MAX_GREP_FILES = 3_000
 const MAX_GREP_FILE_BYTES = 2 * 1024 * 1024
 const MAX_GREP_TOTAL_BYTES = 64 * 1024 * 1024
+/** Large files a folder search names rather than reads. */
+const MAX_SKIPPED_NAMED = 5
 const BINARY_SNIFF_BYTES = 8_192
 const MAX_FOUND_ENTRIES = 200
 const MAX_FIND_PATTERN_CHARS = 200
@@ -184,7 +186,7 @@ async function readTextLines(
   }
   if (stats.size > MAX_READABLE_BYTES) {
     throw new MaterialsError(
-      `${target.relative} is ${formatSize(stats.size)}, too large to read; search it with materials_grep instead.`
+      `${target.relative} is ${formatSize(stats.size)}, too large to read; search it with materials_grep on its path instead.`
     )
   }
   if (await sniffBinary(target.absolute)) {
@@ -315,13 +317,25 @@ export async function grepMaterials(root: string, text: string, path = '.'): Pro
     ? walk(target, Number.POSITIVE_INFINITY)
     : [{ relative: target.relative, absolute: target.absolute, isDirectory: false }]
 
+  // A file named by its path may be as large as the whole scan; a folder search skips large
+  // files but names them, so a miss in a big book never reads as "not in the materials".
+  const fileLimit = stats.isDirectory() ? MAX_GREP_FILE_BYTES : MAX_GREP_TOTAL_BYTES
+  if (!stats.isDirectory() && stats.size > fileLimit) {
+    throw new MaterialsError(
+      `${target.relative} is ${formatSize(stats.size)}, too large to search.`
+    )
+  }
   const matches: string[] = []
+  const skipped: string[] = []
   let scanned = 0
   let bytes = 0
   for (const file of files) {
     if (file.isDirectory) continue
     const size = lstatOrNull(file.absolute)?.size ?? 0
-    if (size > MAX_GREP_FILE_BYTES) continue
+    if (size > fileLimit) {
+      skipped.push(`${file.relative} (${formatSize(size)})`)
+      continue
+    }
     if (scanned === MAX_GREP_FILES || bytes + size > MAX_GREP_TOTAL_BYTES) {
       matches.push(`… search stopped after ${scanned} files; search a subdirectory for the rest`)
       break
@@ -344,5 +358,12 @@ export async function grepMaterials(root: string, text: string, path = '.'): Pro
       matches.push(`${file.relative}:${index + 1}: ${clipLine(line)}`)
     }
   }
-  return matches.length > 0 ? matches.join('\n') : '(no matches)'
+  if (matches.length === 0) matches.push('(no matches)')
+  if (skipped.length > 0) {
+    const named = skipped.slice(0, MAX_SKIPPED_NAMED).join(', ')
+    const more =
+      skipped.length > MAX_SKIPPED_NAMED ? ` and ${skipped.length - MAX_SKIPPED_NAMED} more` : ''
+    matches.push(`… skipped ${named}${more}: too large for a folder search; search it by its path`)
+  }
+  return matches.join('\n')
 }

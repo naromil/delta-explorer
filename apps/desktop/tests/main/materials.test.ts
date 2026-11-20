@@ -127,6 +127,21 @@ describe('grepMaterials', () => {
     expect(await grepMaterials(root, 'nothing here')).toBe('(no matches)')
     await expect(grepMaterials(root, ' ')).rejects.toThrow(/must not be empty/)
   })
+
+  it('searches a large text file named by path, and names the ones a folder search skips', async () => {
+    // A whole book as text is larger than a folder search reads per file.
+    const book = `${'filler line of the book\n'.repeat(120_000)}the Bolzano theorem\n`
+    writeFileSync(join(root, 'calculus', 'book.txt'), book)
+    expect(await grepMaterials(root, 'bolzano', 'calculus/book.txt')).toBe(
+      'calculus/book.txt:120001: the Bolzano theorem'
+    )
+    expect(await grepMaterials(root, 'bolzano')).toBe(
+      '(no matches)\n… skipped calculus/book.txt (2.7 MB): too large for a folder search; search it by its path'
+    )
+    expect(await grepMaterials(root, 'delta', 'calculus')).toContain(
+      '… skipped calculus/book.txt (2.7 MB)'
+    )
+  })
 })
 
 describe('findMaterials and countMaterial', () => {
