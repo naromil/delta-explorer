@@ -1,6 +1,7 @@
 import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
+import { soundSpawn } from '@delta/core/canvas-spawn'
 import type { CanvasSpawn } from '@delta/core/canvas-spawn'
 import {
   CANVAS_SPAWN_LIMITS,
@@ -27,7 +28,10 @@ export function createCanvasTools(
   onSpawn: (spawn: CanvasSpawn) => void
 ): ToolSet {
   const added = { explore: 0, visual: 0 }
-  const add = (spawn: CanvasSpawn): string => {
+  const add = (raw: CanvasSpawn): string => {
+    // The window drops a card with nothing in it, so it is refused here and costs no slot.
+    const spawn = soundSpawn(raw)
+    if (!spawn) return 'Not added: the card was empty.'
     if (added[spawn.kind] >= CANVAS_SPAWN_LIMITS[spawn.kind]) {
       return `Not added: this answer already has ${CANVAS_SPAWN_LIMITS[spawn.kind]} such cards.`
     }

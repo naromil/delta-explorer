@@ -35,6 +35,25 @@ describe('canvas tools', () => {
     expect(replies.at(-1)).toMatch(/Not added/)
   })
 
+  it('refuse an empty card without spending one of the answer cards', () => {
+    const spawned: CanvasSpawn[] = []
+    const tools = createCanvasTools({ explore: true }, (spawn) => spawned.push(spawn))
+    const blank = run(tools, 'canvas_add_visual', {
+      title: 'Graph',
+      content: '  \n ',
+      relation: ''
+    })
+    const empty = run(tools, 'canvas_add_explore', { question: ' ', relation: 'asks' })
+    expect(blank).toMatch(/Not added/)
+    expect(empty).toMatch(/Not added/)
+    expect(spawned).toHaveLength(0)
+    const replies = Array.from({ length: CANVAS_SPAWN_LIMITS.visual }, () =>
+      run(tools, 'canvas_add_visual', { title: '', content: '```graph\ny = x\n```', relation: '' })
+    )
+    expect(replies.every((reply) => /^Added/.test(String(reply)))).toBe(true)
+    expect(spawned).toHaveLength(CANVAS_SPAWN_LIMITS.visual)
+  })
+
   it('leave out exploration for a card the model added itself', () => {
     const tools = createCanvasTools({ explore: false }, () => undefined)
     expect(Object.keys(tools)).toEqual(['canvas_add_visual'])
