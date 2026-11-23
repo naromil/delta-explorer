@@ -297,6 +297,32 @@
   color: var(--text-3);
 }
 
+/* The Ctrl/Cmd+K list starts with every conversation, so this is the way past the five. */
+.home-recent-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.home-recent-all:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+.home-recent-all:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring-inset);
+}
+
 /* ---- Responsive: the sidebar becomes an icon rail, never disappears ---- */
 @media (max-width: 860px) {
   .sidebar {

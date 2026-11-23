@@ -257,7 +257,13 @@ function App(): React.JSX.Element {
         </nav>
       </aside>
       <div className="app-main">
-        {view === 'home' && <HomeView onNavigate={setView} onOpenConversation={openConversation} />}
+        {view === 'home' && (
+          <HomeView
+            onNavigate={setView}
+            onOpenConversation={openConversation}
+            onOpenSearch={openSearch}
+          />
+        )}
         {view === 'chat' && (
           <ToolActivityContext.Provider value={toolActivity}>
             <Conversation
