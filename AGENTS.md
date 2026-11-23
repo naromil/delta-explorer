@@ -294,7 +294,7 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 | Stop/retry generation                    | `useChatStreaming.ts` (`stop`/`retry`) + `Conversation.tsx`, `Turn.tsx`                                                        |
 | Edit and resend a user message           | `useChatStreaming.ts` (`editMessage` → `truncateAndResend`) + `Turn.tsx`, `Conversation.tsx`                                   |
 | Delete the open conversation             | `useChatStreaming.ts` (`deleteConversation`) + `Conversation.tsx` toolbar                                                      |
-| App-wide shortcuts / search modal        | `App.tsx` (Ctrl/Cmd+N/K/,, `ConversationSearch` mount)                                                                         |
+| App-wide shortcuts / search modal        | `App.tsx` (Ctrl/Cmd+N, K, `,` and `/`; `ConversationSearch` mount), the list in `components/KeyboardShortcuts.tsx`             |
 | Change chat auto-scroll                  | `ui/lib/stick-to-bottom.ts`                                                                                                    |
 | Renderer chat UI                         | `App.tsx`, `Conversation.tsx`, `Turn.tsx`, `ConversationSearch.tsx`                                                            |
 | Agent memory tools / document base       | `memory/store.ts` (ops + confinement), `memory/tools.ts` (tool set), `shared/prompts.ts` (rules)                               |
@@ -853,7 +853,9 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   updated before `chatCancel`, so late chunks for a dropped id are no-ops rather than writes to
   a turn that no longer exists.
 - **App-level chat chrome.** `App.tsx` owns the Ctrl/Cmd+N (new chat, switches to Chat),
-  Ctrl/Cmd+K (search) and Ctrl/Cmd+, (Settings) listeners, the `ConversationSearch` modal and the composer draft, so they
+  Ctrl/Cmd+K (search), Ctrl/Cmd+, (Settings) and Ctrl/Cmd+/ (shortcut list) listeners, the `ConversationSearch`
+  modal, the `ShortcutsDialog` (`components/KeyboardShortcuts.tsx`, whose `SHORTCUTS` the Look-Up Guide
+  renders too, so add a key there once) and the composer draft, so they
   work from every view and the draft survives `Conversation` unmounting. The Home view lists the
   five most recent conversations (`conversation-list`), with "See all conversations" under them
   opening the same Ctrl/Cmd+K list, which shows every conversation on an empty query. On startup, a config with no connection

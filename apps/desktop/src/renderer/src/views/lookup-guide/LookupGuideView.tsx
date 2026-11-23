@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { LookupContextMode } from '../../../../shared/models'
+import { ShortcutList } from '../../components/KeyboardShortcuts'
 
 const DEFAULT_HOTKEY = 'Ctrl+Shift+D'
 const HOTKEY_PLACEHOLDER = '{hotkey}'
@@ -49,20 +50,6 @@ const GUIDE_SECTIONS = [
       'Once transferred, the conversation is saved: it shows under Recent conversations on Home and in Ctrl/Cmd+K search.'
     ]
   }
-]
-
-const SHORTCUTS: ReadonlyArray<{ keys: string[]; action: string }> = [
-  { keys: ['Ctrl/Cmd', 'N'], action: 'Start a new chat from any view' },
-  { keys: ['Ctrl/Cmd', 'K'], action: 'Search conversations' },
-  { keys: ['Ctrl/Cmd', 'F'], action: 'Find in the open chat' },
-  { keys: ['Ctrl/Cmd', ','], action: 'Open Settings' },
-  { keys: ['Ctrl/Cmd', 'E'], action: 'Expand the selected text' },
-  {
-    keys: ['Ctrl/Cmd', 'Shift', 'E'],
-    action: 'Expand on\u2026 \u2014 ask a question about the selection'
-  },
-  { keys: ['\u2191'], action: 'Edit your last message (in an empty chat composer)' },
-  { keys: ['Esc'], action: 'Stop a response while it is generating' }
 ]
 
 const MODE_LABELS: Record<LookupContextMode, string> = {
@@ -143,20 +130,7 @@ function LookupGuideView(): React.JSX.Element {
           ))}
           <div className="lookup-guide-section">
             <h2 className="lookup-guide-section-title">Keyboard Shortcuts</h2>
-            <ul className="lookup-guide-shortcuts">
-              {SHORTCUTS.map((shortcut) => (
-                <li key={shortcut.action}>
-                  <span className="lookup-guide-shortcut-keys">
-                    {shortcut.keys.map((key, i) => (
-                      <kbd key={i} className="kbd">
-                        {key}
-                      </kbd>
-                    ))}
-                  </span>
-                  <span>{shortcut.action}</span>
-                </li>
-              ))}
-            </ul>
+            <ShortcutList />
           </div>
         </div>
 
