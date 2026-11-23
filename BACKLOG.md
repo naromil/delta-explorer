@@ -2,21 +2,15 @@
 
 ## Routine (Claude may build these without asking)
 
-- [x] Let the user see and correct the memory — the Knowledge view shows only status and the analyze buttons, and the preload has no way to list or read memory files. Add a read-only tree with a viewer, an "open folder" button, and show the curator's one-line "what I changed" reply after each pass
+- [ ] Jump to the matching message when opening a search result — `conversation-search` results would need a turn id (IPC contract change)
+- [ ] "See all conversations" under Home's five recents — opens the Ctrl/Cmd+K list, which already lists everything on an empty query, so older chats are one click away
+- [ ] Update check — show a "new version available" notice (no auto-install) before other people install the packages
 - [ ] Show something while memory tools run — `provider.ts` forwards only text deltas, so tool steps are silent, and `MEMORY_ASSISTANT_WRITE_RULES` tells the model to finish its notes before answering, which delays the first token. Either show a "checking notes…" state, or leave writing to the curator and keep only reads in session
 - [ ] Expansion: map of what you've explored — a view of every expanded term across conversations, showing repeats and how they connect, with a jump back to the source. First step: tell the user "you expanded this term before" and offer the earlier answer
+- [ ] Ctrl/Cmd+/ opens the keyboard-shortcut list from any view — the list exists only on the Look-up Guide page, where few users will look for it
 - [ ] Split `CanvasView.tsx` (2,991 lines) and `useCanvas.ts` (1,432 lines), and move the canvas conventions out of the root `AGENTS.md` (876 lines, loaded into every agent session) into `packages/ui/AGENTS.md`
-- [x] First-run path — a new install with no API key should land on "add a connection" instead of an empty Home
-- [ ] Update check — show a "new version available" notice (no auto-install) before other people install the packages
-- [x] List the Up-arrow "edit last message" shortcut in the Look-up Guide's Keyboard Shortcuts — it shipped last week but the in-app list still omits it
-- [x] Unit-test `generateConversationTitle` in `main/conversation-title.ts` — its "`null` on any failure, never throws" contract guards every first send and has no test
-- [x] Test that `safeHref` (`ui/lib/safe-url.ts`) agrees with `isSafeExternalUrl` (`window-guards.ts`) — AGENTS.md requires the two allowlists to match and nothing enforces it
-- [x] Unit-test `straightenBlocks` in `canvas-straighten.ts` — the only canvas layout module with no tests, and tidy relies on it never resizing or detaching cards
-- [x] Display what tool calls are in process when the agent calls tools instead of responding directly, so the user knows what is going on.
-- [ ] Jump to the matching message when opening a search result — `conversation-search` results would need a turn id (IPC contract change)
-- [x] Copy a whole conversation as markdown to the clipboard — needs a new IPC channel or moving the export renderer into `shared/`
-- [x] Remember the main window's size and position — adds a field to the `settings.json` schema
-- [x] Find in conversation (Ctrl/Cmd+F) — Electron shows no find bar; needs `webContents.findInPage` behind a new IPC channel
+- [ ] Unit-test `subscribeChatTransport` (`hooks/chat/transport.ts`) — the stale-id drop that keeps late chunks from writing to a dropped turn has no test
+- [ ] Unit-test the `memory-*` IPC handlers (`memory/handlers.ts`) — nothing checks that a cut file reports `truncated` (so it can't be saved over the whole one) or that errors never leak an absolute path
 
 ## Proposed (needs the owner's OK — move to Routine to approve)
 
@@ -26,6 +20,7 @@
 - Voice input and read-aloud
 - Quick model switcher in the chat composer — pick a different model for one conversation without reassigning the chat role
 - Saved prompts / snippets — reusable questions insertable from the composer
+- Keep earlier answers on regenerate and page between them ("2 / 3"), as ChatGPT and Claude do — changes the stored `Turn` format
 
 ## Rejected (Claude won't re-propose these)
 
