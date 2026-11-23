@@ -48,5 +48,16 @@ export function trimMessages(
     kept.splice(index, 1)
     dropped++
   }
+  // A cut that removed a question must not leave its answer opening the conversation:
+  // the model would read a reply to nothing, and some providers reject a conversation
+  // whose first non-system message is not the user's.
+  if (dropped > 0) {
+    for (;;) {
+      const index = kept.findIndex((message) => message.role !== 'system')
+      if (index === -1 || index === kept.length - 1 || kept[index].role !== 'assistant') break
+      kept.splice(index, 1)
+      dropped++
+    }
+  }
   return { messages: kept, dropped }
 }

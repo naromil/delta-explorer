@@ -76,6 +76,27 @@ describe('trimMessages', () => {
     expect(result.messages).toEqual([last])
   })
 
+  it('drops the answer to a dropped question so a user message comes first', () => {
+    const system = message('system', 'system')
+    const oldQuestion = message('user', 'q'.repeat(40))
+    const oldAnswer = message('assistant', 'a'.repeat(20))
+    const question = message('user', 'u'.repeat(20))
+    const answer = message('assistant', 'b'.repeat(20))
+    const last = message('user', 'c'.repeat(20))
+    const result = trimMessages([system, oldQuestion, oldAnswer, question, answer, last], 22)
+
+    expect(result.dropped).toBe(2)
+    expect(result.messages).toEqual([system, question, answer, last])
+  })
+
+  it('leaves a leading answer alone when nothing had to be dropped', () => {
+    const messages = [message('assistant', 'hello'), message('user', 'question')]
+    const result = trimMessages(messages, 100)
+
+    expect(result.dropped).toBe(0)
+    expect(result.messages).toEqual(messages)
+  })
+
   it('keeps the system prompt and the final message even when over budget', () => {
     const system = message('system', 's'.repeat(40))
     const middle = message('user', 'u'.repeat(40))

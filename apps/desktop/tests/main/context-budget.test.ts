@@ -68,11 +68,12 @@ describe('applyContextBudget', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     h.resolveRole.mockReturnValue({ connection, model: 'tiny' })
     // budgetFor(2048, 512) = max(1024, 1740 - 512) = 1228 tokens: one 1000-token
-    // message plus the system prompt and latest question fit, two do not.
+    // message plus the system prompt and latest question fit, two do not. The answer
+    // whose question was dropped goes too, so the user's latest question comes first.
     h.getCachedModel.mockReturnValue({ id: 'tiny', contextWindow: 2048, maxOutput: 512 })
     const messages = conversation()
     const trimmed = applyContextBudget(messages, 'chat')
-    expect(trimmed.map((m) => m.role)).toEqual(['system', 'assistant', 'user'])
+    expect(trimmed.map((m) => m.role)).toEqual(['system', 'user'])
     expect(trimmed[trimmed.length - 1].content).toBe('latest question')
     expect(messages).toHaveLength(4)
     expect(console.warn).toHaveBeenCalledOnce()
