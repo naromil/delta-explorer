@@ -359,6 +359,43 @@ export function withStoredApiKey(connection: Connection, stored: ModelConfig): C
   return apiKey ? { ...rest, apiKey } : rest
 }
 
+/**
+ * Sealed keys on disk that this session cannot decrypt (a locked keychain), by
+ * connection id. They are invisible to `loadModelConfig`, so a save must carry
+ * them over or it would erase them.
+ */
+function undecryptableStoredKeys(): Record<string, string> {
+  try {
+    const raw = JSON.parse(readFileSync(modelConfigPath(), 'utf-8')) as {
+      connections?: Record<string, { apiKey?: unknown } | null>
+    }
+    const keys: Record<string, string> = {}
+    for (const [id, connection] of Object.entries(raw.connections ?? {})) {
+      const apiKey = connection?.apiKey
+      if (typeof apiKey === 'string' && isSealedSecret(apiKey) && openSecret(apiKey) === null) {
+        keys[id] = apiKey
+      }
+    }
+    return keys
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * The config the renderer sent, with every key it did not replace taken from disk:
+ * a readable key from `stored`, or an undecryptable one kept sealed as it is.
+ */
+export function withStoredApiKeys(config: ModelConfig): ModelConfig {
+  const stored = loadModelConfig()
+  const sealed = undecryptableStoredKeys()
+  return mapConnections(config, (connection) => {
+    const merged = withStoredApiKey(connection, stored)
+    const kept = sealed[merged.id]
+    return merged.apiKey === undefined && kept ? { ...merged, apiKey: kept } : merged
+  })
+}
+
 export function resolveRole(roleId: RoleId): { connection: Connection; model: string } | null {
   const config = loadModelConfig()
   const assignment = config.roles[roleId]
@@ -506,9 +543,7 @@ export function registerConfigIpcHandlers(): void {
       ) {
         return { success: false, error: 'Invalid model config.' }
       }
-      const stored = loadModelConfig()
-      const merged = mapConnections(config, (connection) => withStoredApiKey(connection, stored))
-      const result = saveModelConfig(merged)
+      const result = saveModelConfig(withStoredApiKeys(config))
       if (!result.ok) console.warn(`Failed to save model config: ${result.error}`)
       if (result.ok) notifyAppConfigChanged()
       return result.ok ? { success: true } : { success: false, error: result.error }

@@ -35,7 +35,8 @@ import {
   loadModelConfig,
   redactModelConfig,
   saveModelConfig,
-  withStoredApiKey
+  withStoredApiKey,
+  withStoredApiKeys
 } from '../../src/main/config'
 
 function configWithKey(apiKey: string): ModelConfig {
@@ -92,6 +93,29 @@ describe('API key storage', () => {
     h.decryptFails = true
     expect(loadModelConfig().connections.c1.apiKey).toBeUndefined()
     expect(storedKey()).toBe(sealed)
+  })
+
+  it('keeps an undecryptable key when the settings are saved without it', () => {
+    saveModelConfig(configWithKey('sk-secret'))
+    const sealed = storedKey()
+    h.decryptFails = true
+    // What the renderer sends back after changing a role: no key, since none could be shown.
+    const edited = redactModelConfig(loadModelConfig())
+    edited.roles.chat = { connectionId: 'c1', model: 'gpt-y' }
+    expect(saveModelConfig(withStoredApiKeys(edited)).ok).toBe(true)
+    expect(storedKey()).toBe(sealed)
+    h.decryptFails = false
+    expect(loadModelConfig().connections.c1.apiKey).toBe('sk-secret')
+    expect(loadModelConfig().roles.chat?.model).toBe('gpt-y')
+  })
+
+  it('still lets a new or removed key replace an undecryptable one', () => {
+    saveModelConfig(configWithKey('sk-secret'))
+    h.decryptFails = true
+    const edited = redactModelConfig(loadModelConfig())
+    edited.connections.c1 = { ...edited.connections.c1, apiKey: '' }
+    saveModelConfig(withStoredApiKeys(edited))
+    expect(storedKey()).toBeUndefined()
   })
 })
 
