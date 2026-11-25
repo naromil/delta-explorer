@@ -30,3 +30,5 @@ export type {
   ActivityTarget,
   ToolActivity
 } from '../lib/tool-activity'
+export { ExpansionHistoryContext } from '../lib/expansion-history'
+export type { EarlierExpansion, ExpandedTerm, ExpansionHistory } from '../lib/expansion-history'

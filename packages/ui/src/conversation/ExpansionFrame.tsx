@@ -6,6 +6,8 @@ import { isPlainMarkdown } from '../lib/markdown'
 import Markdown from './Markdown'
 import ToolActivityLine from './ToolActivityLine'
 import { useToolActivity } from '../lib/tool-activity'
+import { useEarlierExpansion, useExpansionHistory } from '../lib/expansion-history'
+import type { EarlierExpansion, ExpansionHistory } from '../lib/expansion-history'
 
 /** Screen point of the control that opened a popup, so the popup appears next to it. */
 export type FramePopupAt = { x: number; y: number }
@@ -91,6 +93,61 @@ function FrameButton({
 }
 
 /**
+ * "You expanded this before": the earlier answer opens in place, and one from another
+ * conversation can be opened there. Display-only, so nothing in it is a selection target.
+ */
+function EarlierAnswer({
+  earlier,
+  history
+}: {
+  earlier: EarlierExpansion
+  history: ExpansionHistory | null
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const conversation = earlier.conversation
+  return (
+    <span className="frame-earlier">
+      <span className="frame-earlier-line">
+        <span className="frame-earlier-note">
+          {conversation
+            ? `You expanded this before, in “${conversation.title}”`
+            : 'You expanded this before, earlier in this conversation'}
+        </span>
+        <FrameButton
+          label={open ? 'Hide earlier answer' : 'Show earlier answer'}
+          onClick={() => setOpen((value) => !value)}
+        />
+        {conversation && history ? (
+          <FrameButton
+            label="Open"
+            title="Open the conversation with the earlier answer"
+            onClick={() =>
+              history.openConversation({ id: conversation.id, source: conversation.source })
+            }
+          />
+        ) : null}
+      </span>
+      {open ? (
+        <span className="frame-earlier-answer">
+          {earlier.prompt?.trim() ? (
+            <span className="frame-question">{earlier.prompt.trim()}</span>
+          ) : null}
+          <Markdown
+            source={earlier.answer}
+            expansions={[]}
+            inline
+            anchored={false}
+            onFold={() => {}}
+            onUnfold={() => {}}
+            renderExpansion={() => null}
+          />
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+/**
  * Inline expansion frame. The host element is always a `<span>`: in block mode
  * it sits inside a paragraph, and its answer is rendered in inline mode so no
  * block element ever nests inside it.
@@ -106,6 +163,8 @@ function ExpansionFrame({ node, group, ...actions }: ExpansionFrameProps): React
   const question = node.prompt?.trim() || null
   const answerCount = group?.length ?? 1
   const toolActivity = useToolActivity()
+  const history = useExpansionHistory()
+  const earlier = useEarlierExpansion(node)
 
   useEffect(() => {
     return () => {
@@ -218,6 +277,7 @@ function ExpansionFrame({ node, group, ...actions }: ExpansionFrameProps): React
             {node.error ? <span className="frame-error">{node.error}</span> : null}
           </>
         ) : null}
+        {earlier ? <EarlierAnswer key={node.id} earlier={earlier} history={history} /> : null}
         <span className="frame-actions">
           <span
             className="fold-toggle"
