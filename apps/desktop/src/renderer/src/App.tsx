@@ -9,6 +9,7 @@ import { CanvasView, useCanvas } from '@delta/ui/canvas'
 import { ToolActivityContext } from '@delta/ui/conversation'
 import { useChatStreaming } from './hooks/useChatStreaming'
 import MemoryIndicator from './components/MemoryIndicator'
+import { ShortcutsDialog } from './components/KeyboardShortcuts'
 import type { ImageAttachment } from '@delta/core/attachments'
 import type { ConversationTarget } from '@delta/core/conversation'
 import { hasNoConnections } from '../../shared/models'
@@ -115,6 +116,7 @@ function App(): React.JSX.Element {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general')
   const [transferKey, setTransferKey] = useState(0)
   const [showSearch, setShowSearch] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
   // Lives here, not in Conversation, so a view switch cannot drop the draft.
   const [draft, setDraft] = useState('')
   const [draftAttachments, setDraftAttachments] = useState<ImageAttachment[]>([])
@@ -191,6 +193,7 @@ function App(): React.JSX.Element {
 
   const openSearch = useCallback(() => setShowSearch(true), [])
   const closeSearch = useCallback(() => setShowSearch(false), [])
+  const closeShortcuts = useCallback(() => setShowShortcuts(false), [])
 
   useEffect(() => {
     const handleShortcut = (e: KeyboardEvent): void => {
@@ -198,12 +201,19 @@ function App(): React.JSX.Element {
       const key = e.key.toLowerCase()
       if (key === 'k') {
         e.preventDefault()
+        setShowShortcuts(false)
         setShowSearch(true)
+      } else if (key === '/') {
+        e.preventDefault()
+        setShowSearch(false)
+        setShowShortcuts((open) => !open)
       } else if (key === 'n') {
         e.preventDefault()
+        setShowShortcuts(false)
         startNewChat()
       } else if (key === ',') {
         e.preventDefault()
+        setShowShortcuts(false)
         setView('settings')
       }
     }
@@ -257,7 +267,13 @@ function App(): React.JSX.Element {
         </nav>
       </aside>
       <div className="app-main">
-        {view === 'home' && <HomeView onNavigate={setView} onOpenConversation={openConversation} />}
+        {view === 'home' && (
+          <HomeView
+            onNavigate={setView}
+            onOpenConversation={openConversation}
+            onOpenSearch={openSearch}
+          />
+        )}
         {view === 'chat' && (
           <ToolActivityContext.Provider value={toolActivity}>
             <Conversation
@@ -303,6 +319,7 @@ function App(): React.JSX.Element {
           openConversationIds={[conversationId, canvasId]}
         />
       )}
+      {showShortcuts && <ShortcutsDialog onClose={closeShortcuts} />}
       <MemoryIndicator />
     </div>
   )

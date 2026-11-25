@@ -3,14 +3,14 @@
 ## Routine (Claude may build these without asking)
 
 - [ ] Jump to the matching message when opening a search result — `conversation-search` results would need a turn id (IPC contract change)
-- [ ] "See all conversations" under Home's five recents — opens the Ctrl/Cmd+K list, which already lists everything on an empty query, so older chats are one click away
+- [x] "See all conversations" under Home's five recents — opens the Ctrl/Cmd+K list, which already lists everything on an empty query, so older chats are one click away
 - [ ] Update check — show a "new version available" notice (no auto-install) before other people install the packages
 - [ ] Show something while memory tools run — `provider.ts` forwards only text deltas, so tool steps are silent, and `MEMORY_ASSISTANT_WRITE_RULES` tells the model to finish its notes before answering, which delays the first token. Either show a "checking notes…" state, or leave writing to the curator and keep only reads in session
 - [ ] Expansion: map of what you've explored — a view of every expanded term across conversations, showing repeats and how they connect, with a jump back to the source. First step: tell the user "you expanded this term before" and offer the earlier answer
-- [ ] Ctrl/Cmd+/ opens the keyboard-shortcut list from any view — the list exists only on the Look-up Guide page, where few users will look for it
+- [x] Ctrl/Cmd+/ opens the keyboard-shortcut list from any view — the list exists only on the Look-up Guide page, where few users will look for it
 - [ ] Split `CanvasView.tsx` (2,991 lines) and `useCanvas.ts` (1,432 lines), and move the canvas conventions out of the root `AGENTS.md` (876 lines, loaded into every agent session) into `packages/ui/AGENTS.md`
-- [ ] Unit-test `subscribeChatTransport` (`hooks/chat/transport.ts`) — the stale-id drop that keeps late chunks from writing to a dropped turn has no test
-- [ ] Unit-test the `memory-*` IPC handlers (`memory/handlers.ts`) — nothing checks that a cut file reports `truncated` (so it can't be saved over the whole one) or that errors never leak an absolute path
+- [x] Unit-test `subscribeChatTransport` (`hooks/chat/transport.ts`) — the stale-id drop that keeps late chunks from writing to a dropped turn has no test
+- [x] Unit-test the `memory-*` IPC handlers (`memory/handlers.ts`) — nothing checks that a cut file reports `truncated` (so it can't be saved over the whole one) or that errors never leak an absolute path
 
 ## Proposed (needs the owner's OK — move to Routine to approve)
 

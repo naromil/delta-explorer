@@ -8,6 +8,7 @@ type HomeTarget = 'chat' | 'knowledge' | 'lookup-guide'
 interface HomeViewProps {
   onNavigate?: (view: HomeTarget) => void
   onOpenConversation?: (target: ConversationTarget) => void
+  onOpenSearch?: () => void
 }
 
 const RECENT_LIMIT = 5
@@ -63,7 +64,11 @@ function SearchIcon(): React.JSX.Element {
   )
 }
 
-function HomeView({ onNavigate, onOpenConversation }: HomeViewProps): React.JSX.Element {
+function HomeView({
+  onNavigate,
+  onOpenConversation,
+  onOpenSearch
+}: HomeViewProps): React.JSX.Element {
   const [hotkey, setHotkey] = useState<string | null>(null)
   const [recent, setRecent] = useState<ConversationMeta[]>([])
 
@@ -150,6 +155,12 @@ function HomeView({ onNavigate, onOpenConversation }: HomeViewProps): React.JSX.
                 </li>
               ))}
             </ul>
+            {onOpenSearch && (
+              <button className="home-recent-all" onClick={onOpenSearch}>
+                See all conversations
+                <kbd className="kbd">Ctrl/Cmd+K</kbd>
+              </button>
+            )}
           </section>
         )}
       </div>

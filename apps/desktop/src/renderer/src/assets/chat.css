@@ -715,6 +715,33 @@ body {
   border-radius: 3px;
 }
 
+/* ---- Keyboard shortcuts (Ctrl/Cmd+/) ---- */
+.shortcuts-dialog {
+  width: 560px;
+  max-height: min(520px, calc(100vh - 140px));
+}
+
+.shortcuts-dialog-header {
+  justify-content: space-between;
+}
+
+.shortcuts-dialog-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.shortcuts-dialog-body {
+  padding: 14px 16px;
+}
+
+.shortcuts-dialog-note {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
 .conversation-search-empty {
   padding: 28px 16px;
   text-align: center;
