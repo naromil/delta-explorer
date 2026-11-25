@@ -88,6 +88,7 @@ describe('serializeForChat', () => {
     const messages = serializeForChat({ context: 'screen', turns })
     expect(messages[0]).toEqual({ role: 'system', content: DELTA_SYSTEM_PROMPT })
     expect(messages[1].content).toContain('screen')
+    expect(messages[1].pinned).toBe(true)
     expect(messages[2]).toEqual({ role: 'user', content: 'hello' })
   })
 

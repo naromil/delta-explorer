@@ -33,8 +33,9 @@ export function budgetFor(contextWindow?: number, maxOutput?: number): number | 
 }
 
 /**
- * Drops the oldest non-system messages (never the final one) until the
- * estimated total fits the budget. The input array and messages are untouched.
+ * Drops the oldest messages that are neither system nor pinned (never the
+ * final one) until the estimated total fits the budget. The input array and
+ * messages are untouched.
  */
 export function trimMessages(
   messages: ProviderMessage[],
@@ -43,7 +44,9 @@ export function trimMessages(
   const kept = [...messages]
   let dropped = 0
   while (kept.reduce((total, message) => total + estimateMessageTokens(message), 0) > budget) {
-    const index = kept.findIndex((message, i) => i !== kept.length - 1 && message.role !== 'system')
+    const index = kept.findIndex(
+      (message, i) => i !== kept.length - 1 && message.role !== 'system' && !message.pinned
+    )
     if (index === -1) break
     kept.splice(index, 1)
     dropped++
@@ -53,7 +56,7 @@ export function trimMessages(
   // whose first non-system message is not the user's.
   if (dropped > 0) {
     for (;;) {
-      const index = kept.findIndex((message) => message.role !== 'system')
+      const index = kept.findIndex((message) => message.role !== 'system' && !message.pinned)
       if (index === -1 || index === kept.length - 1 || kept[index].role !== 'assistant') break
       kept.splice(index, 1)
       dropped++

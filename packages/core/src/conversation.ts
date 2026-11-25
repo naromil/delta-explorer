@@ -214,7 +214,8 @@ export function serializeForChat(
   if (state.context) {
     messages.push({
       role: 'user',
-      content: buildScreenContextMessage(state.context)
+      content: buildScreenContextMessage(state.context),
+      pinned: true
     })
   }
 

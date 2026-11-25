@@ -14,6 +14,13 @@ describe('parseProviderMessages', () => {
     ])
   })
 
+  it('keeps the pinned flag of the screen text and refuses any other pinned value', () => {
+    expect(parseProviderMessages([{ role: 'user', content: 'screen', pinned: true }])).toEqual([
+      { role: 'user', content: 'screen', pinned: true }
+    ])
+    expect(parseProviderMessages([{ role: 'user', content: 'screen', pinned: 'yes' }])).toBeNull()
+  })
+
   it('refuses empty, unknown-role or non-string messages', () => {
     expect(parseProviderMessages([])).toBeNull()
     expect(parseProviderMessages('hi')).toBeNull()

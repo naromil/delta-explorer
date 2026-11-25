@@ -10,4 +10,10 @@ export interface ProviderMessage {
   content: string
   /** User messages only. */
   images?: ImageInput[]
+  /**
+   * Kept when a long conversation is trimmed to fit the context window (the
+   * look-up's screen text, which later questions refer to as "this").
+   * Never sent to a provider.
+   */
+  pinned?: true
 }

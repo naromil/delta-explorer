@@ -23,8 +23,10 @@ export function parseProviderMessages(raw: unknown): ProviderMessage[] | null {
   for (const entry of raw) {
     if (!isRecord(entry) || typeof entry.content !== 'string') return null
     if (typeof entry.role !== 'string' || !MESSAGE_ROLES.has(entry.role)) return null
+    if (entry.pinned !== undefined && entry.pinned !== true) return null
+    const pinned = entry.pinned === true ? { pinned: true as const } : {}
     if (entry.images === undefined) {
-      messages.push({ role: entry.role, content: entry.content })
+      messages.push({ role: entry.role, content: entry.content, ...pinned })
       continue
     }
     if (
@@ -36,7 +38,7 @@ export function parseProviderMessages(raw: unknown): ProviderMessage[] | null {
       return null
     }
     const images = entry.images.map(({ mediaType, data }) => ({ mediaType, data }))
-    messages.push({ role: entry.role, content: entry.content, images })
+    messages.push({ role: entry.role, content: entry.content, images, ...pinned })
   }
   return messages
 }

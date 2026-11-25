@@ -116,6 +116,28 @@ describe('trimMessages', () => {
     expect(result.messages).toEqual([system, last])
   })
 
+  it('keeps a pinned screen text and drops older questions and answers first', () => {
+    const system = message('system', 's'.repeat(8))
+    const screen: ProviderMessage = { role: 'user', content: 'c'.repeat(40), pinned: true }
+    const oldQuestion = message('user', 'q'.repeat(40))
+    const oldAnswer = message('assistant', 'a'.repeat(40))
+    const last = message('user', 'u'.repeat(8))
+    // 2 + 10 + 10 + 10 + 2 = 34 tokens; 15 fits only system, screen text and the last question.
+    const result = trimMessages([system, screen, oldQuestion, oldAnswer, last], 15)
+
+    expect(result.messages).toEqual([system, screen, last])
+    expect(result.dropped).toBe(2)
+  })
+
+  it('stops at pinned messages when nothing else is left to drop', () => {
+    const screen: ProviderMessage = { role: 'user', content: 'c'.repeat(400), pinned: true }
+    const last = message('user', 'u'.repeat(8))
+    const result = trimMessages([screen, last], 10)
+
+    expect(result.messages).toEqual([screen, last])
+    expect(result.dropped).toBe(0)
+  })
+
   it('handles an empty conversation', () => {
     expect(trimMessages([], 0)).toEqual({ messages: [], dropped: 0 })
   })
