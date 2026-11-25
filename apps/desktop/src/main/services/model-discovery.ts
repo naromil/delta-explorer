@@ -124,6 +124,48 @@ function fetchWithTimeout(
   return fetchImpl(url, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
 }
 
+/* ---- Paging ----
+ * Anthropic's and Google's model lists are paged (Anthropic returns 20 per page unless asked,
+ * Google 50), so one plain request missed every model past the first page. Ask for the
+ * largest page and follow the cursor; other providers return their whole list at once.
+ */
+
+const MAX_LIST_PAGES = 10
+const LIST_PAGE_SIZE = 1000
+
+const anthropicPageSchema = z.object({
+  has_more: z.boolean().optional(),
+  last_id: z.string().nullable().optional()
+})
+
+const googlePageSchema = z.object({ nextPageToken: z.string().optional() })
+
+function listPageUrl(connection: Connection, url: string, cursor: string | null): string {
+  const params = new URLSearchParams()
+  if (connection.providerType === 'anthropic') {
+    params.set('limit', String(LIST_PAGE_SIZE))
+    if (cursor) params.set('after_id', cursor)
+  } else if (connection.providerType === 'google-ai-studio') {
+    params.set('pageSize', String(LIST_PAGE_SIZE))
+    if (cursor) params.set('pageToken', cursor)
+  } else {
+    return url
+  }
+  return `${url}?${params.toString()}`
+}
+
+function nextPageCursor(connection: Connection, payload: unknown): string | null {
+  if (connection.providerType === 'anthropic') {
+    const page = anthropicPageSchema.safeParse(payload)
+    return page.success && page.data.has_more && page.data.last_id ? page.data.last_id : null
+  }
+  if (connection.providerType === 'google-ai-studio') {
+    const page = googlePageSchema.safeParse(payload)
+    return page.success && page.data.nextPageToken ? page.data.nextPageToken : null
+  }
+  return null
+}
+
 /* ---- Discovery ---- */
 
 export async function discoverConnectionModels(
@@ -143,22 +185,33 @@ export async function discoverConnectionModels(
         : connection.providerType === 'ollama'
           ? `${baseUrl}/api/tags`
           : `${baseUrl}/models`
-    const response = await fetchWithTimeout(
-      url,
-      { method: 'GET', headers: authHeaders(connection) },
-      fetchImpl
-    )
-    if (!response.ok) {
-      return { models: [], error: httpError(response.status, response.statusText) }
-    }
+    const models: string[] = []
+    let cursor: string | null = null
+    for (let page = 0; page < MAX_LIST_PAGES; page++) {
+      const pageUrl = listPageUrl(connection, url, cursor)
+      const response = await fetchWithTimeout(
+        pageUrl,
+        { method: 'GET', headers: authHeaders(connection) },
+        fetchImpl
+      )
+      if (!response.ok) {
+        // A later page failing still leaves the models already listed.
+        if (page > 0) break
+        return { models: [], error: httpError(response.status, response.statusText) }
+      }
 
-    let payload: unknown
-    try {
-      payload = await response.json()
-    } catch {
-      return { models: [], error: `Invalid JSON response from ${url}` }
+      let payload: unknown
+      try {
+        payload = await response.json()
+      } catch {
+        if (page > 0) break
+        return { models: [], error: `Invalid JSON response from ${url}` }
+      }
+      models.push(...parseModels(connection, payload))
+      cursor = nextPageCursor(connection, payload)
+      if (!cursor) break
     }
-    return { models: [...new Set(parseModels(connection, payload))].sort() }
+    return { models: [...new Set(models)].sort() }
   } catch (err) {
     return { models: [], error: errorMessage(err) }
   }
