@@ -58,6 +58,8 @@ export function toolActivityLabel(name: string, input: unknown): string {
       return withDetail('Drawing a visual', field(input, 'title'))
     case 'canvas_add_explore':
       return withDetail('Adding a card to explore', field(input, 'question'))
+    case 'canvas_suggest':
+      return withDetail('Suggesting a question', field(input, 'question'))
     default:
       return 'Using a tool'
   }

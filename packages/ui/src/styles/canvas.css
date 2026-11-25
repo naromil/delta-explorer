@@ -526,6 +526,38 @@
   margin-top: 8px;
 }
 
+.canvas-card-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.canvas-card-suggestion {
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+
+.canvas-card-suggestion:hover,
+.canvas-card-suggestion:focus-visible {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+
 .canvas-skeleton + .tool-activity,
 .tool-activity + .canvas-skeleton {
   margin-top: 10px;

@@ -23,6 +23,16 @@ export type SpawnRole = ExploreRole | 'visual'
 export type CanvasSpawn =
   | { kind: 'explore'; question: string; relation: string; role?: ExploreRole }
   | { kind: 'visual'; title: string; content: string; relation: string }
+  | { kind: 'suggest'; question: string; relation: string; role?: ExploreRole }
+
+/**
+ * A follow-up the model offers without answering it: a chip on its answer that becomes an
+ * exploration card, placed by its role, only when the user clicks it.
+ */
+export type CanvasSuggestion = Omit<Extract<CanvasSpawn, { kind: 'suggest' }>, 'kind'>
+
+/** How many suggestions one answer keeps; main also refuses more. */
+export const SUGGESTION_LIMIT = 4
 
 export function spawnRole(spawn: CanvasSpawn): SpawnRole {
   return spawn.kind === 'visual' ? 'visual' : (spawn.role ?? 'deeper')
@@ -56,13 +66,14 @@ export function soundSpawn(raw: unknown): CanvasSpawn | null {
   if (typeof raw !== 'object' || raw === null) return null
   const value = raw as Record<string, unknown>
   const relation = clip(value.relation, RELATION_LIMIT)
-  if (value.kind === 'explore') {
+  if (value.kind === 'explore' || value.kind === 'suggest') {
+    const kind = value.kind
     const question = clip(value.question, QUESTION_LIMIT)
     if (!question) return null
     // An unknown role is not worth refusing the card over; it goes where deeper ones go.
     return isExploreRole(value.role)
-      ? { kind: 'explore', question, relation, role: value.role }
-      : { kind: 'explore', question, relation }
+      ? { kind, question, relation, role: value.role }
+      : { kind, question, relation }
   }
   if (value.kind === 'visual' && typeof value.content === 'string') {
     const content = value.content.trim().slice(0, CONTENT_LIMIT)
@@ -70,6 +81,30 @@ export function soundSpawn(raw: unknown): CanvasSpawn | null {
     return content ? { kind: 'visual', title, content, relation } : null
   }
   return null
+}
+
+/** A suggestion spawn as its answer's card keeps it. */
+export function withoutKind(spawn: Extract<CanvasSpawn, { kind: 'suggest' }>): CanvasSuggestion {
+  return spawn.role
+    ? { question: spawn.question, relation: spawn.relation, role: spawn.role }
+    : { question: spawn.question, relation: spawn.relation }
+}
+
+/**
+ * An answer's suggestions as stored on its card, made sound: questions kept, unknown roles and
+ * empty relations dropped, repeats and anything past the limit left out. Undefined when none.
+ */
+export function soundSuggestions(raw: unknown): CanvasSuggestion[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const kept: CanvasSuggestion[] = []
+  for (const value of raw) {
+    if (kept.length >= SUGGESTION_LIMIT) break
+    const spawn = soundSpawn({ ...(value as object | null), kind: 'suggest' })
+    if (spawn?.kind !== 'suggest') continue
+    if (kept.some((other) => other.question === spawn.question)) continue
+    kept.push(withoutKind(spawn))
+  }
+  return kept.length > 0 ? kept : undefined
 }
 
 /**
@@ -82,7 +117,7 @@ export function soundSpawn(raw: unknown): CanvasSpawn | null {
 export function spawnRect(
   cards: CanvasCard[],
   parentId: string,
-  kind: CanvasSpawn['kind'],
+  kind: 'explore' | 'visual',
   role: SpawnRole = kind === 'visual' ? 'visual' : 'deeper'
 ): CanvasRect | null {
   const parent = cards.find((card) => card.id === parentId)

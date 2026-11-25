@@ -250,6 +250,8 @@ export interface CanvasState {
     context?: readonly CanvasContextLink[],
     spawned?: CanvasSpawnedForm
   ) => string
+  /** Asks a suggestion offered under `cardId` as its own card; null when it is gone. */
+  askSuggestion: (cardId: string, question: string) => string | null
   /** Puts a page on the canvas as the first context of every session continuing it. */
   addPage: (rect: CanvasRect | undefined, page: CanvasPageInput) => string
   expand: (

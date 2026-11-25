@@ -5,6 +5,7 @@ import {
   SPAWN_SIZES,
   settleSpawns,
   soundSpawn,
+  soundSuggestions,
   spawnRect,
   spawnRole,
   untouchedSpawns
@@ -54,6 +55,39 @@ describe('soundSpawn', () => {
 
   it('names an untitled visual', () => {
     expect(soundSpawn({ kind: 'visual', content: 'x' })).toMatchObject({ title: 'Visual' })
+  })
+})
+
+describe('suggestions', () => {
+  it('come through as suggestions, with the same checks as an exploration', () => {
+    expect(soundSpawn({ kind: 'suggest', question: '  Why  now? ', role: 'example' })).toEqual({
+      kind: 'suggest',
+      question: 'Why now?',
+      relation: '',
+      role: 'example'
+    })
+    expect(soundSpawn({ kind: 'suggest', question: '  ' })).toBeNull()
+  })
+
+  it('are kept sound on the card: no blanks, no repeats, at most four', () => {
+    const raw = [
+      { question: 'A?', role: 'odd', relation: 'x' },
+      { question: ' ' },
+      null,
+      { question: 'A?' },
+      { question: 'B?' },
+      { question: 'C?' },
+      { question: 'D?' },
+      { question: 'E?' }
+    ]
+    expect(soundSuggestions(raw)).toEqual([
+      { question: 'A?', relation: 'x' },
+      { question: 'B?', relation: '' },
+      { question: 'C?', relation: '' },
+      { question: 'D?', relation: '' }
+    ])
+    expect(soundSuggestions([{ question: '' }])).toBeUndefined()
+    expect(soundSuggestions('nope')).toBeUndefined()
   })
 })
 
@@ -126,6 +160,23 @@ describe('spawned cards at load', () => {
     expect(first.relation).toBeUndefined()
     expect(second.spawned).toBe(true)
     expect(second.relation).toBe('graphed as')
+  })
+
+  it('keep sound suggestions and drop broken ones', () => {
+    const layout = normalizeCanvasLayout(
+      {
+        cards: [
+          { ...answer, suggestions: [{ question: ' Why? ', role: 'background' }] },
+          { ...answer, id: 'b', suggestions: [{ question: '' }] },
+          { ...answer, id: 'c', suggestions: 'junk' }
+        ]
+      },
+      turns
+    )
+    const [first, second, third] = layout.cards as CanvasMessageCard[]
+    expect(first.suggestions).toEqual([{ question: 'Why?', relation: '', role: 'background' }])
+    expect(second.suggestions).toBeUndefined()
+    expect(third.suggestions).toBeUndefined()
   })
 })
 

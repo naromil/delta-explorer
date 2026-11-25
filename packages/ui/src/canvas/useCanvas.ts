@@ -28,8 +28,15 @@ import type { CanvasContextLink } from '@delta/core/canvas-context'
 import type { ConversationMeta, ProviderMessage, Turn } from '@delta/core/conversation'
 import { CONVERSATION_TITLE_MAX_LENGTH, buildConversationTitle } from '@delta/core/conversation'
 import { expansionCardRequest, messageCardRequest } from '@delta/core/canvas-request'
-import type { CanvasSpawn } from '@delta/core/canvas-spawn'
-import { settleSpawns, soundSpawn, spawnRect, spawnRole } from '@delta/core/canvas-spawn'
+import type { CanvasSpawn, CanvasSuggestion } from '@delta/core/canvas-spawn'
+import {
+  SUGGESTION_LIMIT,
+  settleSpawns,
+  soundSpawn,
+  spawnRect,
+  spawnRole,
+  withoutKind
+} from '@delta/core/canvas-spawn'
 import type { ExpansionRange, ExpansionTarget } from '@delta/core/rich-text'
 import {
   applyExpansionChunk,
@@ -86,6 +93,14 @@ import {
   withActivityLabel,
   withoutActivityLabel
 } from '../lib/tool-activity'
+
+/** The card with these suggestions, or with none. */
+function withSuggestions(
+  card: CanvasMessageCard,
+  suggestions: CanvasSuggestion[] | undefined
+): CanvasMessageCard {
+  return suggestions ? { ...card, suggestions } : withoutField(card, 'suggestions')
+}
 
 export function useCanvas(asker?: CanvasAsker | null): CanvasState {
   const host = useUiHost()
@@ -330,6 +345,20 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
 
   const startSend = useCallback(
     (card: CanvasMessageCard, messages: ProviderMessage[] | null): void => {
+      // A new answer brings its own suggestions; the old answer's no longer fit.
+      if (card.suggestions) {
+        updateDoc((prev) => ({
+          ...prev,
+          layout: {
+            ...prev.layout,
+            cards: prev.layout.cards.map((item) =>
+              item.id === card.id && item.kind === 'message'
+                ? withSuggestions(item, undefined)
+                : item
+            )
+          }
+        }))
+      }
       const requestId = generateRequestId()
       requestsRef.current.set(requestId, { kind: 'send', turnId: card.turnId })
       syncStreaming()
@@ -340,7 +369,7 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
         askElsewhere(requestId, { kind: 'send', cardId: card.id })
       }
     },
-    [askElsewhere, host, syncStreaming]
+    [askElsewhere, host, syncStreaming, updateDoc]
   )
 
   const sendCard = useCallback(
@@ -541,6 +570,44 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
   useEffect(() => {
     askRef.current = ask
   }, [ask])
+
+  /**
+   * A suggestion the user clicked: it leaves the answer and is asked as a card of its own,
+   * placed where its role puts it. The user chose it, so it is theirs (not spawned): it may
+   * add cards of its own, and the settling tidy leaves it where it landed.
+   */
+  const askSuggestion = useCallback(
+    (cardId: string, question: string): string | null => {
+      const cards = docRef.current.layout.cards
+      const parent = cards.find((card) => card.id === cardId)
+      if (parent?.kind !== 'message') return null
+      const suggestion = parent.suggestions?.find((item) => item.question === question)
+      if (!suggestion) return null
+      const rect = spawnRect(cards, parent.id, 'explore', suggestion.role ?? 'deeper')
+      if (!rect) return null
+      const rest = parent.suggestions?.filter((item) => item !== suggestion) ?? []
+      updateDoc((prev) => ({
+        ...prev,
+        layout: {
+          ...prev.layout,
+          cards: prev.layout.cards.map((card) =>
+            card.id === cardId && card.kind === 'message'
+              ? withSuggestions(card, rest.length > 0 ? rest : undefined)
+              : card
+          )
+        }
+      }))
+      return ask(
+        rect,
+        suggestion.question,
+        parent.id,
+        [],
+        [],
+        suggestion.relation ? { relation: suggestion.relation } : {}
+      )
+    },
+    [ask, updateDoc]
+  )
 
   const addPage = useCallback(
     (rect: CanvasRect | undefined, page: CanvasPageInput): string => {
@@ -1050,6 +1117,22 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
       requestFit(card.id)
       requestSave(true)
     }
+    /** A follow-up offered under the answer, kept on its card until the user clicks it. */
+    const addSuggestion = (parentId: string, suggestion: CanvasSuggestion): void => {
+      updateDoc((prev) => ({
+        ...prev,
+        layout: {
+          ...prev.layout,
+          cards: prev.layout.cards.map((card) => {
+            if (card.id !== parentId || card.kind !== 'message') return card
+            const held = card.suggestions ?? []
+            if (held.length >= SUGGESTION_LIMIT) return card
+            if (held.some((item) => item.question === suggestion.question)) return card
+            return withSuggestions(card, [...held, suggestion])
+          })
+        }
+      }))
+    }
     /** Once the answer is whole, each exploration it asked for gets its card and its question. */
     const growExplores = (turnId: number): void => {
       const explores = pendingExploresRef.current.get(turnId) ?? []
@@ -1135,6 +1218,10 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
         if (!spawn || !parent) return
         if (spawn.kind === 'visual') {
           addVisual(parent, spawn)
+          return
+        }
+        if (spawn.kind === 'suggest') {
+          addSuggestion(parent.id, withoutKind(spawn))
           return
         }
         const held = pendingExploresRef.current.get(request.turnId) ?? []
@@ -1223,6 +1310,7 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
     fitCard,
     exportCanvas,
     ask,
+    askSuggestion,
     addPage,
     expand,
     stopCard,

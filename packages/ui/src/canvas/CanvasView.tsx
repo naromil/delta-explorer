@@ -1050,6 +1050,15 @@ function CanvasBoard({
     [confirmReplacing, regenerateCard, setCollapsed]
   )
 
+  const askSuggestion = canvas.askSuggestion
+  const handleAskSuggestion = useCallback(
+    (id: string, question: string): void => {
+      const asked = askSuggestion(id, question)
+      if (asked) currentIdRef.current = asked
+    },
+    [askSuggestion]
+  )
+
   const handleEdit = useCallback(
     (id: string, question: string): boolean => {
       if (!confirmReplacing(id)) return false
@@ -2143,6 +2152,7 @@ function CanvasBoard({
       onRegenerate: handleRegenerate,
       onEdit: handleEdit,
       onAskAnother: askAnotherExpansion,
+      onAskSuggestion: handleAskSuggestion,
       onDelete: handleDelete,
       onContinue: handleContinue,
       onContinueStart: handleContinueStart,
@@ -2157,6 +2167,7 @@ function CanvasBoard({
     [
       askAnotherExpansion,
       goToSource,
+      handleAskSuggestion,
       handleCardClick,
       handleCardKeyDown,
       handleCardMenu,

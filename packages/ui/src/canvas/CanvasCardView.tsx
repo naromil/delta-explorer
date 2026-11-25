@@ -26,6 +26,8 @@ export interface CanvasCardActions {
   /** Returns `false` when the edit was not sent (the user declined a confirm). */
   onEdit: (id: string, question: string) => boolean
   onAskAnother: (expansionId: number, at: { x: number; y: number }) => void
+  /** A follow-up the model offered under this answer, clicked to be asked as its own card. */
+  onAskSuggestion: (id: string, question: string) => void
   onDelete: (id: string) => void
   /** The keyboard's way to the `+`; a pointer goes through `onContinueStart`. */
   onContinue: (id: string, side: CanvasSide) => void
@@ -169,6 +171,8 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
   const { onDragStart, onResizeStart, onStop, onRegenerate, onEdit, onDelete } = props
   const { onContinue, onContinueStart } = props
   const { onAskAnother, onContextMenu, onOpenExpansion, onGoToSource, onCardKeyDown } = props
+  const { onAskSuggestion } = props
+  const suggestions = card.kind === 'message' ? card.suggestions : undefined
   const [editing, setEditing] = useState(false)
   const [copied, setCopied] = useState(false)
   const copiedTimerRef = useRef<number | null>(null)
@@ -510,6 +514,21 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
               {!waiting && activity ? (
                 <div className="canvas-card-activity">
                   <ToolActivityLine label={activity} />
+                </div>
+              ) : null}
+              {status === 'done' && suggestions ? (
+                <div className="canvas-card-suggestions" aria-label="Suggested follow-ups">
+                  {suggestions.map((suggestion) => (
+                    <button
+                      key={suggestion.question}
+                      type="button"
+                      className="canvas-card-suggestion"
+                      title="Ask this in a card of its own"
+                      onClick={() => onAskSuggestion(card.id, suggestion.question)}
+                    >
+                      {suggestion.question}
+                    </button>
+                  ))}
                 </div>
               ) : null}
             </div>
