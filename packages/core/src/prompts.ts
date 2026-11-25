@@ -346,6 +346,7 @@ export const CANVAS_TOOL_FIELDS = {
     'The follow-up question the new card answers, self-contained, as the user would ask it.',
   title: 'A short title for the visual card, a few words.',
   content: 'The card: one diagram block in the syntax described, optionally a one-line caption.',
+  role: 'What the card is for, which decides where it goes: "background" for something your answer builds on that the user may not know (placed left of your answer), "deeper" for going further into a point (right, the default), "example" for a worked example or application (below).',
   relation:
     'How your answer relates to the new card, as a 1 to 4 word phrase read from your answer to the card, shown on the line between them (for example "graphed as", "depends on", "is a kind of").'
 } as const
@@ -360,7 +361,7 @@ export function buildCanvasToolInstructions(explore: boolean): string {
     `Use canvas_add_visual when seeing it helps the user learn: a graph when a function or rate is involved (with a slider when the effect of a quantity is the point), a chart for quantities, a trace for a procedure or a table of values, a network for how several things relate, a diagram for a process, cycle, timeline, structure, comparison or classification. At most ${CANVAS_SPAWN_LIMITS.visual} per answer; usually zero or one.`,
     ...(explore
       ? [
-          `Use canvas_add_explore when something deserves more than your space allows, or a concept the user likely does not know would stop them understanding: name it briefly in your answer and give it its own card instead of cramming it in. At most ${CANVAS_SPAWN_LIMITS.explore} per answer; add none when the answer is complete as it is.`
+          `Use canvas_add_explore when something deserves more than your space allows, or a concept the user likely does not know would stop them understanding: name it briefly in your answer and give it its own card instead of cramming it in. At most ${CANVAS_SPAWN_LIMITS.explore} per answer; add none when the answer is complete as it is. Give each a role: background, deeper or example; the canvas places it by its role and tidies your cards once they are all answered.`
         ]
       : []),
     'Call the tools before or while writing your answer, and refer to the cards naturally ("see the graph beside this") rather than describing the tool.',

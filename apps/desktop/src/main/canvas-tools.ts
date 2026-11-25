@@ -1,7 +1,7 @@
 import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
-import { soundSpawn } from '@delta/core/canvas-spawn'
+import { EXPLORE_ROLES, soundSpawn } from '@delta/core/canvas-spawn'
 import type { CanvasSpawn } from '@delta/core/canvas-spawn'
 import {
   CANVAS_SPAWN_LIMITS,
@@ -56,9 +56,11 @@ export function createCanvasTools(
             description: CANVAS_TOOL_DESCRIPTIONS.explore,
             inputSchema: z.object({
               question: z.string().describe(CANVAS_TOOL_FIELDS.question),
+              role: z.enum([...EXPLORE_ROLES]).describe(CANVAS_TOOL_FIELDS.role),
               relation
             }),
-            execute: ({ question, relation }) => add({ kind: 'explore', question, relation })
+            execute: ({ question, role, relation }) =>
+              add({ kind: 'explore', question, relation, role })
           })
         }
       : {})

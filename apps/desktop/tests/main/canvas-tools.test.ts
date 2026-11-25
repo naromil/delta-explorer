@@ -25,6 +25,19 @@ describe('canvas tools', () => {
     expect(spawned.map((spawn) => spawn.kind)).toEqual(['visual', 'explore'])
   })
 
+  it('pass the role of an exploration on, so the window can place it on its side', () => {
+    const spawned: CanvasSpawn[] = []
+    const tools = createCanvasTools({ explore: true }, (spawn) => spawned.push(spawn))
+    run(tools, 'canvas_add_explore', {
+      question: 'What is a set?',
+      role: 'background',
+      relation: 'uses'
+    })
+    expect(spawned).toEqual([
+      { kind: 'explore', question: 'What is a set?', relation: 'uses', role: 'background' }
+    ])
+  })
+
   it('refuse cards past the limit for one answer', () => {
     const spawned: CanvasSpawn[] = []
     const tools = createCanvasTools({ explore: true }, (spawn) => spawned.push(spawn))

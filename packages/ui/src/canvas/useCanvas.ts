@@ -21,6 +21,7 @@ import {
   normalizeCanvasLayout,
   withoutField
 } from '@delta/core/canvas'
+import type { CanvasFrameUpdate } from '@delta/core/canvas-arrange'
 import type { CanvasPatch, CanvasPatchDirection } from '@delta/core/canvas-history'
 import { applyCanvasPatch, diffCanvas } from '@delta/core/canvas-history'
 import type { CanvasContextLink } from '@delta/core/canvas-context'
@@ -28,7 +29,7 @@ import type { ConversationMeta, ProviderMessage, Turn } from '@delta/core/conver
 import { CONVERSATION_TITLE_MAX_LENGTH, buildConversationTitle } from '@delta/core/conversation'
 import { expansionCardRequest, messageCardRequest } from '@delta/core/canvas-request'
 import type { CanvasSpawn } from '@delta/core/canvas-spawn'
-import { soundSpawn, spawnRect } from '@delta/core/canvas-spawn'
+import { settleSpawns, soundSpawn, spawnRect, spawnRole } from '@delta/core/canvas-spawn'
 import type { ExpansionRange, ExpansionTarget } from '@delta/core/rich-text'
 import {
   applyExpansionChunk,
@@ -63,6 +64,7 @@ import {
 } from './canvas-state'
 import type {
   CanvasAskRequest,
+  CanvasCardUpdate,
   CanvasAsker,
   CanvasDoc,
   CanvasDocView,
@@ -108,6 +110,11 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
   const listenerRef = useRef<StreamListener | null>(null)
   /** Exploration cards an answer asked for, held until it finishes so they see all of it. */
   const pendingExploresRef = useRef(new Map<number, Extract<CanvasSpawn, { kind: 'explore' }>[]>())
+  /** Cards the agent placed that the user has not moved since; only these are ever tidied. */
+  const agentPlacedRef = useRef(new Set<string>())
+  /** Answers (top cards, not spawned ones) whose cards get tidied once they have all settled. */
+  const settlingRef = useRef(new Set<string>())
+  const [settleTick, setSettleTick] = useState(0)
   const expansionCounterRef = useRef(1)
   const saveTimerRef = useRef<number | null>(null)
   const loadStartedRef = useRef(false)
@@ -749,7 +756,7 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
     setViewport,
     updateCards,
     raiseCards,
-    moveItems,
+    moveItems: moveLayoutItems,
     addNote,
     updateNote,
     addFrame,
@@ -762,6 +769,58 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
     setCollapsed,
     duplicate
   } = useCanvasLayout({ docRef, requestsRef, updateDoc, requestSave, recorded })
+
+  /** A move the user made: whatever it moved is theirs now, and the settling tidy leaves it. */
+  const moveItems = useCallback(
+    (label: string, cards: CanvasCardUpdate[], frames?: CanvasFrameUpdate[]): void => {
+      for (const card of cards) agentPlacedRef.current.delete(card.id)
+      moveLayoutItems(label, cards, frames)
+    },
+    [moveLayoutItems]
+  )
+
+  /**
+   * Tidies each settling answer once nothing in its family is still being answered, waiting
+   * for an exploration, or waiting to fit its text: the answer stays put, and the cards the
+   * agent placed under it that nobody moved are laid out around it, as one step to undo.
+   */
+  useEffect(() => {
+    const { cards, frames, links } = docRef.current.layout
+    for (const rootId of [...settlingRef.current]) {
+      if (!cards.some((card) => card.id === rootId)) {
+        settlingRef.current.delete(rootId)
+        continue
+      }
+      const family = new Set([rootId])
+      for (let grew = true; grew;) {
+        grew = false
+        for (const card of cards) {
+          if (card.kind !== 'message' || family.has(card.id)) continue
+          if (card.parentId === undefined || !family.has(card.parentId)) continue
+          family.add(card.id)
+          grew = true
+        }
+      }
+      const turnIds = new Set(
+        cards.flatMap((card) =>
+          card.kind === 'message' && family.has(card.id) ? [card.turnId] : []
+        )
+      )
+      const busy =
+        [...requestsRef.current.values()].some(
+          (request) => request.kind === 'send' && turnIds.has(request.turnId)
+        ) ||
+        [...turnIds].some((turnId) => pendingExploresRef.current.has(turnId)) ||
+        [...family].some((id) => fitCardIds.has(id))
+      if (busy) continue
+      settlingRef.current.delete(rootId)
+      const result = settleSpawns({ cards, frames, links }, rootId, agentPlacedRef.current)
+      if (result.ok) {
+        moveLayoutItems('Arrange answer', result.cards, result.frames)
+        requestSave(false)
+      }
+    }
+  }, [settleTick, fitCardIds, moveLayoutItems, requestSave])
 
   const requestFit = useCallback((id: string): void => {
     setFitCardIds((prev) => new Set(prev).add(id))
@@ -804,6 +863,8 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
       if (saveTimerRef.current !== null) void flushSave()
       cancelRequests(() => true)
       setFitCardIds(new Set())
+      agentPlacedRef.current.clear()
+      settlingRef.current.clear()
       undoStackRef.current = []
       redoStackRef.current = []
       syncHistory()
@@ -977,6 +1038,7 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
         spawned: true,
         ...(spawn.relation ? { relation: spawn.relation } : {})
       }
+      agentPlacedRef.current.add(card.id)
       updateDoc((prev) => ({
         turns: [
           ...prev.turns,
@@ -995,13 +1057,26 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
       const parent = answeringCard(turnId)
       if (!parent) return
       for (const spawn of explores) {
-        const rect = spawnRect(docRef.current.layout.cards, parent.id, 'explore')
+        const rect = spawnRect(docRef.current.layout.cards, parent.id, 'explore', spawnRole(spawn))
         if (!rect) return
-        askRef.current(rect, spawn.question, parent.id, [], [], {
+        const id = askRef.current(rect, spawn.question, parent.id, [], [], {
           spawned: true,
           ...(spawn.relation ? { relation: spawn.relation } : {})
         })
+        agentPlacedRef.current.add(id)
       }
+    }
+    /** The answer's family is tidied when it settles; a spawned card's family is its parent's. */
+    const settleFamilyOf = (turnId: number): void => {
+      const cards = docRef.current.layout.cards
+      let card = answeringCard(turnId)
+      while (card?.kind === 'message' && card.spawned && card.parentId !== undefined) {
+        const parentId: string = card.parentId
+        card = cards.find((other) => other.id === parentId)
+      }
+      if (!card) return
+      settlingRef.current.add(card.id)
+      setSettleTick((tick) => tick + 1)
     }
     const editTurn = (turnId: number, change: (turn: Turn) => Turn): void => {
       updateDoc((prev) => ({
@@ -1042,6 +1117,7 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
         } else {
           pendingExploresRef.current.delete(request.turnId)
         }
+        settleFamilyOf(request.turnId)
       },
       error: ({ requestId, error }) => {
         const request = requestsRef.current.get(requestId)
@@ -1049,6 +1125,7 @@ export function useCanvas(asker?: CanvasAsker | null): CanvasState {
         editTurn(request.turnId, (turn) => ({ ...turn, content: error, error: true }))
         pendingExploresRef.current.delete(request.turnId)
         settle(requestId)
+        settleFamilyOf(request.turnId)
       },
       card: ({ requestId, card: raw }) => {
         const request = requestsRef.current.get(requestId)
