@@ -12,6 +12,8 @@
 - [x] Split `CanvasView.tsx` (2,991 lines) and `useCanvas.ts` (1,432 lines), and move the canvas conventions out of the root `AGENTS.md` (876 lines, loaded into every agent session) into `packages/ui/AGENTS.md`
 - [x] Unit-test `subscribeChatTransport` (`hooks/chat/transport.ts`) — the stale-id drop that keeps late chunks from writing to a dropped turn has no test
 - [x] Unit-test the `memory-*` IPC handlers (`memory/handlers.ts`) — nothing checks that a cut file reports `truncated` (so it can't be saved over the whole one) or that errors never leak an absolute path
+- [x] the non-attached borders are the border where not another card is attached. Non-attached sides shouldn't be moved whenever the card adjusts sizes. Right or bottom are prioritized in adjusting if both sides are in the same attached state.
+- [x] add a shortcut to change the size of new card or old card conveniently, the steps should be somewhere like 2 times the length between two dots in the background.
 
 ## Proposed (needs the owner's OK — move to Routine to approve)
 
