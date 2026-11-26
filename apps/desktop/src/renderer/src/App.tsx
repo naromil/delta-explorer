@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Settings, { type SettingsTab } from './views/settings/Settings'
 import Conversation from './components/conversation/Conversation'
 import ConversationSearch from './components/conversation/ConversationSearch'
@@ -11,6 +11,7 @@ import { useChatStreaming } from './hooks/useChatStreaming'
 import { useExpansionHistory } from './hooks/useExpansionHistory'
 import MemoryIndicator from './components/MemoryIndicator'
 import { ShortcutsDialog } from './components/KeyboardShortcuts'
+import type { FindRequest } from './components/conversation/find-text'
 import type { ImageAttachment } from '@delta/core/attachments'
 import type { ConversationTarget } from '@delta/core/conversation'
 import { hasNoConnections } from '../../shared/models'
@@ -121,6 +122,10 @@ function App(): React.JSX.Element {
   // Lives here, not in Conversation, so a view switch cannot drop the draft.
   const [draft, setDraft] = useState('')
   const [draftAttachments, setDraftAttachments] = useState<ImageAttachment[]>([])
+  /** A search result's query, waiting for main to open its conversation here. */
+  const pendingFindRef = useRef<{ id: string; query: string } | null>(null)
+  const findKeyRef = useRef(0)
+  const [findRequest, setFindRequest] = useState<FindRequest | null>(null)
   const {
     state,
     toolActivity,
@@ -180,6 +185,13 @@ function App(): React.JSX.Element {
   // Every history reaches this through main, which may raise a look-up's popup instead.
   useEffect(() => {
     return window.api.onConversationOpen(({ id, source }) => {
+      const pending = pendingFindRef.current
+      pendingFindRef.current = null
+      setFindRequest(
+        pending?.id === id && source !== 'canvas'
+          ? { conversationId: id, query: pending.query, key: ++findKeyRef.current }
+          : null
+      )
       if (source === 'canvas') {
         setView('canvas')
         openCanvas(id)
@@ -192,6 +204,16 @@ function App(): React.JSX.Element {
 
   const openConversation = useCallback((target: ConversationTarget) => {
     window.api.openConversation(target)
+  }, [])
+
+  /** Main may raise a look-up's popup instead, which then leaves the query unused. */
+  const openSearchResult = useCallback((target: ConversationTarget, findQuery?: string) => {
+    pendingFindRef.current = findQuery ? { id: target.id, query: findQuery } : null
+    window.api.openConversation(target)
+  }, [])
+
+  const finishFindRequest = useCallback((key: number) => {
+    setFindRequest((request) => (request?.key === key ? null : request))
   }, [])
 
   const openSearch = useCallback(() => setShowSearch(true), [])
@@ -308,6 +330,8 @@ function App(): React.JSX.Element {
                 onDismissExpansion={dismissExpansion}
                 onHighlight={toggleHighlight}
                 transferKey={transferKey}
+                findRequest={findRequest}
+                onFindRequestDone={finishFindRequest}
               />
             </ExpansionHistoryContext.Provider>
           </ToolActivityContext.Provider>
@@ -319,7 +343,7 @@ function App(): React.JSX.Element {
       </div>
       {showSearch && (
         <ConversationSearch
-          onSelect={openConversation}
+          onSelect={openSearchResult}
           onClose={closeSearch}
           openConversationIds={[conversationId, canvasId]}
         />

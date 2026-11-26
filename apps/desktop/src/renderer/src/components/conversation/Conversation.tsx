@@ -15,6 +15,7 @@ import { useStickToBottom } from '@delta/ui/lib/stick-to-bottom'
 import { attachmentSrc } from '@delta/ui/lib/image-attachments'
 import Turn from './Turn'
 import FindBar from './FindBar'
+import type { FindRequest } from './find-text'
 
 interface ConversationProps {
   state: ConversationState
@@ -46,6 +47,9 @@ interface ConversationProps {
   conversationId?: string | null
   conversationTitle?: string | null
   saveError?: string | null
+  /** A search result to show: the find bar opens on its query once that conversation is here. */
+  findRequest?: FindRequest | null
+  onFindRequestDone?: (key: number) => void
 }
 
 const SUGGESTIONS = [
@@ -82,9 +86,11 @@ function Conversation({
   transferKey,
   conversationId,
   conversationTitle,
-  saveError
+  saveError,
+  findRequest = null,
+  onFindRequestDone
 }: ConversationProps): React.JSX.Element {
-  const { scrollRef, atBottom, pin, jumpToLatest } = useStickToBottom(state.turns)
+  const { scrollRef, atBottom, pin, jumpToLatest, release } = useStickToBottom(state.turns)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const {
@@ -99,6 +105,9 @@ function Conversation({
   const copiedTimerRef = useRef<number | null>(null)
   /** Find in conversation: `null` while closed, otherwise how often Ctrl/Cmd+F asked for it. */
   const [findKey, setFindKey] = useState<number | null>(null)
+  /** The query a search result opened the bar with; its key remounts the bar. */
+  const [findSeed, setFindSeed] = useState<{ query: string; key: number } | null>(null)
+  const [appliedFind, setAppliedFind] = useState<FindRequest | null>(null)
   const exportSavedTimerRef = useRef<number | null>(null)
   const [editingTitle, setEditingTitle] = useState(false)
   /** Up in an empty composer: which message to edit, and a key so a repeat opens it again. */
@@ -157,8 +166,20 @@ function Conversation({
     return () => window.removeEventListener('keydown', handleFind)
   }, [searchOpen])
 
+  // Taken while rendering, so the bar opens in the same commit as the loaded turns.
+  if (findRequest && findRequest !== appliedFind && findRequest.conversationId === conversationId) {
+    setAppliedFind(findRequest)
+    setFindSeed({ query: findRequest.query, key: findRequest.key })
+    setFindKey((key) => (key ?? 0) + 1)
+  }
+
+  useEffect(() => {
+    if (appliedFind) onFindRequestDone?.(appliedFind.key)
+  }, [appliedFind, onFindRequestDone])
+
   const closeFind = useCallback((): void => {
     setFindKey(null)
+    setFindSeed(null)
     textareaRef.current?.focus()
   }, [])
 
@@ -505,7 +526,15 @@ function Conversation({
         {loading ? 'Delta Explorer is responding' : ''}
       </div>
       {findKey !== null && (
-        <FindBar rootRef={scrollRef} signal={state.turns} focusKey={findKey} onClose={closeFind} />
+        <FindBar
+          key={findSeed?.key ?? 0}
+          rootRef={scrollRef}
+          signal={state.turns}
+          focusKey={findKey}
+          seed={findSeed?.query}
+          onReveal={release}
+          onClose={closeFind}
+        />
       )}
       <div className="chat-scroll" ref={scrollRef}>
         {state.context && (

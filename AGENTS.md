@@ -649,7 +649,8 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
 - **Auto-scroll is a pin, not a proximity check.** `ui/lib/stick-to-bottom.ts` follows new
   chunks only while the reader is at the bottom. Scrolling up unpins the view immediately, so
   streaming can never drag the reader back down; returning to the bottom, clicking Latest, or
-  sending a message re-pins. The main chat and the lookup popup share the hook.
+  sending a message re-pins. The main chat and the lookup popup share the hook. Code that scrolls the view away
+  from the bottom (the find bar) calls `release`, or a resize in that frame glues it back down.
 - **Every navigation action drops its in-flight requests.** `stop`, `newChat`, `loadConversation`
   and conversation replacement cancel all pending ids, while `retry`/`regenerate` cancel only
   expands attached to the turns they drop. The request book (`hooks/chat/requests.ts`) is
@@ -671,6 +672,11 @@ tokens; the desktop `@import`s them from `assets/base.css`, in the order they al
   React's nodes and the `data-src` offsets stay as they are and the input keeps the focus, which
   `webContents.findInPage` does not allow. Matches are read again as text streams in, but the view
   scrolls only when the query or the step changes. Escape is claimed by the bar, so it does not stop an answer.
+  A Ctrl/Cmd+K result that matched a message opens its chat or look-up with the bar already on the
+  query, at the newest match (the one the snippet quotes): `ConversationSearch` hands `onSelect` the
+  query (`findQueryForResult`), `App` keeps it until main answers `conversation-open` for that id, and
+  `Conversation` opens the bar once that conversation is the one loaded (`FindRequest`). No turn id
+  crosses IPC. Title matches, canvases and the popup's list just open.
 - **The main window opens where it was left.** `window-state.ts` saves size, position and the maximized
   flag to `config/window-state.json` (its own file, since a settings write announces a config change),
   debounced and once more on close. `fitWindowState` clamps the size to the displays present and drops

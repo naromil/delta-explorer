@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { findTextMatches } from '../../src/renderer/src/components/conversation/find-text'
+import {
+  findQueryForResult,
+  findTextMatches,
+  shownMatchIndex
+} from '../../src/renderer/src/components/conversation/find-text'
 
 describe('findTextMatches', () => {
   it('finds every match in a node, ignoring case', () => {
@@ -41,5 +45,32 @@ describe('findTextMatches', () => {
     expect(findTextMatches(['İ then word'], 'word')).toEqual([
       { start: { node: 0, offset: 7 }, end: { node: 0, offset: 11 } }
     ])
+  })
+})
+
+describe('shownMatchIndex', () => {
+  it('keeps a step inside the matches there are', () => {
+    expect(shownMatchIndex(0, 3)).toBe(0)
+    expect(shownMatchIndex(2, 3)).toBe(2)
+    expect(shownMatchIndex(5, 3)).toBe(2)
+    expect(shownMatchIndex(0, 0)).toBe(0)
+  })
+
+  it('counts a negative step back from the last match', () => {
+    expect(shownMatchIndex(-1, 4)).toBe(3)
+    expect(shownMatchIndex(-2, 4)).toBe(2)
+    expect(shownMatchIndex(-9, 4)).toBe(0)
+    expect(shownMatchIndex(-1, 0)).toBe(0)
+  })
+})
+
+describe('findQueryForResult', () => {
+  it('jumps with the query when a message matched', () => {
+    expect(findQueryForResult('content', '  eigenvalue ')).toBe('eigenvalue')
+  })
+
+  it('opens a title match, or an empty query, without a jump', () => {
+    expect(findQueryForResult('title', 'eigenvalue')).toBeNull()
+    expect(findQueryForResult('content', '   ')).toBeNull()
   })
 })

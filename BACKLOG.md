@@ -2,7 +2,7 @@
 
 ## Routine (Claude may build these without asking)
 
-- [ ] Jump to the matching message when opening a search result — `conversation-search` results would need a turn id (IPC contract change)
+- [x] Jump to the matching message when opening a search result — `conversation-search` results would need a turn id (IPC contract change)
 - [x] "See all conversations" under Home's five recents — opens the Ctrl/Cmd+K list, which already lists everything on an empty query, so older chats are one click away
 - [ ] Update check — show a "new version available" notice (no auto-install) before other people install the packages
 - [x] Show something while memory tools run — `provider.ts` forwards only text deltas, so tool steps are silent, and `MEMORY_ASSISTANT_WRITE_RULES` tells the model to finish its notes before answering, which delays the first token. Either show a "checking notes…" state, or leave writing to the curator and keep only reads in session

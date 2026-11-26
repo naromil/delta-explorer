@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import { findTextMatches } from './find-text'
+import { findTextMatches, shownMatchIndex } from './find-text'
 
 const ALL = 'delta-find'
 const CURRENT = 'delta-find-current'
@@ -30,12 +30,15 @@ function rangesIn(root: HTMLElement, query: string): Range[] {
   })
 }
 
-/** Scrolls only when the match is outside the comfortable part of the view. */
-function reveal(root: HTMLElement, range: Range): void {
+/** Scrolls only when the match is outside the comfortable part of the view; true if it did. */
+function reveal(root: HTMLElement, range: Range): boolean {
   const box = range.getBoundingClientRect()
   const view = root.getBoundingClientRect()
-  if (box.top >= view.top + VIEW_MARGIN_PX && box.bottom <= view.bottom - VIEW_MARGIN_PX) return
+  if (box.top >= view.top + VIEW_MARGIN_PX && box.bottom <= view.bottom - VIEW_MARGIN_PX) {
+    return false
+  }
   root.scrollTop += box.top - view.top - view.height / 3
+  return true
 }
 
 interface FindBarProps {
@@ -45,6 +48,10 @@ interface FindBarProps {
   signal: unknown
   /** Bumped by Ctrl/Cmd+F while the bar is open, to take the focus back. */
   focusKey: number
+  /** A search result's query: the bar opens on it, at the newest match, which the result quoted. */
+  seed?: string
+  /** The bar moved the view to a match, so the chat should stop following new text. */
+  onReveal?: () => void
   onClose: () => void
 }
 
@@ -53,9 +60,17 @@ interface FindBarProps {
  * API, which leaves the DOM alone: React keeps its nodes, text offsets stay true,
  * and the input keeps the focus, none of which `webContents.findInPage` allows.
  */
-function FindBar({ rootRef, signal, focusKey, onClose }: FindBarProps): React.JSX.Element {
-  const [query, setQuery] = useState('')
-  const [position, setPosition] = useState(0)
+function FindBar({
+  rootRef,
+  signal,
+  focusKey,
+  seed,
+  onReveal,
+  onClose
+}: FindBarProps): React.JSX.Element {
+  const [query, setQuery] = useState(seed ?? '')
+  /** Negative counts back from the last match. */
+  const [position, setPosition] = useState(seed ? -1 : 0)
   const [count, setCount] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   /** The step the view last scrolled for, so streaming text never moves it again. */
@@ -76,15 +91,19 @@ function FindBar({ rootRef, signal, focusKey, onClose }: FindBarProps): React.JS
       CSS.highlights.delete(CURRENT)
       return
     }
-    const current = ranges[Math.min(position, ranges.length - 1)]
+    const current = ranges[shownMatchIndex(position, ranges.length)]
     CSS.highlights.set(ALL, new Highlight(...ranges))
     CSS.highlights.set(CURRENT, new Highlight(current))
     const step = `${query}\n${position}`
-    if (revealedRef.current !== step) {
+    if (revealedRef.current === step) return
+    // A conversation opened from search pins itself to the bottom in this same commit,
+    // after this effect, so the view moves a frame later.
+    const frame = requestAnimationFrame(() => {
       revealedRef.current = step
-      reveal(root, current)
-    }
-  }, [rootRef, query, position, signal])
+      if (reveal(root, current)) onReveal?.()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [rootRef, query, position, signal, onReveal])
 
   useEffect(() => {
     return () => {
@@ -93,7 +112,7 @@ function FindBar({ rootRef, signal, focusKey, onClose }: FindBarProps): React.JS
     }
   }, [])
 
-  const shown = count === 0 ? 0 : Math.min(position, count - 1)
+  const shown = shownMatchIndex(position, count)
   const step = (by: number): void => {
     if (count > 0) setPosition((shown + by + count) % count)
   }
