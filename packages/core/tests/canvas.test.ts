@@ -26,6 +26,8 @@ import {
   resizeCard,
   resizeCardKeepingClear,
   resizeKeyStep,
+  resizeCorner,
+  clickRectAt,
   minCardSize,
   resizeFollowerIds,
   raisedStack,
@@ -596,6 +598,56 @@ describe('fitCardHeight', () => {
       message('blocker', 5, rect(300, 100, 300, 200))
     ]
     expect(fitCardHeight(cards, 'a', 150)).toEqual([])
+  })
+})
+
+describe('which corner resizes', () => {
+  const cards = [
+    message('left', 1, rect(0, 0, 300, 200)),
+    message('a', 3, rect(300, 0, 300, 200), 'left'),
+    message('b', 5, rect(1000, 300, 300, 200)),
+    message('b-right', 7, rect(1300, 300, 300, 200), 'b'),
+    message('b-below', 9, rect(1000, 500, 300, 200), 'b'),
+    message('alone', 11, rect(2000, 0, 300, 200))
+  ]
+
+  it('puts the handle on the free corner, bottom-right on a tie', () => {
+    expect(resizeCorner(cards, 'a')).toEqual({ x: 1, y: 1 })
+    expect(resizeCorner(cards, 'left')).toEqual({ x: -1, y: 1 })
+    expect(resizeCorner(cards, 'b')).toEqual({ x: -1, y: -1 })
+    expect(resizeCorner(cards, 'alone')).toEqual({ x: 1, y: 1 })
+    expect(resizeCorner(cards, 'missing')).toEqual({ x: 1, y: 1 })
+  })
+
+  it('leaves a left or top handle snapping past what the mirrored edges carry', () => {
+    const chain = [
+      message('far', 1, rect(-300, 0, 300, 200)),
+      message('a', 3, rect(0, 0, 300, 200)),
+      message('right', 5, rect(300, 0, 300, 200))
+    ]
+    expect(resizeFollowerIds(chain, 'a', { x: -1, y: 1 })).toEqual(new Set(['far']))
+    expect(resizeFollowerIds(chain, 'a')).toEqual(new Set(['right']))
+  })
+})
+
+describe('a click-drawn rectangle', () => {
+  const size = { w: 400, h: 280 }
+  const card = rect(1000, 1000, 300, 200)
+
+  it('extends right and down in open space', () => {
+    expect(clickRectAt({ x: 0, y: 0 }, size, [card], 8)).toEqual(rect(0, 0, 400, 280))
+  })
+
+  it('extends away from the card whose edge was clicked', () => {
+    expect(clickRectAt({ x: 1300, y: 1050 }, size, [card], 8)).toEqual(rect(1300, 1050, 400, 280))
+    expect(clickRectAt({ x: 1003, y: 1050 }, size, [card], 8)).toEqual(rect(603, 1050, 400, 280))
+    expect(clickRectAt({ x: 1100, y: 997 }, size, [card], 8)).toEqual(rect(1100, 717, 400, 280))
+    expect(clickRectAt({ x: 1100, y: 1200 }, size, [card], 8)).toEqual(rect(1100, 1200, 400, 280))
+  })
+
+  it('goes right or down between two cards', () => {
+    const left = rect(700, 1000, 300, 200)
+    expect(clickRectAt({ x: 1000, y: 1050 }, size, [left, card], 8).x).toBe(1000)
   })
 })
 

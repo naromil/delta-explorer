@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react'
 import type { CanvasNoteCard, CanvasRect } from '@delta/core/canvas'
 import { flattenMarkdown } from '@delta/core/rich-text'
 import Markdown from '../conversation/Markdown'
+import type { CornerName } from './board-helpers'
 
 const noop = (): void => undefined
 const noExpansion = (): null => null
@@ -86,6 +87,8 @@ interface CanvasNoteViewProps {
   dragging: boolean
   /** Its height in the pile where cards overlap; a held card rises above all of them. */
   stackLevel: number
+  /** The corner its resize handle sits on: the one on its free sides. */
+  resizeCorner: CornerName
   pulsing: boolean
   dimmed: boolean
   /** A connection being drawn starts or would end here. */
@@ -186,6 +189,7 @@ function CanvasNoteView(props: CanvasNoteViewProps): React.JSX.Element {
         {editing ? null : (
           <span
             className="canvas-card-resize"
+            data-corner={props.resizeCorner}
             title="Drag to resize"
             onPointerDown={(e) => onResizeStart(e, card.id)}
           />

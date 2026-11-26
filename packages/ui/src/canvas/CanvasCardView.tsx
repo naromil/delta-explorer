@@ -14,6 +14,7 @@ import ToolActivityLine from '../conversation/ToolActivityLine'
 import { useToolActivity } from '../lib/tool-activity'
 import { nextPinned } from '../lib/stick-to-bottom'
 import { safeHref } from '../lib/safe-url'
+import type { CornerName } from './board-helpers'
 
 export type CanvasCardStatus = 'streaming' | 'done' | 'failed'
 
@@ -62,6 +63,8 @@ interface CanvasCardViewProps extends CanvasCardActions {
   handleBottom: boolean
   /** Its height in the pile where cards overlap; a held card rises above all of them. */
   stackLevel: number
+  /** The corner its resize handle sits on: the one on its free sides. */
+  resizeCorner: CornerName
   pulsing: boolean
   dimmed: boolean
   selected: boolean
@@ -537,6 +540,7 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
         {collapsed ? null : (
           <span
             className="canvas-card-resize"
+            data-corner={props.resizeCorner}
             title="Drag to resize"
             onPointerDown={(e) => onResizeStart(e, card.id)}
           />

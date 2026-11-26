@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CanvasLinkContext, CanvasRect, CanvasSide } from '@delta/core/canvas'
-import { estimateWords } from '@delta/core/canvas'
+import { draftGrowth, estimateWords } from '@delta/core/canvas'
 import { LOOKUP_DEFAULT_QUERY } from '@delta/core/prompts'
 import { bodyCharWidth } from '../lib/char-width'
+import { cornerName } from './board-helpers'
 
 export interface CanvasDraftSession {
   id: string
@@ -262,7 +263,7 @@ function CanvasDraft({
         </div>
         <div
           className="canvas-card-resize"
-          data-side={side}
+          data-corner={cornerName(draftGrowth(side))}
           title="Drag to resize; the answer's length follows"
           onPointerDown={onResizeStart}
         />

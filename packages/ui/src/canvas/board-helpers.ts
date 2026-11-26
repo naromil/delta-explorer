@@ -4,6 +4,13 @@ const MINIMAP_STORAGE_KEY = 'delta-canvas-minimap'
 
 /** DOM and wording helpers for the canvas board; nothing here holds state. */
 
+/** A resize handle's corner as the stylesheet names it (`data-corner`). */
+export type CornerName = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
+
+export function cornerName(corner: { x: number; y: number }): CornerName {
+  return `${corner.y < 0 ? 'top' : 'bottom'}-${corner.x < 0 ? 'left' : 'right'}`
+}
+
 export function readMinimapPreference(): boolean {
   try {
     return localStorage.getItem(MINIMAP_STORAGE_KEY) !== 'off'

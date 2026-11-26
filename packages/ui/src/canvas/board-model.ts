@@ -45,7 +45,14 @@ export type Gesture =
       start: CanvasPoint
       pointer: CanvasPoint
     }
-  | { type: 'resize'; id: string; start: CanvasPoint; pointer: CanvasPoint }
+  | {
+      type: 'resize'
+      id: string
+      start: CanvasPoint
+      pointer: CanvasPoint
+      /** Which way the handle's corner moves: -1 for the left or top edge. */
+      corner: { x: 1 | -1; y: 1 | -1 }
+    }
   | { type: 'frameResize'; id: string; start: CanvasPoint; pointer: CanvasPoint }
   | { type: 'connect'; from: string; pointer: CanvasPoint }
   /** A card's `+` on its way somewhere: a click continues on its side. */

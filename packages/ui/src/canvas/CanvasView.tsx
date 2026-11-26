@@ -31,6 +31,7 @@ import {
   fitsOnScreen,
   gridSpacing,
   nearestCardInDirection,
+  clickRectAt,
   minCardSize,
   openCardSize,
   rectAgainst,
@@ -42,6 +43,7 @@ import {
   resizeCard,
   resizeFollowerIds,
   resizeDraftRect,
+  resizeCorner,
   resizeKeyStep,
   resolveMove,
   sessionCardIds,
@@ -108,6 +110,7 @@ import type { CanvasTool } from './CanvasToolRail'
 import CanvasToolRail from './CanvasToolRail'
 import {
   confirmCascade,
+  cornerName,
   deletedNotice,
   dependentsPhrase,
   measureCardHeight,
@@ -491,7 +494,7 @@ function CanvasBoard({
           ? DEFAULT_NOTE_SIZE
           : DEFAULT_MESSAGE_SIZE
       const snapped: SnapResult = snapEdges(
-        isClick ? rectFromCorner(start, clickSize) : raw,
+        isClick ? clickRectAt(start, clickSize, others, threshold) : raw,
         others,
         threshold
       )
@@ -821,15 +824,26 @@ function CanvasBoard({
     const card = cards.find((item) => item.id === gesture.id)
     if (!card) return null
     const min = minCardSize(card)
+    const { corner } = gesture
+    const w = Math.max(card.rect.w + corner.x * (gesture.pointer.x - gesture.start.x), min.w)
+    const h = Math.max(card.rect.h + corner.y * (gesture.pointer.y - gesture.start.y), min.h)
+    // The handle's corner moves; the opposite one stays.
+    const right = card.rect.x + card.rect.w
+    const bottom = card.rect.y + card.rect.h
     const rect = {
-      ...card.rect,
-      w: Math.max(card.rect.w + gesture.pointer.x - gesture.start.x, min.w),
-      h: Math.max(card.rect.h + gesture.pointer.y - gesture.start.y, min.h)
+      x: corner.x < 0 ? right - w : card.rect.x,
+      y: corner.y < 0 ? bottom - h : card.rect.y,
+      w,
+      h
     }
     // A card that follows the moving edge is not a target: it would hold the edge in place.
-    const carried = new Set([card.id, ...resizeFollowerIds(cards, card.id)])
+    const carried = new Set([card.id, ...resizeFollowerIds(cards, card.id, corner)])
     const snapped = snapEdges(rect, cardRects(cards, carried), SNAP_SCREEN_PX / viewport.zoom).rect
-    return { ...rect, w: snapped.x + snapped.w - rect.x, h: snapped.y + snapped.h - rect.y }
+    return {
+      ...rect,
+      w: corner.x < 0 ? right - snapped.x : snapped.x + snapped.w - rect.x,
+      h: corner.y < 0 ? bottom - snapped.y : snapped.y + snapped.h - rect.y
+    }
   }, [cards, gesture, viewport.zoom])
 
   const resizedDraft = useMemo(() => {
@@ -874,10 +888,16 @@ function CanvasBoard({
     [cards, dragDelta, gesture]
   )
 
+  // Each card's resize handle sits on its free corner, the way its free sides resize.
+  const resizeCorners = useMemo(
+    () => new Map(cards.map((card) => [card.id, cornerName(resizeCorner(cards, card.id))])),
+    [cards]
+  )
+
   const resizeUpdates = useMemo(
     () =>
       gesture?.type === 'resize' && resizedRect
-        ? resizeCard(cards, gesture.id, { w: resizedRect.w, h: resizedRect.h })
+        ? resizeCard(cards, gesture.id, { w: resizedRect.w, h: resizedRect.h }, 'free')
         : null,
     [cards, gesture, resizedRect]
   )
@@ -953,7 +973,13 @@ function CanvasBoard({
       if (e.button !== 0) return
       const start = pointerInWorld(e)
       claimPress(e)
-      setGesture({ type: 'resize', id, start, pointer: start })
+      setGesture({
+        type: 'resize',
+        id,
+        start,
+        pointer: start,
+        corner: resizeCorner(cardsRef.current, id)
+      })
     },
     [claimPress, pointerInWorld]
   )
@@ -2330,6 +2356,7 @@ function CanvasBoard({
                     selected={liveSelection.has(card.id)}
                     dragging={dragging}
                     stackLevel={stackLevel}
+                    resizeCorner={resizeCorners.get(card.id) ?? 'bottom-right'}
                     pulsing={pulseId === card.id}
                     dimmed={dimmed}
                     continued={
@@ -2359,6 +2386,7 @@ function CanvasBoard({
                   handleRight={!continueHandleBlocked(card, 'right', displayed, stackRanks)}
                   handleBottom={!continueHandleBlocked(card, 'bottom', displayed, stackRanks)}
                   stackLevel={stackLevel}
+                  resizeCorner={resizeCorners.get(card.id) ?? 'bottom-right'}
                   pulsing={pulseId === card.id}
                   dimmed={dimmed}
                   selected={liveSelection.has(card.id)}

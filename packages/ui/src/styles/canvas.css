@@ -433,6 +433,29 @@
   transition: opacity var(--dur-1) var(--ease-out);
 }
 
+/* The handle sits on the card's free corner (`resizeCorner`), its grip drawn towards it. */
+.canvas-card-resize[data-corner='bottom-left'] {
+  right: auto;
+  left: 0;
+  cursor: nesw-resize;
+  transform: scaleX(-1);
+}
+
+.canvas-card-resize[data-corner='top-right'] {
+  top: 0;
+  bottom: auto;
+  cursor: nesw-resize;
+  transform: scaleY(-1);
+}
+
+.canvas-card-resize[data-corner='top-left'] {
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 0;
+  transform: scale(-1, -1);
+}
+
 .canvas-card:hover .canvas-card-resize {
   opacity: 1;
 }
@@ -947,13 +970,6 @@
 .canvas-card--draft .canvas-card-resize {
   z-index: 1;
   opacity: 0.7;
-}
-
-.canvas-card--draft .canvas-card-resize[data-side='left'] {
-  right: auto;
-  left: 0;
-  cursor: nesw-resize;
-  transform: scaleX(-1);
 }
 
 .canvas-card--draft .canvas-card-resize[data-side='top'] {

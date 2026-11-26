@@ -201,6 +201,39 @@ export function rectFromCorner(point: CanvasPoint, size: { w: number; h: number 
   return { x: point.x, y: point.y, w: size.w, h: size.h }
 }
 
+/**
+ * The default-sized rectangle drawn by a click at `point`, extending away from cards whose
+ * edge the click lies on, so it joins them by its own side: to the left of a card whose left
+ * edge was clicked, above one whose top was. Right and down otherwise, including on a tie.
+ */
+export function clickRectAt(
+  point: CanvasPoint,
+  size: { w: number; h: number },
+  others: CanvasRect[],
+  threshold: number
+): CanvasRect {
+  const near = (edge: number, at: number): boolean => Math.abs(edge - at) <= threshold
+  const within = (at: number, start: number, length: number): boolean =>
+    at >= start && at <= start + length
+  const onSides = { left: false, right: false, top: false, bottom: false }
+  for (const rect of others) {
+    if (within(point.y, rect.y, rect.h)) {
+      if (near(rect.x, point.x)) onSides.right = true
+      if (near(rect.x + rect.w, point.x)) onSides.left = true
+    }
+    if (within(point.x, rect.x, rect.w)) {
+      if (near(rect.y, point.y)) onSides.bottom = true
+      if (near(rect.y + rect.h, point.y)) onSides.top = true
+    }
+  }
+  return {
+    x: onSides.right && !onSides.left ? point.x - size.w : point.x,
+    y: onSides.bottom && !onSides.top ? point.y - size.h : point.y,
+    w: size.w,
+    h: size.h
+  }
+}
+
 export function rectCenteredAt(point: CanvasPoint, size: { w: number; h: number }): CanvasRect {
   return { x: point.x - size.w / 2, y: point.y - size.h / 2, w: size.w, h: size.h }
 }
@@ -886,10 +919,17 @@ function updatesFromRects(cards: CanvasCard[], rects: CardRects, id: string): Ca
 }
 
 /** The cards a resize of `id` carries along, whose edges it should therefore not snap to. */
-export function resizeFollowerIds(cards: CanvasCard[], id: string): Set<string> {
+export function resizeFollowerIds(
+  cards: CanvasCard[],
+  id: string,
+  corner: { x: 1 | -1; y: 1 | -1 } = { x: 1, y: 1 }
+): Set<string> {
   const rects = rectsById(cards)
   if (!rects.has(id)) return new Set()
-  return new Set([...edgeFollowers(rects, id, 'w'), ...edgeFollowers(rects, id, 'h')])
+  // A left or top edge's followers are a mirrored right or bottom edge's.
+  const along = (dimension: CardDimension, sign: 1 | -1): Set<string> =>
+    edgeFollowers(sign < 0 ? mirroredRects(rects, dimension) : rects, id, dimension)
+  return new Set([...along('w', corner.x), ...along('h', corner.y)])
 }
 
 /**
@@ -949,6 +989,19 @@ function resizeAlongFrom(
     if (rect !== before.get(cardId)) rects.set(cardId, back.get(cardId) as CanvasRect)
   }
   return true
+}
+
+/**
+ * Which way each axis of a card grows when resized from its free sides: -1 where the left or
+ * top edge moves, 1 for the right or bottom. Its resize handle sits on that corner.
+ */
+export function resizeCorner(cards: CanvasCard[], id: string): { x: 1 | -1; y: 1 | -1 } {
+  const rects = rectsById(cards)
+  if (!rects.has(id)) return { x: 1, y: 1 }
+  return {
+    x: resizesFromNear(rects, id, 'w') ? -1 : 1,
+    y: resizesFromNear(rects, id, 'h') ? -1 : 1
+  }
 }
 
 function resizeMoves(

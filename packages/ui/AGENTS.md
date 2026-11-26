@@ -175,10 +175,11 @@ desktop's main process. A change here ships in both apps, so test it in both (se
   ways, plus anything joined only through them (`edgeFollowers`); a card also joined by another route
   keeps its place. Joined cards never land on each other: a resize pushes one it reaches, and shrinking
   stops where a follower can come back no further. Anything not joined stays where it is, so the card
-  may end up over it. A corner drag moves the right and bottom; a size change by key or by fitting
-  (`from: 'free'`) moves, on each axis, the side with nothing joined to it, so what is joined stays put,
-  and the right or bottom when both sides are joined or both free (`resizesFromNear` mirrors the
-  rectangles and resizes the far edge).
+  may end up over it. Every resize, by the handle, by key or by fitting (`from: 'free'`), moves on
+  each axis the side with nothing joined to it, so what is joined stays put, and the right or bottom
+  when both sides are joined or both free (`resizesFromNear` mirrors the rectangles and resizes the far
+  edge). The handle sits on that corner (`resizeCorner`, `data-corner`), as a draft's sits on the
+  corner away from its parent. Collapsing still keeps the title in place.
 - **Cards may overlap wherever the user puts them; nothing automatic covers one.** Drawing, dragging,
   nudging, resizing, arranging and undo never refuse a landing. Placement nobody aimed still looks for
   open space (`adjacentSlot`, `rectClearOf`), and a change of size nobody aimed (answer fitting, reopening
@@ -203,7 +204,8 @@ desktop's main process. A change here ships in both apps, so test it in both (se
   Like chat it drops what came after: every card in `cascadeCardIds`. Anything that takes other cards
   along, delete included, confirms twice (`confirmCascade`); a card nothing depends on deletes at once.
 - **Sides are sessions.** Drawing with a side against a card (`continuationParent`, snapped by
-  `snapEdges`) continues it; anywhere else starts a new session. A rectangle touching several cards
+  `snapEdges`) continues it; anywhere else starts a new session. A click without travel draws the
+  default size away from a card whose edge it lies on (`clickRectAt`), right and down otherwise. A rectangle touching several cards
   continues one only (`continuationCandidates`, newest first) and sends only that history; the
   drawing highlights it (`is-continued`) and the draft's "Continues" picker can switch to another
   candidate or to a new session. Alt+drag pulls a card off its parent and neighbours, bringing the descendants attached
