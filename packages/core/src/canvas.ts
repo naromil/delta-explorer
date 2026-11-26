@@ -892,30 +892,93 @@ export function resizeFollowerIds(cards: CanvasCard[], id: string): Set<string> 
   return new Set([...edgeFollowers(rects, id, 'w'), ...edgeFollowers(rects, id, 'h')])
 }
 
+/**
+ * Which edges a resize moves: always the right and bottom (`far`), as a corner drag does,
+ * or on each axis the side with nothing joined to it (`free`), the right or bottom when
+ * both sides are joined or both free, so what is joined to the card stays where it is.
+ */
+export type ResizeFrom = 'far' | 'free'
+
+/** Whether a `free` resize moves the left or top edge: nothing joins there, something does beyond. */
+function resizesFromNear(rects: CardRects, id: string, dimension: CardDimension): boolean {
+  const rect = rects.get(id) as CanvasRect
+  const [near, far]: CanvasSide[] = dimension === 'w' ? ['left', 'right'] : ['top', 'bottom']
+  let nearJoined = false
+  let farJoined = false
+  for (const [otherId, other] of rects) {
+    if (otherId === id) continue
+    const side = sharedSide(rect, other)
+    if (side === near) nearJoined = true
+    else if (side === far) farJoined = true
+  }
+  return farJoined && !nearJoined
+}
+
+/**
+ * The rectangles mirrored along a dimension, so the left or top edge becomes the right or
+ * bottom one. Everything a resize reads (shared sides, overlaps, order) mirrors with them.
+ */
+function mirroredRects(rects: CardRects, dimension: CardDimension): CardRects {
+  const axis = dimension === 'w' ? 'x' : 'y'
+  return new Map(
+    [...rects].map(([id, rect]): [string, CanvasRect] => [
+      id,
+      { ...rect, [axis]: -(rect[axis] + rect[dimension]) }
+    ])
+  )
+}
+
+/** `resizeAlong` from whichever edge `from` picks, writing the result back into `rects`. */
+function resizeAlongFrom(
+  rects: CardRects,
+  id: string,
+  dimension: CardDimension,
+  length: number,
+  reach: ResizeReach,
+  from: ResizeFrom
+): boolean {
+  if (from === 'far' || !resizesFromNear(rects, id, dimension)) {
+    return resizeAlong(rects, id, dimension, length, reach)
+  }
+  const before = mirroredRects(rects, dimension)
+  const mirrored = new Map(before)
+  if (!resizeAlong(mirrored, id, dimension, length, reach)) return false
+  // Unmoved cards keep their own rectangles, so mirroring twice adds no rounding to them.
+  const back = mirroredRects(mirrored, dimension)
+  for (const [cardId, rect] of mirrored) {
+    if (rect !== before.get(cardId)) rects.set(cardId, back.get(cardId) as CanvasRect)
+  }
+  return true
+}
+
 function resizeMoves(
   cards: CanvasCard[],
   id: string,
   size: { w: number; h: number },
-  reach: ResizeReach
+  reach: ResizeReach,
+  from: ResizeFrom
 ): CanvasMoveUpdate[] | null {
   const card = cardById(cards, id)
   if (!card) return null
   const rects = rectsById(cards)
   const settled =
-    resizeAlong(rects, id, 'w', size.w, reach) && resizeAlong(rects, id, 'h', size.h, reach)
+    resizeAlongFrom(rects, id, 'w', size.w, reach, from) &&
+    resizeAlongFrom(rects, id, 'h', size.h, reach, from)
   return settled ? updatesFromRects(cards, rects, id) : null
 }
 
 /**
- * The moves for a resize the user asked for, from a card's bottom-right corner. Cards
+ * The moves for a resize the user asked for: from a card's bottom-right corner, as a drag
+ * of that corner does, or from its free sides (`from: 'free'`), as the resize keys do. Cards
  * joined to it follow or are pushed aside, and it may end up over anything else.
  */
 export function resizeCard(
   cards: CanvasCard[],
   id: string,
-  size: { w: number; h: number }
+  size: { w: number; h: number },
+  from: ResizeFrom = 'far'
 ): CanvasMoveUpdate[] {
-  return resizeMoves(cards, id, size, 'joined') ?? []
+  return resizeMoves(cards, id, size, 'joined', from) ?? []
 }
 
 /**
@@ -926,9 +989,10 @@ export function resizeCard(
 export function resizeCardKeepingClear(
   cards: CanvasCard[],
   id: string,
-  size: { w: number; h: number }
+  size: { w: number; h: number },
+  from: ResizeFrom = 'far'
 ): CanvasMoveUpdate[] | null {
-  return resizeMoves(cards, id, size, 'everything')
+  return resizeMoves(cards, id, size, 'everything', from)
 }
 
 /* ---- Stacking: which card is on top where they overlap ---- */
@@ -992,8 +1056,9 @@ export function raisedStack(cards: CanvasCard[], stack: string[], ids: Iterable<
 
 /**
  * The moves that give a card the height its answer needs; its width never changes.
- * It resizes with `resizeCardKeepingClear`, so what is joined below follows it. An empty
- * result means nothing changes, and the body scrolls.
+ * It resizes with `resizeCardKeepingClear` from its free side: the bottom, with what is
+ * joined below following it, unless only something below is joined, when the top moves and
+ * that stays. An empty result means nothing changes, and the body scrolls.
  */
 export function fitCardHeight(
   cards: CanvasCard[],
@@ -1008,12 +1073,18 @@ export function fitCardHeight(
   const minimum = card.kind === 'message' ? MIN_MESSAGE_SIZE.h : MIN_EXPANSION_SIZE.h
   const wanted = Math.max(Math.ceil(contentHeight), minimum)
   if (wanted === card.rect.h) return []
-  const updates = resizeCardKeepingClear(cards, id, { w: card.rect.w, h: wanted }) ?? []
+  const updates = resizeCardKeepingClear(cards, id, { w: card.rect.w, h: wanted }, 'free') ?? []
   const unchanged = updates.find((update) => update.id === id)?.rect.h === card.rect.h
   return unchanged ? [] : updates
 }
 
 /* ---- Collapsing a card to its title ---- */
+
+/** The smallest a card may be resized to. */
+export function minCardSize(card: CanvasCard): { w: number; h: number } {
+  if (card.kind === 'message') return MIN_MESSAGE_SIZE
+  return card.kind === 'note' ? MIN_NOTE_SIZE : MIN_EXPANSION_SIZE
+}
 
 /** The size a card has when open, whether or not it is collapsed now. */
 export function openCardSize(card: CanvasCard): { w: number; h: number } {
@@ -1380,6 +1451,14 @@ export function gridSpacing(zoom: number): number {
   let spacing = GRID_SPACING * zoom
   while (spacing < MIN_GRID_SCREEN_SPACING) spacing *= 2
   return spacing
+}
+
+/**
+ * How far one press of a resize key changes a card, in world pixels: two spaces between the
+ * dots as they show at this zoom, so a step looks the same on screen however far out.
+ */
+export function resizeKeyStep(zoom: number): number {
+  return (2 * gridSpacing(zoom)) / zoom
 }
 
 const FIT_MARGIN = 64

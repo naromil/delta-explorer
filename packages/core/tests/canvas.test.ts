@@ -25,6 +25,8 @@ import {
   rectsOverlap,
   resizeCard,
   resizeCardKeepingClear,
+  resizeKeyStep,
+  minCardSize,
   resizeFollowerIds,
   raisedStack,
   resolveMove,
@@ -516,7 +518,8 @@ describe('fitCardHeight', () => {
 
   it('brings a continuation below along, both ways, and leaves one alongside', () => {
     const cards = [
-      message('a', 1, rect(0, 0, 300, 200)),
+      message('above', 9, rect(0, -200, 300, 200)),
+      message('a', 1, rect(0, 0, 300, 200), 'above'),
       message('below', 3, rect(0, 200, 300, 200), 'a'),
       message('right', 5, rect(300, 0, 300, 200), 'a')
     ]
@@ -524,6 +527,28 @@ describe('fitCardHeight', () => {
     expect(topOf(grown, 'below')).toBe(300)
     expect(topOf(grown, 'right')).toBeUndefined()
     expect(topOf(fitCardHeight(cards, 'a', 150), 'below')).toBe(150)
+    expect(topOf(grown, 'above')).toBeUndefined()
+  })
+
+  it('moves the top instead when only something below is joined, which stays put', () => {
+    const cards = [
+      message('a', 1, rect(0, 200, 300, 200)),
+      message('below', 3, rect(0, 400, 300, 200), 'a')
+    ]
+    expect(fitCardHeight(cards, 'a', 300)).toEqual([{ id: 'a', rect: rect(0, 100, 300, 300) }])
+    expect(fitCardHeight(cards, 'a', 150)).toEqual([{ id: 'a', rect: rect(0, 250, 300, 150) }])
+  })
+
+  it('pushes what it reaches above when growing upward, so nothing overlaps', () => {
+    const cards = [
+      message('other', 5, rect(0, 0, 300, 150)),
+      message('a', 1, rect(0, 200, 300, 200)),
+      message('below', 3, rect(0, 400, 300, 200), 'a')
+    ]
+    const updates = fitCardHeight(cards, 'a', 300)
+    expect(topOf(updates, 'a')).toBe(100)
+    expect(topOf(updates, 'other')).toBe(-50)
+    expect(topOf(updates, 'below')).toBeUndefined()
   })
 
   it('pushes whatever is in the way, in a chain, so nothing overlaps', () => {
@@ -541,6 +566,7 @@ describe('fitCardHeight', () => {
 
   it('takes a side continuation with a pushed card, and pushes what it newly reaches', () => {
     const cards = [
+      message('above', 9, rect(0, -100, 300, 100)),
       message('a', 1, rect(0, 0, 300, 200)),
       message('b', 3, rect(0, 200, 300, 200)),
       over('over-b', 'b', rect(20, 230, 100, 90)),
@@ -564,11 +590,27 @@ describe('fitCardHeight', () => {
 
   it('stays tall when what hangs below cannot follow it up', () => {
     const cards = [
+      message('above', 9, rect(0, -100, 300, 200)),
       message('a', 1, rect(0, 100, 300, 200)),
       message('below', 3, rect(0, 300, 600, 200), 'a'),
       message('blocker', 5, rect(300, 100, 300, 200))
     ]
     expect(fitCardHeight(cards, 'a', 150)).toEqual([])
+  })
+})
+
+describe('resize keys', () => {
+  it('step by two spaces between the dots as they show', () => {
+    expect(resizeKeyStep(1)).toBe(56)
+    expect(resizeKeyStep(2)).toBe(56)
+    // Zoomed far out the dots thin out, so a step covers more of the plane.
+    expect(resizeKeyStep(0.25)).toBe(224)
+    expect(resizeKeyStep(0.25) * 0.25).toBe(2 * gridSpacing(0.25))
+  })
+
+  it('stop at the smallest a card may be', () => {
+    expect(minCardSize(message('a', 1, rect(0, 0)))).toEqual({ w: 200, h: 120 })
+    expect(minCardSize(expansion('e', 1, 1, 'a', rect(0, 0)))).toEqual({ w: 140, h: 84 })
   })
 })
 
@@ -822,12 +864,63 @@ describe('keeping adjacent cards joined', () => {
 
   it('follows on fitting too, for a card from another session', () => {
     const cards = [
+      message('above', 5, rect(0, -100, 300, 100)),
       message('a', 1, rect(0, 0, 300, 300)),
       message('unrelated', 3, rect(0, 300, 300, 100))
     ]
     expect(fitCardHeight(cards, 'a', 200).find((update) => update.id === 'unrelated')?.rect.y).toBe(
       200
     )
+  })
+
+  describe('from the free sides', () => {
+    const cards = [
+      message('left', 1, rect(0, 0, 300, 200)),
+      message('a', 3, rect(300, 0, 300, 200), 'left'),
+      message('right', 5, rect(900, 0, 300, 200)),
+      message('b', 7, rect(600, 300, 300, 200)),
+      message('b-right', 9, rect(900, 300, 300, 200), 'b')
+    ]
+
+    it('moves the side with nothing joined, keeping what is joined in place', () => {
+      expect(resizeCard(cards, 'a', { w: 350, h: 250 }, 'free')).toEqual([
+        { id: 'a', rect: rect(300, 0, 350, 250) }
+      ])
+      expect(resizeCard(cards, 'b', { w: 350, h: 200 }, 'free')).toEqual([
+        { id: 'b', rect: rect(550, 300, 350, 200) }
+      ])
+      expect(resizeCard(cards, 'b', { w: 250, h: 200 }, 'free')).toEqual([
+        { id: 'b', rect: rect(650, 300, 250, 200) }
+      ])
+    })
+
+    it('moves the right or bottom when both sides are joined or both free', () => {
+      const between = [...cards, message('c', 11, rect(600, 0, 300, 200))]
+      const updates = resizeCard(between, 'a', { w: 340, h: 200 }, 'free')
+      expect(movedTo(updates, 'a')).toEqual(rect(300, 0, 340, 200))
+      expect(movedTo(updates, 'c')).toEqual(rect(640, 0, 300, 200))
+      expect(movedTo(updates, 'left')).toBeUndefined()
+    })
+
+    it('carries what is joined beyond the moved side, mirrored', () => {
+      const chain = [
+        message('far-left', 1, rect(-300, 0, 300, 200)),
+        message('near-left', 3, rect(0, 0, 300, 200)),
+        message('a', 5, rect(300, 0, 300, 200)),
+        message('right', 7, rect(600, 0, 300, 200))
+      ]
+      // Joined on both sides: the right moves and the card beyond it follows.
+      expect(movedTo(resizeCard(chain, 'a', { w: 360, h: 200 }, 'free'), 'right')?.x).toBe(660)
+      // Joined only on the right of `near-left`'s chain end: nothing beyond the left moves.
+      const lone = chain.filter((card) => card.id !== 'right')
+      const updates = resizeCard(lone, 'far-left', { w: 360, h: 200 }, 'free')
+      expect(movedTo(updates, 'far-left')).toEqual(rect(-360, 0, 360, 200))
+      expect(movedTo(updates, 'near-left')).toBeUndefined()
+    })
+
+    it('leaves the corner drag as it was', () => {
+      expect(movedTo(resizeCard(cards, 'b', { w: 350, h: 200 }), 'b-right')?.x).toBe(950)
+    })
   })
 })
 

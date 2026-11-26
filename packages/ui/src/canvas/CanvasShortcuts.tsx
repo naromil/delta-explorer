@@ -33,6 +33,10 @@ const SHORTCUTS: readonly ShortcutGroup[] = [
       { keys: ['Ctrl', 'A'], what: 'Select everything' },
       { keys: ['Shift', '↑ ↓ ← →'], what: 'Add the nearest card that way' },
       { keys: ['Ctrl', '↑ ↓ ← →'], what: 'Nudge the selection; Shift for further' },
+      {
+        keys: ['Alt', 'Shift', '↑ ↓ ← →'],
+        what: 'Resize the selected cards: → ↓ grow, ← ↑ shrink'
+      },
       { keys: ['Ctrl', 'D'], what: 'Duplicate' },
       { keys: ['Ctrl', 'C'], what: 'Copy as markdown' },
       { keys: ['Ctrl', 'V'], what: 'Paste text as a note' },

@@ -484,8 +484,10 @@ user's own text, holding no turn). The layout also holds frames and connections.
   (arrows, Enter, B for back, `?` for the full list). Links can be clicked to travel along them.
 - **Expanding** selects a term as usual, then asks for a rectangle. The answer is a card like any other,
   linked from the term, wherever it is drawn or dropped.
-- **Finished answers** set the card's height, never its width (`fitCardHeight`): continuations below
-  follow and anything else it newly reaches is pushed down, so an answer never hides a neighbour.
+- **Finished answers** set the card's height, never its width (`fitCardHeight`), from the card's free
+  side: the bottom, with continuations below following, unless only something below is joined, when the
+  top moves instead and that card stays put. Anything else it newly reaches is pushed away, so an answer
+  never hides a neighbour.
 - **Overlap** is allowed for anything the user places: drawing, dragging, nudging, resizing and arranging.
   Pressing or selecting a covered card brings it forward (`layout.stack`).
 - **Regenerate** uses the card's current rectangle and removes what depended on the old answer.

@@ -40,6 +40,8 @@ export interface CanvasKeyboardActions {
   redo: () => void
   selectEverything: () => void
   nudgeSelection: (side: CanvasSide, far: boolean) => void
+  /** Grows (right, bottom) or shrinks (left, top) the selected cards by one step. */
+  resizeSelection: (side: CanvasSide) => void
   duplicateSelection: () => void
   frameSelection: () => void
   copySelection: () => void
@@ -195,6 +197,14 @@ export function handleKeyDown(e: KeyboardEvent, actions: CanvasKeyboardActions):
     return
   }
   if (e.altKey) {
+    const side = ARROW_SIDES[e.key]
+    if (e.shiftKey) {
+      if (side && !isTyping(e.target) && actions.selectedRef.current.size > 0) {
+        e.preventDefault()
+        actions.resizeSelection(side)
+      }
+      return
+    }
     if (!isTyping(e.target) && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       e.preventDefault()
       actions.travelViewHistory(e.key === 'ArrowLeft' ? 'back' : 'forward')

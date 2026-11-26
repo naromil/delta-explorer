@@ -46,15 +46,14 @@ interface CanvasDraftProps {
   onContextMode: (id: string, context: CanvasLinkContext) => void
   onContextRemove: (id: string) => void
   onResizeStart: (e: React.PointerEvent) => void
-  onResizeBy: (dw: number, dh: number) => void
+  /** Alt+arrows: steps to grow (1) or shrink (-1) by, sized by the board (`resizeKeyStep`). */
+  onResizeBy: (stepsW: number, stepsH: number) => void
   onSubmit: (question: string) => void
   onCancel: () => void
 }
 
 const NEW_SESSION = ''
 const LABEL_CHARS = 32
-/** How far Alt+arrow resizes, in world pixels. */
-const RESIZE_STEP = 40
 
 function shortLabel(label: string): string {
   const flat = label.replace(/\s+/g, ' ').trim()
@@ -158,7 +157,7 @@ function CanvasDraft({
       const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[
         e.key
       ]
-      if (step) onResizeBy(step[0] * RESIZE_STEP, step[1] * RESIZE_STEP)
+      if (step) onResizeBy(step[0], step[1])
     }
   }
 
