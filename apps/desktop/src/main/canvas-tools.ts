@@ -1,7 +1,7 @@
 import { tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod'
-import { soundSpawn } from '@delta/core/canvas-spawn'
+import { EXPLORE_ROLES, soundSpawn } from '@delta/core/canvas-spawn'
 import type { CanvasSpawn } from '@delta/core/canvas-spawn'
 import {
   CANVAS_SPAWN_LIMITS,
@@ -11,8 +11,9 @@ import {
 } from '@delta/core/prompts'
 import type { AgentTools } from './provider'
 
-/** Memory steps plus one per card a canvas answer may add. */
-const CANVAS_EXTRA_STEPS = CANVAS_SPAWN_LIMITS.explore + CANVAS_SPAWN_LIMITS.visual
+/** Memory steps plus one per card or suggestion a canvas answer may add. */
+const CANVAS_EXTRA_STEPS =
+  CANVAS_SPAWN_LIMITS.explore + CANVAS_SPAWN_LIMITS.visual + CANVAS_SPAWN_LIMITS.suggest
 
 /** What a canvas send asks for: the visual tool always, the exploration tool unless spawned. */
 export interface CanvasToolOptions {
@@ -27,17 +28,27 @@ export function createCanvasTools(
   options: CanvasToolOptions,
   onSpawn: (spawn: CanvasSpawn) => void
 ): ToolSet {
-  const added = { explore: 0, visual: 0 }
+  const added = { explore: 0, visual: 0, suggest: 0 }
+  const asked = new Set<string>()
   const add = (raw: CanvasSpawn): string => {
     // The window drops a card with nothing in it, so it is refused here and costs no slot.
     const spawn = soundSpawn(raw)
     if (!spawn) return 'Not added: the card was empty.'
     if (added[spawn.kind] >= CANVAS_SPAWN_LIMITS[spawn.kind]) {
-      return `Not added: this answer already has ${CANVAS_SPAWN_LIMITS[spawn.kind]} such cards.`
+      const what = spawn.kind === 'suggest' ? 'suggestions' : 'cards'
+      return `Not added: this answer already has ${CANVAS_SPAWN_LIMITS[spawn.kind]} such ${what}.`
+    }
+    if (spawn.kind !== 'visual') {
+      // One question is either answered or offered, once.
+      const key = spawn.question.toLowerCase()
+      if (asked.has(key)) return 'Not added: that question is already on the canvas.'
+      asked.add(key)
     }
     added[spawn.kind] += 1
     onSpawn(spawn)
-    return 'Added the card beside your answer.'
+    return spawn.kind === 'suggest'
+      ? 'Offered the question under your answer.'
+      : 'Added the card beside your answer.'
   }
   const relation = z.string().describe(CANVAS_TOOL_FIELDS.relation)
   return {
@@ -56,9 +67,21 @@ export function createCanvasTools(
             description: CANVAS_TOOL_DESCRIPTIONS.explore,
             inputSchema: z.object({
               question: z.string().describe(CANVAS_TOOL_FIELDS.question),
+              role: z.enum([...EXPLORE_ROLES]).describe(CANVAS_TOOL_FIELDS.role),
               relation
             }),
-            execute: ({ question, relation }) => add({ kind: 'explore', question, relation })
+            execute: ({ question, role, relation }) =>
+              add({ kind: 'explore', question, relation, role })
+          }),
+          canvas_suggest: tool({
+            description: CANVAS_TOOL_DESCRIPTIONS.suggest,
+            inputSchema: z.object({
+              question: z.string().describe(CANVAS_TOOL_FIELDS.question),
+              role: z.enum([...EXPLORE_ROLES]).describe(CANVAS_TOOL_FIELDS.role),
+              relation
+            }),
+            execute: ({ question, role, relation }) =>
+              add({ kind: 'suggest', question, relation, role })
           })
         }
       : {})

@@ -5,6 +5,9 @@
  * and expansions keep their usual shape, so saving, the curator and export need
  * nothing new. This layout is the only addition. Everything here is pure.
  */
+import type { CanvasSuggestion } from './canvas-spawn'
+// Only called inside functions, so the two modules importing each other is harmless.
+import { soundSuggestions } from './canvas-spawn'
 import type { Turn } from './conversation'
 import type { CanvasContextExcerpt, CanvasSourceExcerpt } from './prompts'
 import {
@@ -53,6 +56,8 @@ export interface CanvasMessageCard {
   spawned?: true
   /** How its parent's answer relates to it, written on the line from the parent. */
   relation?: string
+  /** Follow-ups the model offered but did not answer; a click makes one a card. */
+  suggestions?: CanvasSuggestion[]
   color?: CanvasColor
   /** Shown as its title alone; this is the height to return to. */
   collapsedFrom?: number
@@ -1511,6 +1516,13 @@ function soundCard(card: CanvasCard, ids: ReadonlySet<string>): CanvasCard {
     const relation = typeof next.relation === 'string' ? next.relation.trim() : ''
     if (relation === '') next = withoutField(next, 'relation')
     else if (relation !== next.relation) next = { ...next, relation }
+  }
+  if (next.suggestions !== undefined) {
+    const suggestions = soundSuggestions(next.suggestions)
+    if (!suggestions) next = withoutField(next, 'suggestions')
+    else if (JSON.stringify(suggestions) !== JSON.stringify(next.suggestions)) {
+      next = { ...next, suggestions }
+    }
   }
   // The session it continued is gone; it stands on its own now.
   if (next.parentId !== undefined && !ids.has(next.parentId)) {

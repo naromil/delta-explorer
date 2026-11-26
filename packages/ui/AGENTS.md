@@ -137,15 +137,27 @@ desktop's main process. A change here ships in both apps, so test it in both (se
   its dots (`is-animating`) with the same timing as the world, or they would jump ahead of the cards.
 - **A canvas answer can add cards beside itself.** A canvas card's `chat-send` carries
   `canvas: { explore }`, and main adds `canvas_add_visual` and (when `explore`) `canvas_add_explore`
-  to the memory tools (`withCanvasTools`, more steps, limits in `CANVAS_SPAWN_LIMITS`), with
+  and `canvas_suggest` to the memory tools (`withCanvasTools`, more steps, limits in `CANVAS_SPAWN_LIMITS`), with
   `buildCanvasToolInstructions`: the answer stays text, and visuals go in cards. The tools only
   report: each call sends `chat-card` to the asking window, and `useCanvas` builds the card. A visual
   card is a finished message card (the title as its question, the model's markdown as its answer); an
   exploration waits until its answer completes (dropped if stopped or failed), then is asked as a
   continuation. Both continue the answering card (`parentId`), are marked `spawned`, and carry
-  `relation`, which `CanvasLinks` writes on their session line; `spawnRect` stacks them on the answer's
-  right, where its own growth cannot reach. A spawned card gets only the visual tool, so branching
+  `relation`, which `CanvasLinks` writes on their session line. `spawnRect` places them by role
+  (`spawnRole`): an exploration's `role` puts background on the answer's left, deeper on its right
+  (the default), examples below; visuals always go below (fitting the answer pushes them down). Once
+  the answer, its explorations and their fits have all finished, `useCanvas` tidies the family
+  (`settleSpawns`): only cards the agent placed that the user hasn't moved (`agentPlacedRef`, cleared
+  by any user `moveItems`, in memory only), laid out as a tree around the answer, which itself never
+  moves; one "Arrange answer" undo step, skipped when it would land on another card. A spawned card gets only the visual tool, so branching
   stays one level deep per question. Regenerating the answer drops them as it drops any continuation.
+  An answer gets at most 2 answered explorations; further directions go through `canvas_suggest`
+  (up to 4, a question main has already taken for this answer is refused): `useCanvas` keeps them on
+  the answering card (`suggestions`, sound via `soundSuggestions`) and `CanvasCardView` shows them as
+  buttons under a finished answer. A click (`askSuggestion`) takes the suggestion off the card and asks
+  it as an ordinary continuation placed by its role: not `spawned` and not agent-placed, since the user
+  chose it, so it may add cards of its own and the settling tidy leaves it alone. A new answer on the
+  card (send, Retry, Regenerate, Edit) clears the old suggestions.
   No tools means no cards: a tool-less model, an expand, or the extension's host (which ignores the
   flag) answer as before. Claude Code reaches the tools over MCP like the memory tools.
 - **A rectangle decides the answer's length.** `estimateWords(rect, captionChars, charWidth)` mirrors

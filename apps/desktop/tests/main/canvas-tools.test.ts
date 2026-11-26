@@ -25,11 +25,24 @@ describe('canvas tools', () => {
     expect(spawned.map((spawn) => spawn.kind)).toEqual(['visual', 'explore'])
   })
 
+  it('pass the role of an exploration on, so the window can place it on its side', () => {
+    const spawned: CanvasSpawn[] = []
+    const tools = createCanvasTools({ explore: true }, (spawn) => spawned.push(spawn))
+    run(tools, 'canvas_add_explore', {
+      question: 'What is a set?',
+      role: 'background',
+      relation: 'uses'
+    })
+    expect(spawned).toEqual([
+      { kind: 'explore', question: 'What is a set?', relation: 'uses', role: 'background' }
+    ])
+  })
+
   it('refuse cards past the limit for one answer', () => {
     const spawned: CanvasSpawn[] = []
     const tools = createCanvasTools({ explore: true }, (spawn) => spawned.push(spawn))
-    const replies = Array.from({ length: CANVAS_SPAWN_LIMITS.explore + 1 }, () =>
-      run(tools, 'canvas_add_explore', { question: 'Why?', relation: '' })
+    const replies = Array.from({ length: CANVAS_SPAWN_LIMITS.explore + 1 }, (_, i) =>
+      run(tools, 'canvas_add_explore', { question: `Why ${i}?`, relation: '' })
     )
     expect(spawned).toHaveLength(CANVAS_SPAWN_LIMITS.explore)
     expect(replies.at(-1)).toMatch(/Not added/)
@@ -54,6 +67,34 @@ describe('canvas tools', () => {
     expect(spawned).toHaveLength(CANVAS_SPAWN_LIMITS.visual)
   })
 
+  it('answer two explorations and offer up to four more as suggestions', () => {
+    expect(CANVAS_SPAWN_LIMITS.explore).toBe(2)
+    expect(CANVAS_SPAWN_LIMITS.suggest).toBe(4)
+    const spawned: CanvasSpawn[] = []
+    const tools = createCanvasTools({ explore: true }, (spawn) => spawned.push(spawn))
+    const replies = Array.from({ length: CANVAS_SPAWN_LIMITS.suggest + 1 }, (_, i) =>
+      run(tools, 'canvas_suggest', { question: `Next ${i}?`, role: 'deeper', relation: 'leads to' })
+    )
+    expect(replies[0]).toMatch(/^Offered/)
+    expect(replies.at(-1)).toMatch(/Not added.*suggestions/)
+    expect(spawned).toHaveLength(CANVAS_SPAWN_LIMITS.suggest)
+    expect(spawned[0]).toEqual({
+      kind: 'suggest',
+      question: 'Next 0?',
+      relation: 'leads to',
+      role: 'deeper'
+    })
+  })
+
+  it('refuse a question already answered or offered for this answer', () => {
+    const spawned: CanvasSpawn[] = []
+    const tools = createCanvasTools({ explore: true }, (spawn) => spawned.push(spawn))
+    run(tools, 'canvas_add_explore', { question: 'What is a set?', relation: '' })
+    const again = run(tools, 'canvas_suggest', { question: 'what is a set?', relation: '' })
+    expect(again).toMatch(/already/)
+    expect(spawned).toHaveLength(1)
+  })
+
   it('leave out exploration for a card the model added itself', () => {
     const tools = createCanvasTools({ explore: false }, () => undefined)
     expect(Object.keys(tools)).toEqual(['canvas_add_visual'])
@@ -62,6 +103,7 @@ describe('canvas tools', () => {
   it('join the memory tools, with their instructions and more steps', () => {
     const merged = withCanvasTools(agent, { explore: true }, () => undefined)
     expect(Object.keys(merged?.tools ?? {})).toContain('canvas_add_explore')
+    expect(Object.keys(merged?.tools ?? {})).toContain('canvas_suggest')
     expect(merged?.instructions).toMatch(/^Memory rules\.\n\n.*canvas/s)
     expect(merged?.maxSteps).toBeGreaterThan(agent.maxSteps)
   })
