@@ -12,12 +12,21 @@ export const TERM_KEY_LIMIT = 80
 const EDGE_PUNCTUATION = /^[\s"'“”‘’«»()[\]{}.,;:!?…-]+|[\s"'“”‘’«»()[\]{}.,;:!?…-]+$/g
 
 /**
+ * A selected term as the user saw it: markdown flattened, single spaces and no punctuation at
+ * its edges, case kept. Empty when there is no term or the selection is a passage.
+ */
+export function expansionTermLabel(originalText: string): string {
+  const flat = flattenMarkdown(originalText).replace(/\s+/g, ' ')
+  const label = flat.replace(EDGE_PUNCTUATION, '')
+  return label.length > TERM_KEY_LIMIT ? '' : label
+}
+
+/**
  * One spelling for a selected term: markdown flattened, lower case, single spaces and no
  * punctuation at its edges. Empty when there is no term or the selection is a passage.
  */
 export function expansionTermKey(originalText: string): string {
-  const flat = flattenMarkdown(originalText).replace(/\s+/g, ' ').toLowerCase()
-  const key = flat.replace(EDGE_PUNCTUATION, '')
+  const key = expansionTermLabel(originalText).toLowerCase()
   return key.length > TERM_KEY_LIMIT ? '' : key
 }
 
