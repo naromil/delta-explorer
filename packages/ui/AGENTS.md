@@ -145,7 +145,7 @@ desktop's main process. A change here ships in both apps, so test it in both (se
   continuation. Both continue the answering card (`parentId`), are marked `spawned`, and carry
   `relation`, which `CanvasLinks` writes on their session line. `spawnRect` places them by role
   (`spawnRole`): an exploration's `role` puts background on the answer's left, deeper on its right
-  (the default), examples below; visuals always go below (fitting the answer pushes them down). Once
+  (the default), examples below; visuals always go below (fitting the answer then moves its free side, so they stay where they were put). Once
   the answer, its explorations and their fits have all finished, `useCanvas` tidies the family
   (`settleSpawns`): only cards the agent placed that the user hasn't moved (`agentPlacedRef`, cleared
   by any user `moveItems`, in memory only), laid out as a tree around the answer, which itself never
@@ -173,7 +173,10 @@ desktop's main process. A change here ships in both apps, so test it in both (se
   ways, plus anything joined only through them (`edgeFollowers`); a card also joined by another route
   keeps its place. Joined cards never land on each other: a resize pushes one it reaches, and shrinking
   stops where a follower can come back no further. Anything not joined stays where it is, so the card
-  may end up over it.
+  may end up over it. A corner drag moves the right and bottom; a size change by key or by fitting
+  (`from: 'free'`) moves, on each axis, the side with nothing joined to it, so what is joined stays put,
+  and the right or bottom when both sides are joined or both free (`resizesFromNear` mirrors the
+  rectangles and resizes the far edge).
 - **Cards may overlap wherever the user puts them; nothing automatic covers one.** Drawing, dragging,
   nudging, resizing, arranging and undo never refuse a landing. Placement nobody aimed still looks for
   open space (`adjacentSlot`, `rectClearOf`), and a change of size nobody aimed (answer fitting, reopening
