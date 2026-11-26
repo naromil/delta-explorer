@@ -118,7 +118,9 @@ desktop's main process. A change here ships in both apps, so test it in both (se
   pointer from there until the next click (`handleSizingPress` takes that press before a card's own
   handlers), and the draft continues that card wherever it stands; no travel gives the default size.
 - **A draft resizes from the corner away from its parent** (`draftGrowth`, `resizeDraftRect`), by
-  drag or Alt+arrows, and may grow over other cards. `estimateWords` follows, so this is how the answer's length is chosen.
+  drag or Alt+arrows, and may grow over other cards. Standing cards resize with Alt+Shift+arrows
+  (`resizeSelection`, right/down grow, left/up shrink, from their free sides); both key steps are
+  `resizeKeyStep`, two spaces between the dots as they show at the current zoom. `estimateWords` follows, so this is how the answer's length is chosen.
 - **Far out, a card is its title.** Below `FAR_ZOOM` the surface gets `data-far` at rest, and
   `.canvas-card-lod` covers the card with its title scaled against the zoom. The header and body are
   `visibility: hidden`, never `display: none`, because a card finishing out there still measures its

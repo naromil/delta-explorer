@@ -25,6 +25,8 @@ import {
   rectsOverlap,
   resizeCard,
   resizeCardKeepingClear,
+  resizeKeyStep,
+  minCardSize,
   resizeFollowerIds,
   raisedStack,
   resolveMove,
@@ -594,6 +596,21 @@ describe('fitCardHeight', () => {
       message('blocker', 5, rect(300, 100, 300, 200))
     ]
     expect(fitCardHeight(cards, 'a', 150)).toEqual([])
+  })
+})
+
+describe('resize keys', () => {
+  it('step by two spaces between the dots as they show', () => {
+    expect(resizeKeyStep(1)).toBe(56)
+    expect(resizeKeyStep(2)).toBe(56)
+    // Zoomed far out the dots thin out, so a step covers more of the plane.
+    expect(resizeKeyStep(0.25)).toBe(224)
+    expect(resizeKeyStep(0.25) * 0.25).toBe(2 * gridSpacing(0.25))
+  })
+
+  it('stop at the smallest a card may be', () => {
+    expect(minCardSize(message('a', 1, rect(0, 0)))).toEqual({ w: 200, h: 120 })
+    expect(minCardSize(expansion('e', 1, 1, 'a', rect(0, 0)))).toEqual({ w: 140, h: 84 })
   })
 })
 

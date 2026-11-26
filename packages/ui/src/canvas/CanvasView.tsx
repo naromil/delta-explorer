@@ -31,6 +31,7 @@ import {
   fitsOnScreen,
   gridSpacing,
   nearestCardInDirection,
+  minCardSize,
   openCardSize,
   rectAgainst,
   rectCenteredAt,
@@ -41,6 +42,7 @@ import {
   resizeCard,
   resizeFollowerIds,
   resizeDraftRect,
+  resizeKeyStep,
   resolveMove,
   sessionCardIds,
   turnsThroughCard,
@@ -818,12 +820,7 @@ function CanvasBoard({
     if (gesture?.type !== 'resize') return null
     const card = cards.find((item) => item.id === gesture.id)
     if (!card) return null
-    const min =
-      card.kind === 'message'
-        ? MIN_MESSAGE_SIZE
-        : card.kind === 'note'
-          ? MIN_NOTE_SIZE
-          : MIN_EXPANSION_SIZE
+    const min = minCardSize(card)
     const rect = {
       ...card.rect,
       w: Math.max(card.rect.w + gesture.pointer.x - gesture.start.x, min.w),
@@ -1545,6 +1542,43 @@ function CanvasBoard({
     [moveItems]
   )
 
+  /**
+   * Alt+Shift+arrows: right and down grow the selected cards by a step, left and up shrink
+   * them, each from its free side so what is joined to it stays put. One undo step.
+   */
+  const resizeSelection = useCallback(
+    (side: CanvasSide): void => {
+      const step = resizeKeyStep(viewportRef.current.zoom)
+      const dw = side === 'right' ? step : side === 'left' ? -step : 0
+      const dh = side === 'bottom' ? step : side === 'top' ? -step : 0
+      let working = cardsRef.current
+      for (const card of cardsRef.current) {
+        // A collapsed card is its title; its open height is kept for reopening.
+        if (!selectedRef.current.has(card.id)) continue
+        if (card.kind !== 'note' && card.collapsedFrom !== undefined) continue
+        const current = working.find((item) => item.id === card.id) ?? card
+        const min = minCardSize(card)
+        const size = {
+          w: Math.max(current.rect.w + dw, min.w),
+          h: Math.max(current.rect.h + dh, min.h)
+        }
+        if (size.w === current.rect.w && size.h === current.rect.h) continue
+        const rects = new Map(
+          resizeCard(working, card.id, size, 'free').map((update) => [update.id, update.rect])
+        )
+        working = working.map((item) => {
+          const rect = rects.get(item.id)
+          return rect ? { ...item, rect } : item
+        })
+      }
+      const updates = working.flatMap((card, index) =>
+        card === cardsRef.current[index] ? [] : [{ id: card.id, rect: card.rect }]
+      )
+      if (updates.length > 0) moveItems('Resize', updates)
+    },
+    [moveItems]
+  )
+
   /* ---- Keyboard ---- */
 
   const handleCardKeyDown = useCallback(
@@ -1621,6 +1655,7 @@ function CanvasBoard({
     redo: () => handleUndo(redo),
     selectEverything,
     nudgeSelection,
+    resizeSelection,
     duplicateSelection: () => handleDuplicate(selectedRef.current),
     frameSelection: () => frameSelection(selectedRef.current),
     copySelection: () => handleCopy(selectedRef.current),
@@ -2003,10 +2038,17 @@ function CanvasBoard({
     })
   }
 
-  const resizeDraftBy = (dw: number, dh: number): void => {
+  const resizeDraftBy = (stepsW: number, stepsH: number): void => {
     if (!draft || !draftRect) return
     const side = draftParent ? draft.side : undefined
-    const { rect } = resizeDraftRect(draftRect, side, { dw, dh }, cardRects(displayed), 0)
+    const step = resizeKeyStep(viewportRef.current.zoom)
+    const { rect } = resizeDraftRect(
+      draftRect,
+      side,
+      { dw: stepsW * step, dh: stepsH * step },
+      cardRects(displayed),
+      0
+    )
     setDraft({ ...draft, rect })
     refollow()
   }

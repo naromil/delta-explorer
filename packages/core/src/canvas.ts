@@ -1080,6 +1080,12 @@ export function fitCardHeight(
 
 /* ---- Collapsing a card to its title ---- */
 
+/** The smallest a card may be resized to. */
+export function minCardSize(card: CanvasCard): { w: number; h: number } {
+  if (card.kind === 'message') return MIN_MESSAGE_SIZE
+  return card.kind === 'note' ? MIN_NOTE_SIZE : MIN_EXPANSION_SIZE
+}
+
 /** The size a card has when open, whether or not it is collapsed now. */
 export function openCardSize(card: CanvasCard): { w: number; h: number } {
   const collapsedFrom = card.kind === 'note' ? undefined : card.collapsedFrom
@@ -1445,6 +1451,14 @@ export function gridSpacing(zoom: number): number {
   let spacing = GRID_SPACING * zoom
   while (spacing < MIN_GRID_SCREEN_SPACING) spacing *= 2
   return spacing
+}
+
+/**
+ * How far one press of a resize key changes a card, in world pixels: two spaces between the
+ * dots as they show at this zoom, so a step looks the same on screen however far out.
+ */
+export function resizeKeyStep(zoom: number): number {
+  return (2 * gridSpacing(zoom)) / zoom
 }
 
 const FIT_MARGIN = 64

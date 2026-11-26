@@ -23,13 +23,18 @@ function actionsWith(selected: string[] = []): CanvasKeyboardActions {
   })
 }
 
-function press(key: string, actions: CanvasKeyboardActions): KeyboardEvent {
+function press(
+  key: string,
+  actions: CanvasKeyboardActions,
+  modifiers: { altKey?: boolean; shiftKey?: boolean } = {}
+): KeyboardEvent {
   const e = {
     key,
     ctrlKey: false,
     metaKey: false,
     altKey: false,
     shiftKey: false,
+    ...modifiers,
     defaultPrevented: false,
     target: new (globalThis.Element as unknown as new () => Element)(),
     preventDefault: vi.fn()
@@ -78,6 +83,25 @@ describe('canvas keys', () => {
     } as unknown as KeyboardEvent
     handleKeyDown(e, actions)
     expect(actions.toggleOutline).not.toHaveBeenCalled()
+    expect(e.preventDefault).not.toHaveBeenCalled()
+  })
+
+  it('resizes the selection with Alt+Shift+arrows, and keeps Alt+arrows for the view history', () => {
+    const actions = actionsWith(['card'])
+    const e = press('ArrowRight', actions, { altKey: true, shiftKey: true })
+    expect(actions.resizeSelection).toHaveBeenCalledWith('right')
+    expect(e.preventDefault).toHaveBeenCalled()
+    press('ArrowUp', actions, { altKey: true, shiftKey: true })
+    expect(actions.resizeSelection).toHaveBeenLastCalledWith('top')
+    press('ArrowLeft', actions, { altKey: true })
+    expect(actions.travelViewHistory).toHaveBeenCalledWith('back')
+    expect(actions.resizeSelection).toHaveBeenCalledTimes(2)
+  })
+
+  it('has nothing to resize with no selection', () => {
+    const actions = actionsWith()
+    const e = press('ArrowDown', actions, { altKey: true, shiftKey: true })
+    expect(actions.resizeSelection).not.toHaveBeenCalled()
     expect(e.preventDefault).not.toHaveBeenCalled()
   })
 
