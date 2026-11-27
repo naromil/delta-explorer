@@ -460,6 +460,16 @@
   opacity: 1;
 }
 
+/* On a top corner the grip sits in the title bar: it stays above the header and its
+   buttons, and the buttons step aside so the whole grip can be grabbed. */
+.canvas-card-resize[data-corner^='top'] {
+  z-index: 2;
+}
+
+.canvas-card:has(.canvas-card-resize[data-corner='top-right']) .canvas-card-actions {
+  right: 24px;
+}
+
 /* ---- Collapsed to its title ---- */
 
 .canvas-card.is-collapsed .canvas-card-header {
