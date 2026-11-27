@@ -44,11 +44,6 @@ export type Gesture =
       shiftPress: boolean
       start: CanvasPoint
       pointer: CanvasPoint
-      /**
-       * A lone card held by its title bar: whether that bar starts at the bottom, and how far
-       * it travels inside the card between top and bottom. The title stays under the pointer.
-       */
-      title?: { bottom: boolean; lift: number }
     }
   | {
       type: 'resize'

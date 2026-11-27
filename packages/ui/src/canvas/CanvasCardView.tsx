@@ -65,8 +65,6 @@ interface CanvasCardViewProps extends CanvasCardActions {
   stackLevel: number
   /** The corner its resize handle sits on: the one on its free sides. */
   resizeCorner: CornerName
-  /** Its title bar is drawn at the bottom, leaving a top-corner handle its corner. */
-  titleBottom: boolean
   pulsing: boolean
   dimmed: boolean
   selected: boolean
@@ -264,7 +262,6 @@ function CanvasCardView(props: CanvasCardViewProps): React.JSX.Element {
     'canvas-card',
     `canvas-card--${card.kind}`,
     collapsed ? 'is-collapsed' : '',
-    props.titleBottom ? 'is-title-bottom' : '',
     selected ? 'is-selected' : '',
     onPath ? 'is-on-path' : '',
     status === 'streaming' ? 'is-streaming' : '',

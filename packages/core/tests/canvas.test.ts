@@ -27,8 +27,6 @@ import {
   resizeCardKeepingClear,
   resizeKeyStep,
   resizeCorner,
-  titleAtBottom,
-  draggedTitleAtBottom,
   clickRectAt,
   minCardSize,
   resizeFollowerIds,
@@ -629,41 +627,6 @@ describe('which corner resizes', () => {
     ]
     expect(resizeFollowerIds(chain, 'a', { x: -1, y: 1 })).toEqual(new Set(['far']))
     expect(resizeFollowerIds(chain, 'a')).toEqual(new Set(['right']))
-  })
-})
-
-describe('where the title bar sits', () => {
-  const cards = [
-    message('root', 1, rect(0, 0, 300, 200)),
-    message('reply', 3, rect(0, 200, 300, 200), 'root'),
-    message('left', 5, rect(1000, 0, 300, 200)),
-    message('right', 7, rect(1300, 0, 300, 200), 'left'),
-    { kind: 'note' as const, id: 'note', rect: rect(3000, 0, 300, 200), text: 'x' },
-    message('under-note', 9, rect(3000, 200, 300, 200))
-  ]
-
-  it('goes to the bottom only where the handle takes a top corner', () => {
-    expect(titleAtBottom(cards, 'root')).toBe(true)
-    expect(titleAtBottom(cards, 'reply')).toBe(false)
-    expect(titleAtBottom(cards, 'left')).toBe(false)
-    expect(titleAtBottom(cards, 'right')).toBe(false)
-    expect(titleAtBottom(cards, 'missing')).toBe(false)
-  })
-
-  it('stays on top of a note, which has no title bar', () => {
-    expect(resizeCorner(cards, 'note').y).toBe(-1)
-    expect(titleAtBottom(cards, 'note')).toBe(false)
-  })
-
-  it('turns a held card over once its title, not its far edge, meets a card below', () => {
-    const lone = [
-      message('held', 1, rect(500, 500, 300, 200)),
-      message('below', 3, rect(0, 400, 300, 200))
-    ]
-    // Standing above the title, the card's bottom is on the card below: title at the bottom.
-    expect(draggedTitleAtBottom(lone, 'held', rect(0, 200, 300, 200))).toBe(true)
-    // Its bottom well above that card: the title stays on top.
-    expect(draggedTitleAtBottom(lone, 'held', rect(0, 0, 300, 200))).toBe(false)
   })
 })
 
