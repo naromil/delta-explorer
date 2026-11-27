@@ -223,6 +223,8 @@
 }
 
 .canvas-card-header {
+  /* Holds the action buttons, so they go with it when it sits at the bottom. */
+  position: relative;
   flex: none;
   display: flex;
   align-items: flex-start;
