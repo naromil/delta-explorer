@@ -32,6 +32,7 @@ import {
   gridSpacing,
   nearestCardInDirection,
   clickRectAt,
+  draggedTitleAtBottom,
   minCardSize,
   openCardSize,
   rectAgainst,
@@ -46,6 +47,7 @@ import {
   resizeCorner,
   resizeKeyStep,
   resolveMove,
+  titleAtBottom,
   sessionCardIds,
   turnsThroughCard,
   screenToWorld,
@@ -796,6 +798,8 @@ function CanvasBoard({
     dy: number
     guidesX: number[]
     guidesY: number[]
+    /** Where the held card's title bar is drawn while it moves, when it is held by it. */
+    titleBottom?: boolean
   } => {
     const still = { dx: 0, dy: 0, guidesX: [], guidesY: [] }
     if (gesture?.type !== 'drag') return still
@@ -809,8 +813,28 @@ function CanvasBoard({
     const travelX = gesture.pointer.x - gesture.start.x
     const travelY = gesture.pointer.y - gesture.start.y
     if (Math.hypot(travelX, travelY) * viewport.zoom < DRAG_START_PX) return still
+    const others = cardRects(cards, gesture.ids)
+    const threshold = SNAP_SCREEN_PX / viewport.zoom
+    const { title } = gesture
+    if (title && single && !gesture.group && gesture.ids.size === 1) {
+      // The title stays under the pointer; the card hangs below it, or stands above it once
+      // that puts its bottom against a card with nothing at its top (its handle goes top).
+      const titleY = single.rect.y + (title.bottom ? title.lift : 0) + travelY
+      const x = single.rect.x + travelX
+      const below = snapMove({ ...single.rect, x, y: titleY }, others, threshold)
+      const above = snapMove({ ...single.rect, x, y: titleY - title.lift }, others, threshold)
+      const bottom = draggedTitleAtBottom(cards, single.id, above.rect)
+      const snap = bottom ? above : below
+      return {
+        dx: snap.rect.x - subject.x,
+        dy: snap.rect.y - subject.y,
+        guidesX: snap.guidesX,
+        guidesY: snap.guidesY,
+        titleBottom: bottom
+      }
+    }
     const moved = { ...subject, x: subject.x + travelX, y: subject.y + travelY }
-    const snap = snapMove(moved, cardRects(cards, gesture.ids), SNAP_SCREEN_PX / viewport.zoom)
+    const snap = snapMove(moved, others, threshold)
     return {
       dx: snap.rect.x - subject.x,
       dy: snap.rect.y - subject.y,
@@ -894,6 +918,13 @@ function CanvasBoard({
     [cards]
   )
 
+  // Where a handle takes a top corner, the title bar moves to the bottom to leave it free.
+  const titlesAtBottom = useMemo(
+    () => new Set(cards.filter((card) => titleAtBottom(cards, card.id)).map((card) => card.id)),
+    [cards]
+  )
+  const heldTitleBottom = gesture?.type === 'drag' ? dragDelta.titleBottom : undefined
+
   const resizeUpdates = useMemo(
     () =>
       gesture?.type === 'resize' && resizedRect
@@ -951,6 +982,15 @@ function CanvasBoard({
         if (!shiftPress) select(chosen)
       }
       const moving = movingForSelection(items, chosen, carrying)
+      const header = target.closest<HTMLElement>('.canvas-card-header')
+      const surface = header?.parentElement
+      const title =
+        header && surface
+          ? {
+              bottom: titleAtBottom(items.cards, id),
+              lift: Math.max(surface.clientHeight - header.offsetHeight, 0)
+            }
+          : undefined
       claimPress(e)
       currentIdRef.current = id
       setGesture({
@@ -962,7 +1002,8 @@ function CanvasBoard({
         plainPress: !additive && !shiftPress,
         shiftPress,
         start,
-        pointer: start
+        pointer: start,
+        title
       })
     },
     [claimPress, isDoublePress, pointerInWorld, select]
@@ -2387,6 +2428,13 @@ function CanvasBoard({
                   handleBottom={!continueHandleBlocked(card, 'bottom', displayed, stackRanks)}
                   stackLevel={stackLevel}
                   resizeCorner={resizeCorners.get(card.id) ?? 'bottom-right'}
+                  titleBottom={
+                    heldTitleBottom !== undefined &&
+                    gesture?.type === 'drag' &&
+                    gesture.id === card.id
+                      ? heldTitleBottom
+                      : titlesAtBottom.has(card.id)
+                  }
                   pulsing={pulseId === card.id}
                   dimmed={dimmed}
                   selected={liveSelection.has(card.id)}

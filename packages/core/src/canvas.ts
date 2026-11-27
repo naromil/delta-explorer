@@ -1004,6 +1004,30 @@ export function resizeCorner(cards: CanvasCard[], id: string): { x: 1 | -1; y: 1
   }
 }
 
+/**
+ * Whether a card draws its title bar at the bottom: when its resize handle sits on a top
+ * corner (only its bottom is joined), so the handle has that corner to itself instead of
+ * sitting under the header's buttons. Notes have no title bar.
+ */
+export function titleAtBottom(cards: CanvasCard[], id: string): boolean {
+  const card = cardById(cards, id)
+  if (!card || card.kind === 'note') return false
+  return resizeCorner(cards, id).y < 0
+}
+
+/**
+ * Whether a card dragged by its title takes the title-at-bottom layout at `above`, the
+ * rectangle that has the title under the pointer and the card extending upwards from it.
+ * Judged at that rectangle, not at the one hanging below the title, so the choice holds
+ * still: the card turns over once its title, not its far edge, meets a card below.
+ */
+export function draggedTitleAtBottom(cards: CanvasCard[], id: string, above: CanvasRect): boolean {
+  return titleAtBottom(
+    cards.map((card) => (card.id === id ? { ...card, rect: above } : card)),
+    id
+  )
+}
+
 function resizeMoves(
   cards: CanvasCard[],
   id: string,

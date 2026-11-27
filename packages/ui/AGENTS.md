@@ -179,7 +179,11 @@ desktop's main process. A change here ships in both apps, so test it in both (se
   each axis the side with nothing joined to it, so what is joined stays put, and the right or bottom
   when both sides are joined or both free (`resizesFromNear` mirrors the rectangles and resizes the far
   edge). The handle sits on that corner (`resizeCorner`, `data-corner`), as a draft's sits on the
-  corner away from its parent. Collapsing still keeps the title in place.
+  corner away from its parent. Where that is a top corner, the title bar moves to the bottom
+  (`titleAtBottom`, `is-title-bottom`; notes have none), so the handle isn't under the header's
+  buttons. A lone card held by its title keeps the title under the pointer: it turns over, its
+  content going to the other side, once the rectangle standing above the title would rest on a card
+  below (`draggedTitleAtBottom`), and back when it leaves. Collapsing still keeps the top in place.
 - **Cards may overlap wherever the user puts them; nothing automatic covers one.** Drawing, dragging,
   nudging, resizing, arranging and undo never refuse a landing. Placement nobody aimed still looks for
   open space (`adjacentSlot`, `rectClearOf`), and a change of size nobody aimed (answer fitting, reopening
