@@ -14,6 +14,11 @@ export interface StickToBottom {
   pin: () => void
   /** Re-pin and animate to the bottom. */
   jumpToLatest: () => void
+  /**
+   * Stop following, as scrolling up does, for a view that code moved away from the bottom:
+   * otherwise a resize in the same frame, before the scroll event, glues it back down.
+   */
+  release: () => void
 }
 
 /**
@@ -118,5 +123,9 @@ export function useStickToBottom(signal: unknown): StickToBottom {
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [])
 
-  return { scrollRef, atBottom, pin, jumpToLatest }
+  const release = useCallback((): void => {
+    pinnedRef.current = false
+  }, [])
+
+  return { scrollRef, atBottom, pin, jumpToLatest, release }
 }

@@ -300,7 +300,7 @@ function LookupApp(): React.JSX.Element {
       <MemoryIndicator />
       {showHistory && (
         <ConversationSearch
-          onSelect={window.api.openConversation}
+          onSelect={(target) => window.api.openConversation(target)}
           onClose={() => setShowHistory(false)}
           canDelete={false}
         />

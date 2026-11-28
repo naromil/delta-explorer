@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Settings, { type SettingsTab } from './views/settings/Settings'
 import Conversation from './components/conversation/Conversation'
 import ConversationSearch from './components/conversation/ConversationSearch'
 import HomeView from './views/home/HomeView'
 import KnowledgeView from './views/knowledge/KnowledgeView'
+import ExploredView from './views/explored/ExploredView'
 import LookupGuideView from './views/lookup-guide/LookupGuideView'
 import { CanvasView, useCanvas } from '@delta/ui/canvas'
 import { ExpansionHistoryContext, ToolActivityContext } from '@delta/ui/conversation'
@@ -11,16 +12,18 @@ import { useChatStreaming } from './hooks/useChatStreaming'
 import { useExpansionHistory } from './hooks/useExpansionHistory'
 import MemoryIndicator from './components/MemoryIndicator'
 import { ShortcutsDialog } from './components/KeyboardShortcuts'
+import type { FindRequest } from './components/conversation/find-text'
 import type { ImageAttachment } from '@delta/core/attachments'
 import type { ConversationTarget } from '@delta/core/conversation'
 import { hasNoConnections } from '../../shared/models'
 
-type View = 'home' | 'chat' | 'canvas' | 'knowledge' | 'lookup-guide' | 'settings'
+type View = 'home' | 'chat' | 'canvas' | 'explored' | 'knowledge' | 'lookup-guide' | 'settings'
 
 const mainNavEntries: Array<{ view: View; label: string; icon: string }> = [
   { view: 'home', label: 'Home', icon: 'home' },
   { view: 'chat', label: 'Chat', icon: 'chat' },
   { view: 'canvas', label: 'Canvas', icon: 'canvas' },
+  { view: 'explored', label: 'Explored', icon: 'explored' },
   { view: 'knowledge', label: 'Knowledge Base', icon: 'knowledge' },
   { view: 'lookup-guide', label: 'Look-Up Guide', icon: 'lookup' }
 ]
@@ -68,6 +71,21 @@ const ICONS: Record<string, React.JSX.Element> = {
     >
       <rect x="3" y="3" width="11" height="11" rx="1" />
       <path d="M14 8h6a1 1 0 011 1v11a1 1 0 01-1 1H9a1 1 0 01-1-1v-6" />
+    </svg>
+  ),
+  explored: (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="6" cy="6" r="2.5" />
+      <circle cx="18" cy="8" r="2.5" />
+      <circle cx="9" cy="18" r="2.5" />
+      <path d="M8.3 7.1l7.4.8M7 8.4l1.4 7.2M16.4 10l-5.6 6.2" />
     </svg>
   ),
   knowledge: (
@@ -121,6 +139,10 @@ function App(): React.JSX.Element {
   // Lives here, not in Conversation, so a view switch cannot drop the draft.
   const [draft, setDraft] = useState('')
   const [draftAttachments, setDraftAttachments] = useState<ImageAttachment[]>([])
+  /** A search result's query, waiting for main to open its conversation here. */
+  const pendingFindRef = useRef<{ id: string; query: string } | null>(null)
+  const findKeyRef = useRef(0)
+  const [findRequest, setFindRequest] = useState<FindRequest | null>(null)
   const {
     state,
     toolActivity,
@@ -180,6 +202,13 @@ function App(): React.JSX.Element {
   // Every history reaches this through main, which may raise a look-up's popup instead.
   useEffect(() => {
     return window.api.onConversationOpen(({ id, source }) => {
+      const pending = pendingFindRef.current
+      pendingFindRef.current = null
+      setFindRequest(
+        pending?.id === id && source !== 'canvas'
+          ? { conversationId: id, query: pending.query, key: ++findKeyRef.current }
+          : null
+      )
       if (source === 'canvas') {
         setView('canvas')
         openCanvas(id)
@@ -192,6 +221,29 @@ function App(): React.JSX.Element {
 
   const openConversation = useCallback((target: ConversationTarget) => {
     window.api.openConversation(target)
+  }, [])
+
+  /**
+   * Opens a conversation with the find bar on `findQuery` (a search result, an explored term).
+   * Main may raise a look-up's popup instead, which then leaves the query unused.
+   */
+  const openWithFind = useCallback((target: ConversationTarget, findQuery?: string) => {
+    pendingFindRef.current = findQuery ? { id: target.id, query: findQuery } : null
+    window.api.openConversation(target)
+  }, [])
+
+  const openExploredTerm = useCallback(
+    (place: ConversationTarget, label: string) => {
+      openWithFind(
+        { id: place.id, source: place.source },
+        place.source === 'canvas' ? undefined : label
+      )
+    },
+    [openWithFind]
+  )
+
+  const finishFindRequest = useCallback((key: number) => {
+    setFindRequest((request) => (request?.key === key ? null : request))
   }, [])
 
   const openSearch = useCallback(() => setShowSearch(true), [])
@@ -308,18 +360,21 @@ function App(): React.JSX.Element {
                 onDismissExpansion={dismissExpansion}
                 onHighlight={toggleHighlight}
                 transferKey={transferKey}
+                findRequest={findRequest}
+                onFindRequestDone={finishFindRequest}
               />
             </ExpansionHistoryContext.Provider>
           </ToolActivityContext.Provider>
         )}
         {view === 'canvas' && <CanvasView canvas={canvas} onOpenSearch={openSearch} />}
+        {view === 'explored' && <ExploredView onOpenTerm={openExploredTerm} />}
         {view === 'knowledge' && <KnowledgeView />}
         {view === 'lookup-guide' && <LookupGuideView />}
         {view === 'settings' && <Settings initialTab={settingsTab} />}
       </div>
       {showSearch && (
         <ConversationSearch
-          onSelect={openConversation}
+          onSelect={openWithFind}
           onClose={closeSearch}
           openConversationIds={[conversationId, canvasId]}
         />

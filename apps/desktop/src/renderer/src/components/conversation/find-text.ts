@@ -53,3 +53,26 @@ export function findTextMatches(
   }
   return matches
 }
+
+/** Which match a step shows: a negative `position` counts back from the last match. */
+export function shownMatchIndex(position: number, count: number): number {
+  if (count === 0) return 0
+  return position < 0 ? Math.max(0, count + position) : Math.min(position, count - 1)
+}
+
+/**
+ * The text a search result opens the find bar with: the query, when it matched the messages.
+ * A title match has nothing to jump to, so it opens the conversation as before.
+ */
+export function findQueryForResult(matchedIn: 'title' | 'content', query: string): string | null {
+  const trimmed = query.trim()
+  return matchedIn === 'content' && trimmed !== '' ? trimmed : null
+}
+
+/** Opens the find bar on `query` once `conversationId` is the conversation on screen. */
+export interface FindRequest {
+  conversationId: string
+  query: string
+  /** New for every request, so the same query can be asked again. */
+  key: number
+}

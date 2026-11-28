@@ -2,9 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import type { ConversationSearchResult, ConversationTarget } from '@delta/core/conversation'
 import { CONVERSATION_SOURCE_LABELS } from '@delta/core/conversation'
 import { formatRelativeTime } from '@delta/ui/lib/format'
+import { findQueryForResult } from './find-text'
 
 interface ConversationSearchProps {
-  onSelect: (target: ConversationTarget) => void
+  /** `findQuery` is set when the result matched a message, so the chat can jump to it. */
+  onSelect: (target: ConversationTarget, findQuery?: string) => void
   onClose: () => void
   /** Open elsewhere, so an autosave would bring them back; delete those from their toolbar. */
   openConversationIds?: ReadonlyArray<string | null>
@@ -25,6 +27,8 @@ function ConversationSearch({
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const selectedRef = useRef<HTMLDivElement>(null)
+  /** The query the listed results answer, which the box may have moved past. */
+  const resultsQueryRef = useRef('')
   const activeIndex =
     conversations.length === 0 ? 0 : Math.min(selectedIndex, conversations.length - 1)
 
@@ -33,14 +37,17 @@ function ConversationSearch({
     const timer = setTimeout(
       () => {
         setLoading(true)
-        const request = query.trim()
-          ? window.api.searchConversations(query.trim())
+        const asked = query.trim()
+        const request = asked
+          ? window.api.searchConversations(asked)
           : window.api
               .listConversations()
               .then((list) => list.map((meta) => ({ ...meta, matchedIn: 'title' as const })))
         request
           .then((list) => {
-            if (!cancelled) setConversations(list)
+            if (cancelled) return
+            resultsQueryRef.current = asked
+            setConversations(list)
           })
           .catch(() => {
             if (!cancelled) setConversations([])
@@ -77,8 +84,9 @@ function ConversationSearch({
   }, [activeIndex])
 
   const handleSelect = useCallback(
-    ({ id, source }: ConversationTarget) => {
-      onSelect({ id, source })
+    ({ id, source, matchedIn }: ConversationSearchResult) => {
+      const findQuery = findQueryForResult(matchedIn, resultsQueryRef.current)
+      onSelect({ id, source }, findQuery ?? undefined)
       onClose()
     },
     [onSelect, onClose]
